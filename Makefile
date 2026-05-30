@@ -38,7 +38,7 @@ ENGINE_SRCS = \
 	src/archive.c  src/depack.c  src/assets.c    src/script.c    \
 	src/actor.c    src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
-	src/actor/render.c                            \
+	src/actor/render.c src/actor/alloc.c                            \
 	src/save.c    src/font.c      src/flic.c                     \
 	src/heap.c     src/cygio.c   src/timer.c     src/stubs.c     \
 	src/binary_data.c src/pe_loader.c                            \
@@ -88,7 +88,7 @@ TEST_ENGINE_SRCS = \
 	src/binary_data.c src/timer.c  src/script.c   \
 	src/stubs.c     src/actor.c    src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
-	src/actor/render.c
+	src/actor/render.c src/actor/alloc.c
 
 # Tests reuse the engine's CFLAGS but use a stub SDL.h (tests/sdl_stub)
 # instead of the system SDL2 headers. -I tests/sdl_stub MUST come first

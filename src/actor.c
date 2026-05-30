@@ -51,52 +51,8 @@ extern uint8_t g_lmb_handled;             /* DAT_0044E5A4 */
 extern uint16_t g_settings_anim_active;   /* DAT_0044E448 (T121) */
 /* g_game_over_code = macro alias for g_script_vars[14]; defined in wacki.h. */
 
-/* ------------------------------------------------------------------------- *
- * InitEntityBitmap — 0x00405920
- * Allocates the backing pixel buffer based on (group_flags) bits:
- *   bit 0x01 = primary image plane
- *   bit 0x04 = secondary plane (mask / shadow)
- * ------------------------------------------------------------------------- */
-static Entity *InitEntityBitmap(Entity *e, uint16_t w, uint16_t h)
-{
-    if (!e) return NULL;
-    uint32_t pixels = (uint32_t)w * h;
-    uint32_t prim = (e->group_flags & 0x0001) ? pixels : 0;
-    uint32_t sec  = (e->group_flags & 0x0004) ? pixels : 0;
-    if (prim + sec) {
-        if (e->pixels) xfree(e->pixels);
-        uint8_t *buf = (uint8_t *)xmalloc(prim + sec);
-        if (!buf) { xfree(e); return NULL; }
-        e->pixels = buf;
-    }
-    e->flags1   |= 0x01;
-    e->width     = w;
-    e->height    = h;
-    return e;
-}
-
-/* ------------------------------------------------------------------------- *
- * AllocEntity — 0x00405A00
- * ------------------------------------------------------------------------- */
-Entity *AllocEntity(uint16_t w, uint16_t h, uint16_t kind, uint16_t flags)
-{
-    Entity *e = (Entity *)xmalloc(sizeof *e);
-    if (!e) return NULL;
-    memset(e, 0, sizeof *e);
-    e->kind        = kind;
-    e->group_flags = flags;
-    return InitEntityBitmap(e, w, h);
-}
-
-/* ------------------------------------------------------------------------- *
- * FreeEntity — 0x004058F0
- * ------------------------------------------------------------------------- */
-void FreeEntity(Entity *e)
-{
-    if (!e) return;
-    if (e->pixels) xfree(e->pixels);
-    xfree(e);
-}
+/* Entity lifecycle (AllocEntity / FreeEntity / init_entity_bitmap)
+ * moved to src/actor/alloc.c. */
 
 /* Register/Unregister/UnregisterFirstKindIdMatch/UnregisterEntityByPtr
  * moved to src/actor/registration.c. */
