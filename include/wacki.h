@@ -166,6 +166,20 @@ typedef struct Entity {
 uint32_t ent_ptr_intern(void *p);
 void    *ent_ptr_resolve(uint32_t slot);
 
+/* Entity list management. Two parallel lists — render (drawables) and
+ * click (hotspots). `LinkEntityToList` takes the address of a head
+ * global (g_render_list_head or g_click_list_head) and routes
+ * accordingly. Iterators use a flag (0 = render, 1 = click). */
+extern Entity *g_render_list_head;
+extern Entity *g_click_list_head;
+
+void   LinkEntityToList(Entity **head, Entity *e, int position);
+void   UnlinkEntity(Entity *e);
+void   EntityListClearAll(void);
+Entity *EntityListFirst(int click_list);
+Entity *EntityListAt(int click_list, int idx);
+int    EntityListCount(int click_list);
+
 #pragma pack(push, 1)
 typedef struct StageDef {
     void    *unknown[5];
