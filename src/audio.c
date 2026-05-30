@@ -703,33 +703,12 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
  * No safety net needed. */
 
 /*
- *
- * void (SampleTable *t, uint frame) {
- * if (t->entry_count == 0 || t->wav_count == 0) return;
- * int random_idx = (t->wav_count); // 0..count-1
- * for (entry in t->frame_entries) {
- * if (entry.start == frame) { ... }
- * else if (entry.end == frame) {
- * if (t->cur_wav == -1) return;
  * (t->wav_state[t->cur_wav].hash); // stop
  * t->wav_state[t->cur_wav].playing_flag = 0;
- * t->cur_wav = -1; return;
- * }
- * }
  * // start_frame matched
- * if (random_idx != t->cur_wav) {
- * if (t->cur_wav != -1) { // stop current
  * (t->wav_state[t->cur_wav].hash);
  * t->wav_state[t->cur_wav].playing_flag = 0;
- * }
- * t->cur_wav = random_idx;
- * }
  * SampleEntry *w = &t->wav_state[random_idx];
- * if (w->channel == 0 || w->playing_flag == 0) { // not blocked
- * if (t->enabled) (w->hash); // play
- * w->playing_flag = 1;
- * }
- * }
  *
  * Key invariant: the play guard at 0x40A292 is `byte+3 == 0 ||
  * byte+2 == 0`. byte+2 (playing_flag) is sticky-on-play, cleared

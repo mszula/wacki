@@ -44,20 +44,7 @@ int16_t   g_persp_profile[0x22*2];      /* g_persp_profile */
 
 /* ActorWalkToBlocking —/0x11/0x12 wait-for-walk
  * loop from Ghidra @ RunScriptInterpreter 0x00407820 case 0x10:
- *
- * if (actor[+0x22] != tx || actor[+0x24] != ty) {
- * g_active_actor = idx; // swap active to this actor
- * g_panel_cursor_redirect2 = 1; // synthesize click pending
- * g_lmb_handled = 1; // synthesize walker-bind flag
- * walk_target_id = -1; // walk-target id reset
- * actor[+0x4C] = 0; actor[+0x50] = 0;
- * UpdateActorMovement(tx, ty); // binds walker via standard path
- * g_active_actor = saved_active;
- * do {
- * g_panel_cursor_redirect2 = 0; g_lmb_handled = 0;
  * ProcessGameFrameTick;
- * } while (actor[+0x4C] != 0 || actor[+0x50] != 0 || walk_target_id != -1);
- * }
  *
  * EACH per-entity VM tick inside ProcessGameFrameTick advances the
  * walker via op 0x15/0x16's step loop — step size = walker bytecode's
@@ -226,11 +213,8 @@ uint16_t g_frame_delta_ticks = 1;
  * load target into fade_target_buf;
  * zero fade_source_snapshot work buffer.
  * case 0x49 (step): if (progress < 100) {
- * progress += step;
  * (work, target, out, progress%);
  * (out, 0); // install
- * return 0;
- * }
  * // else return previous value
  * case 0x4A (instant?): similar to 0x48 but without progress reset.
  *
@@ -239,10 +223,6 @@ uint16_t g_frame_delta_ticks = 1;
  * by progress/100, writing result to live_palette.
  *
  * Port state mirrors:
- * g_palette_rgb = live_palette / live pal (256 entries × 3 RGB)
- * s_pal_fade_source = fade_source_snapshot (snapshot at fade start)
- * s_pal_fade_target = fade_target_buf (loaded by case 0x48)
- * s_pal_fade_progress = fade_progress_alt (0..100)
  * s_pal_fade_step = fade_step_alt (per-step advance) */
 /* Palette fade (ScriptCallPalLoad + ScriptCallPalFadeStep) moved to
  * src/script_bridge/palette.c. */

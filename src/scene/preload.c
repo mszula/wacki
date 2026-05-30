@@ -47,7 +47,6 @@ int PreloadCommonAssets(void)
         if (resident[i].slot) *resident[i].slot = a;
     }
     /* @ 0x00403850 trailing block:
- * LoadFileFromDta("Futura.30", &);
  * = ParseFutFontFile;
  * The bitmap font is used by RenderTextLineToBuffer (op 0x09 / dialog). */
     void *fbuf = NULL; uint32_t fsz = 0;

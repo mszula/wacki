@@ -33,16 +33,8 @@ extern void    ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset);
  * transition):
  *
  * (0, '\x01'); // DESTROY id=0 (kinds 2/3/4)
- * asset = LoadAssetFromDtaBase(name);
- * if (asset) {
- * RegisterEntityForUpdate(asset, 1, 0); // kind=1 asset reg, id=0
- * e = (off_widths[0], off_heights[0], off_drawX[0],
  * off_drawY[0], pixel_ptrs[0]);
- * if (e) {
- * RegisterEntityForUpdate(e, 3, 0); // kind=3 mask entity
  * (&walkability_head, e, 1); // link into mask list (tail)
- * }
- * }
  *
  * Used by enter_scripts to install the room's .fld walkable-area mask
  * (maluch.fld, klatka2.fld, kiosk.fld, plac.fld). The kind=3 mask entity
@@ -65,7 +57,6 @@ void ScriptCallBgMaskSetup(const char *name)
  * (param_2='\x01' to original ). */
     ScriptCallDestroyEnt(0, 1);
     /* Reset perspective band count — case 0x2c (line 893):
- * perspective_band_count_alt = (g_settings_anim_active & 0xff02) << 1;
  * Without this reset, FILD-asset bands accumulate across scene
  * changes (LoadAssetFromDtaBase ADDS to band count, never clears).
  * The mask `& 0xff02` extracts bits 1 + 8-15 of komnata flags; the
@@ -121,9 +112,6 @@ void ScriptCallBgMaskSetup(const char *name)
 
     /* Synthesize the kind=3 walk-behind entity
  * (op 0x2C body):
- * piVar22 = (w[0], h[0], drawX[0], drawY[0], pixels[0]);
- * RegisterEntityForUpdate(piVar22, 3, 0);
- * (&walkability_head, piVar22, 1);
  *
  * The original links to walkability_head (walk-behind list) which is used
  * for foot-fall validation by (clamps walker into

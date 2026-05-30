@@ -101,28 +101,10 @@ Entity *SpawnActorEntity(uint16_t id, AnimAsset *atlas, uint16_t init_frame,
 }
 
 /* ---- @ RunScriptInterpreter:
- *
- * asset = (1, id) // find loaded atlas by id
- * if (asset) {
- * flags = arg3 (16-bit operand)
- * if (flags & 0x510) flags &= ~4
- * w = asset->max_w; h = asset->max_h
- * if (flags & 4) { w <<= 1; h <<= 1; }
- * e = AllocEntity(w, h, 1, has_alpha_plane?)
- * e->flags2 |= flags
- * e->script_bytecode = arg2 (dword2)
- * e->current_anim = asset (dword?+0xa = piVar22[10])
  * RegisterEntityForUpdate(e, 2, id)
  * LinkEntityToList(&render_list_head, e, 0)
- * if (click_payload) {
- * m = alloc(0x14, 1)
- * m->payload = arg1 (dword1)
- * m->owner = e
- * m->flags = 1
  * LinkEntityToList(&click_list_head, m, 0)
  * RegisterEntityForUpdate(m, 4, id)
- * }
- * }
  */
 void ScriptCallSpawnEntity(uint16_t id, uint16_t flags,
                            uint32_t click_payload_addr,
@@ -136,7 +118,6 @@ void ScriptCallSpawnEntity(uint16_t id, uint16_t flags,
     if (flags & 0x510) flags &= ~4u;
     /* Alpha-plane gate — case 0x30:
  * if ((asset->flag_22 & 1) || (flags & 0x2000) || (flags & 4))
- * alloc_flags = 1;
  * Earlier port used `asset->kind == 3` which collapsed bits 0 and 1
  * of the raw flag — would over-trigger alpha for visible-only assets
  * (kind=3 with flag bit 0 clear). */
@@ -162,10 +143,6 @@ void ScriptCallSpawnEntity(uint16_t id, uint16_t flags,
     /* Bind script bytecode + asset via slot-ID intern table (Entity stores
  * 4-byte slot IDs at the original 32-bit pointer offsets; real C
  * pointers don't fit in 4 bytes on 64-bit).
- *
- * case 0x30 (Ghidra line ~960):
- * piVar22[0xb] = iVar3; // entity[+0x2C] = script_addr
- * piVar22[10] = iVar17; // entity[+0x28] = asset_ptr
  *
  * No frame / anchor pre-init — AllocEntity already zeroed the buffer,
  * and the per-entity script (bound at +0x2C) drives position via

@@ -60,52 +60,6 @@ extern Entity *EntityListAt   (int click_list, int idx);
 /* ------------------------------------------------------------------------- *
  * ClickHitTest —
  *
- * Original code:
- *
- * void (void) {
- * uVar7 = 0; sVar4 = 0;
- * if (g_click_list_head != NULL) {
- * short mx = cursor_state_struct+0x22; // mouse X
- * short my = cursor_state_struct+0x24; // mouse Y
- * g_hover_scene_verb = 0x26; // default verb
- * piVar9 = g_click_list_head; // click list head
- * do {
- * puVar8 = piVar9[+0x0A]; // owner entity
- * uVar6 = 0;
- * if (piVar9[+0x08] == 1) { // kind=1 (sprite click, op 0x30 SPAWN)
- * synth_desc(&, puVar8, current_frame);
- * puVar8 = &;
- * uVar6 = puVar8[+0x30]; // current frame
- * goto TEST;
- * } else if (piVar9[+0x08] == 2) { // kind=2 (mask, op 0x2F REG_VERB_MASK)
- * goto TEST; // owner = kind=3 mask entity = test desc
- * }
- * continue;
- * TEST:
- * if ((puVar8, mx, my)) {
- * if (piVar9[+0x0E]) { // verb-id table present
- * count = *(u16*)(piVar9[+0x0E]);
- * idx = min(uVar6, count - 1);
- * piVar9[+0x12] = *(u16*)(piVar9[+0x0E] + 2 + idx*2);
- * }
- * if (uVar7 == 0) {
- * uVar7 = piVar9[+0x12]; // first hit
- * sVar4 = puVar8[+0x12]; // foot_y
- * if (piVar9[+0x08] == 2) { // kind=2 → final (don't keep searching)
- * if (uVar7 == 0) { g_hover_scene_verb = 0x26; return; }
- * goto SET;
- * }
- * } else if (sVar4 < puVar8[+0x12]) { // deeper hit
- * uVar7 = piVar9[+0x12];
- * sVar4 = puVar8[+0x12];
- * if (piVar9[+0x08] == 2) goto SET;
- * }
- * }
- * piVar9 = piVar9->next;
- * } while (piVar9);
- * }
- * if (uVar7 != 0) SET: g_hover_scene_verb = uVar7;
- * }
  *
  * Output: returns the verb_id to dispatch on click. The caller passes
  * this to DispatchClickEvent as its 2nd arg (= "target verb"), with
@@ -115,36 +69,6 @@ extern int     EntityListCount(int kind);  /* kind=1 → click list */
 extern Entity *EntityListAt(int kind, int idx);
 
 /* FindEntityByVerbId —
- *
- * undefined4 *(ushort param_1) {
- * for (puVar4 = g_click_list_head; puVar4; puVar4 = (undefined4*)*puVar4) {
- * ushort *puVar1 = *(ushort**)((int)puVar4 + 0xe); // verb table ptr
- * ushort uVar2;
- * if (puVar1 == NULL) {
- * uVar2 = *(ushort*)((int)puVar4 + 0x12); // cached verb
- * } else {
- * uint uVar3;
- * if (*(short*)(puVar4 + 2) == 1) { // kind=1 click
- * uVar2 = *(ushort*)(*(int*)((int)puVar4 + 10) + 0x30); // owner frame
- * uVar3 = (uint)uVar2;
- * if (*puVar1 <= uVar2) { // clamp to count-1
- * uVar2 = puVar1[*puVar1 - 1 + 1];
- * goto MATCH;
- * }
- * } else {
- * uVar3 = 0;
- * }
- * uVar2 = puVar1[uVar3 + 1]; // verb_id @ frame
- * }
- * MATCH:
- * if (uVar2 == param_1) goto FOUND;
- * }
- * puVar4 = NULL;
- * FOUND:
- * if (puVar4 && *(short*)(puVar4 + 2) == 1)
- * return *(undefined4*)((int)puVar4 + 10); // owner entity
- * return NULL;
- * }
  *
  * Returns the OWNER render entity (kind=1 click → +0x0A) whose
  * verb_id matches `target_verb`. Used by op 0x15/0x26/0x28 etc. */
@@ -219,10 +143,6 @@ int ClickHitTest(int16_t mouse_x, int16_t mouse_y, uint16_t *out_verb)
             mouse_y < oy || mouse_y >= oy + (int)oh) continue;
 
         /* Per-pixel test — mirrors switch on flags^0x8000:
- * case 1 (8bpp): byte != 0 → hit
- * case 2 (1bpp packed, stride = (w+7)&~7 / 8): bit set → hit
- * case 4: bbox hit always
- * kind=1 click (sprite SPAWN): owner is a kind=2 sprite entity
  * with asset[+0x28] → use 8bpp pixel test on asset frame.
  * kind=2 click (mask REG_VERB_MASK): owner is a kind=3 mask
  * entity holding pixel_ptr directly at +0x16 → use 1bpp test. */
@@ -250,10 +170,6 @@ int ClickHitTest(int16_t mouse_x, int16_t mouse_y, uint16_t *out_verb)
  * with arg2==0 (HIDE mask) and re-set with arg2!=0
  * (SHOW mask). Mirrors RunScriptInterpreter case
  * 0x50 @ 0x004080F1 (`AND [ESI+0x14], 0x7FFF`).
- * 0x8001 = 8bpp test (visible asset, kind=2/3 atlas pixels)
- * 0x8002 = 1bpp packed test (mask file with pixel data)
- * 0x8004 = bbox-only (mask file with no pixel data)
- * 0x8008 = TERMINATE — clears global "continue" flag (we
  * translate to: skip without hit; iteration continues
  * on neighbours, since our list-walk is sequential).
  *

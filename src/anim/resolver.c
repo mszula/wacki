@@ -27,16 +27,7 @@ void *FindAnimationScript(void *scripts, const char *name)
 { (void)scripts; (void)name; return NULL; }
 /* PlayActorAnimByPath
  * (UpdateActorMovement @ 0x004061D0, lines ~1054-1064 of decompile):
- *
- * uVar9 = FindKeyInTaggedTable(pcVar12, '\x15', -1);
- * sVar11 = (short)uVar9;
- * if (sVar11 != 0) {
  * (entity); // full reset
- * entity[+0x2C] = pcVar12; // bind script
- * pcVar12[uVar9*2 + 2] = psVar3[2]; // patch target X
- * pcVar12[uVar9*2 + 4] = psVar3[3]; // patch target Y
- * entity[+0x3A] |= 4; // walker-active flag
- * }
  *
  * FindKeyInTaggedTable returns idx in ushort units. The op 0x15 WALK_TO_X
  * lives at byte offset `idx*2` in the bytecode; its first operand (a0 = X)

@@ -169,7 +169,6 @@ void ScriptCallEnableEnt(uint16_t id, int enable)
 }
 
 /* @ Ghidra case 0x3e:
- * iVar20 = (verb_id);
  * if (iVar20) *(byte *)(iVar20 + 8) |= 0x80;
  *
  * Earlier port iterated kinds 2/3/4 via FindUpdateRegistration — too
@@ -222,7 +221,6 @@ void ScriptCallHideEnt(uint16_t id)
     ((uint8_t *)e)[8] |= 0x80;
 }
 /* @ Ghidra case 0x3f:
- * iVar20 = (verb_id);
  * if (iVar20) *(ushort *)(iVar20 + 8) &= 0xff7f;
  *
  * We additionally clear the "wait-for-enable" 0x2000 bit, which is set
@@ -252,15 +250,7 @@ void ScriptCallShowEnt(uint16_t id)
  * SAVE-STATE call: snapshot one field of entity `id` into a 20-slot
  * table keyed by (id, mode). (WalkTo) restores from it.
  *
- * if (save_count < 20) {
  * find slot where (slot.id == id && slot.mode == mode), or append;
- * e = (id); // by verb_id
- * if (e) {
- * if (mode == 1) slot.data = (e[+0x22], e[+0x24]); // anchor pos
- * if (mode == 2) slot.data = e[+0x28]; // asset slot
- * slot.id = id; slot.mode = mode;
- * if (was_append) ++save_count;
- * }
  * } */
 #define SAVE_SLOT_MAX 20
 static struct {
@@ -301,14 +291,6 @@ void ScriptCallWalkMode(uint16_t id, int mode)
 /* ScriptCallWalkTo (op 0x38/0x3A) —
  * RESTORE-STATE: searches the save table for (target_id, mode) slot,
  * then writes its data back into entity `verb_id`.
- *
- * for slot in save_table[0..save_count]:
- * if (slot.id == target_id && slot.mode == mode) {
- * e = (verb_id);
- * if (e) {
- * if (mode == 1) { e[+0x22] = saved_X; e[+0x24] = saved_Y; }
- * if (mode == 2) { (e); e[+0x28] = saved_asset; }
- * }
  * } */
 void ScriptCallWalkTo(uint16_t verb_id, uint16_t target_id, int mode)
 {
@@ -344,13 +326,6 @@ void ScriptCallWalkTo(uint16_t verb_id, uint16_t target_id, int mode)
 
 /* ScriptCallAttachProp
  *
- * case 0x3B: e = FindEntityByVerbId(reg_id);
- * a = FindUpdateRegistration(1, prop);
- * if (e && a) (e, a); // bind atlas
- * if (e) (e); // reset state
- * break;
- * case 0x3C: same as 0x3B but WITHOUT the reset (keep=1).
- *
  * (binder): writes new atlas ptr into entity[+0x28] and
  * resets the per-entity script pc + delay counters. is the
  * "reset state" inlined elsewhere — zero +0x32-0x3C, clear flags &~5. */
@@ -365,9 +340,6 @@ void ScriptCallAttachProp(uint16_t actor, uint16_t prop, int keep)
     void   *a = FindUpdateRegistration(1, prop);   /* asset slot, kind=1 */
     if (a) {
         /* — re-bind atlas + reset per-script state:
- * e[+0x28] = asset;
- * e[+0x32] = 0; // pc
- * e[+0x36] = 0; // delay
  * e[+0x3C] = 0; // sub-delay accumulator */
         uint8_t *eb = (uint8_t *)e;
         *(uint32_t *)(eb + 0x28) = ent_ptr_intern((void *)a);

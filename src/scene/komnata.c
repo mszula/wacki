@@ -50,11 +50,7 @@ extern int   FindScriptByStageAndRoom(void *self, const char *etap, const char *
 
 /* LoadKomnata —
  *
- * piVar2 = *g_actor_walk_anim_table; // komnata table base
  * walk entries (14 bytes each) until index == id
- * if not found: scene_quit_flag = 0; return;
- * g_cur_komnata = id; // g_cur_komnata
- * g_settings_anim_active = entry[+4]; // flags
  * palette fade-out (deferred — see comment below)
  * + // clear lists
  * (name) // name-keyed init
@@ -89,16 +85,6 @@ const char *LoadKomnata(uint16_t id)
     if (!karr) return NULL;
 
     /* T105 fix — walk komnata table:
- * piVar5 = table_base; iVar6 = 0;
- * do {
- * if (*piVar5 == 0 && piVar5[1] == 0) { iVar6 = 0; bail; }
- * ++iVar6; piVar5 += 14;
- * } while (iVar6 < param_1);
- * ++iVar6; // post-loop inc
- * idx = param_1 - 1; // 0-based entry to use
- *
- * Walk scans entries 0..(param_1-1), checking each for NULL+0
- * sentinel mid-walk. If hit, abort. Otherwise use index (param_1-1).
  *
  * Earlier port: `for (i<=idx+1 && i<16; ++i)` — bounded by fixed
  * 16-entry sanity cap. Stages 2-5 with >16 rooms would silently
@@ -171,9 +157,6 @@ const char *LoadKomnata(uint16_t id)
     extern int g_persp_band_count;
     g_persp_band_count = (flags & 2) ? 4 : 0;
     /* Reset perspective globals ( top):
- * g_cursor_speed = 0x78; // g_cursor_speed = 120
- * g_perspective_min = 4; // g_perspective_min = 4
- * g_perspective_step = 7; // g_perspective_step = 7
  * Without this an op 0x40 SET_PERSPECTIVE call from a prior komnata's
  * action cinematic (which biases perspective so ACTIVE actor scales
  * toward 0) persists into the next komnata. First UpdateActorMovement
@@ -237,11 +220,9 @@ const char *LoadKomnata(uint16_t id)
 
     /* TWO frame ticks between enter_va and second_va
  * :
- * RunScriptInterpreter(enter_va);
  * palette fade-in;
  * ProcessGameFrameTick; // <-- this
  * ProcessGameFrameTick; // <-- and this
- * RunScriptInterpreter(second_va);
  *
  * These ticks let EntityRenderAll process one-shot BG-blit entities
  * (spawn flags = 0x0060 → flag-0x40/0x20 branch in 

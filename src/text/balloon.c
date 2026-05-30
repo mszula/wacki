@@ -50,10 +50,6 @@ Entity *g_speech_balloon = NULL;
 /* Speaker animation unbind state — mirrors the original op 0x09 epilogue
  * (RunScriptInterpreter case 9, line ~480 of ):
  *
- * if (local_164 < dlg_count) {
- * (slot[local_164].speaker, slot[local_164].DATA);
- * }
- *
  * The original re-binds the speaker entity to the dialog slot's `data`
  * bytecode (idle animation) AFTER the balloon dismisses. Without it the
  * speaker stays frozen in the "talking" frame.
@@ -274,11 +270,6 @@ void ScriptCallShowText(uint16_t actor, const char *text)
  * + (lines+4)*0x19; ticks down by g_frame_delta_ms each frame). --- */
     size_t n_chars = strlen(text);
     /* Dismiss-timer formula —:
- *
- * speech_dismiss_ticks = (short)pcVar5 * 10 + -0x7d20 + (lines+4) * 0x19;
- *
- * `pcVar5` is the NUL-terminator pointer (= buffer_start +
- * text_chars). The `(short)pcVar5 * 10 - 0x7D20` term resolves to
  * `text_chars * 10` IF the buffer starts at the original game's
  * fixed address `0x475950` (whose low word 0x5950 = 22864 satisfies
  * `22864 * 10 mod 65536 == 0x7D20`). That calibration cancels the
@@ -324,10 +315,6 @@ void TickSpeechBalloon(void)
 
         /* Speaker animation UNBIND — case 9 epilogue:
  *
- * if (local_164 < dlg_count) {
- * (slot[local_164].speaker, slot[local_164].data);
- * }
- *
  * Re-bind the speaker to the dlg_data idle-animation bytecode
  * so they return to neutral pose. Identical to op 0x0E body
  *. */
@@ -362,11 +349,6 @@ void TickSpeechBalloon(void)
  *
  * Full original flow:
  * op 0x52 = — push dialog onto an internal stack with:
- * slot.entity = speaker entity (looked up by reg_id)
- * slot.atlas_backup = entity[+0x28]
- * slot.script_backup = entity[+0x2C]
- * slot.hash = horner-fold(opts bytes)
- * slot.asset = LoadAssetFromDtaBase(dialog_name)
  * op 0x53 = — run the interactive loop:
  * FindSection(Gadki.scr, "[rozmowa]", dialog_name, "[animacja]")
  * for each text line in section:
@@ -707,20 +689,11 @@ static int             s_dialog_stack_n = 0;
 
 /* T108 — Dialog ACTIVATE/RESTORE helpers.
  * Per Ghidra:
- *
- * void (stack, int mode) {
- * for each slot in stack:
- * if (mode == 0) { // RESTORE
  * (entity, slot[+0x10]); // restore atlas_backup
  * (entity); // walker reset
- * entity[+0x2C] = slot[+0x14]; // restore bytecode_backup
  * } else { // ACTIVATE
  * (entity, slot[+0x08]); // bind dialog asset
  * (entity); // walker reset
- * entity[+0x2C] = slot[+0x0C]; // bind talk_anim bytecode
- * }
- * entity[+0x30] = 0; // reset frame pc
- * }
  *
  * Earlier port (T20c) only swapped the atlas and drove a hardcoded
  * frame 0↔1 toggle via DialogTickMouth — that was a port shortcut

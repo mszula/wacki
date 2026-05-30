@@ -175,16 +175,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
 
         /* reg_id = which register the opcode operates on.
  *
- *-223 (the `uVar29 =
- * (ushort)puVar15` derivation that precedes the switch):
- *
- * uVar31 = local_158[1]; // = a0 (1st operand u16)
- * puVar15 = local_144; // = this_id
- * if ((uVar31 != 0x28) && (puVar15 = local_140, uVar31 != 0x27)) {
- * puVar15 = unaff_EDI; // = a0
- * }
- * uVar29 = (ushort)puVar15;
- *
  * I.e. when the FIRST OPERAND of any instruction is 0x27 or 0x28,
  * the register index is re-mapped to that_id or this_id. This is
  * how scripts address the "current" or "calling" entity without
@@ -338,8 +328,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x22: g_return_reg = that_id; break;
         case 0x23: {
             /* @ case 0x23:
- * uVar26 = (uVar29);
- * g_return_reg = (ushort)(uVar26 & 0xff);
  *
  * = InventoryHasItem(reg_id) → store result in var[4] = g_return_reg.
  * Used by scripts as a precondition: `if (has(item)) { ... }`. */
@@ -355,13 +343,8 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x14: {                            /* WAIT — a0 in 10 ms TICKS.
  * Original case 0x14 wait loop @ 0x00408366:
  *
- * uint16_t left = a0;
  * do {
  *; // PGFT
- * uint16_t dt = g_frame_delta_ticks; // ticks elapsed
- * if (left < dt) { left = 0; break; }
- * left -= dt;
- * } while (left);
  *
  * g_frame_delta_ticks is in 10 ms units (timeSetEvent 10ms period at
  * 0x00403D84), so the operand a0 is ALSO ticks — a script that
@@ -379,11 +362,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x15: {                            /* WAIT_ENTITY
  * Ghidra case 0x15:
- * iVar20 = (uVar29); // find by verb_id
- * if (iVar20 != 0) {
- * while (entity[+0x4C] || entity[+0x50]) // walking?
  * ProcessGameFrameTick;
- * }
  * Entity fields +0x4C / +0x50 = walk_dx_remaining / walk_dy_remaining
  * (set by in WALK_TO op, decremented per step). */
             extern Entity *FindEntityByVerbId(uint16_t verb_id);
@@ -402,7 +381,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x26: {                            /* WAIT_ANIM_FRAME — 
  * with Ghidra case 0x26:
- * e = (verb_id);
  * if (e) while (e[+0x30] != target) ProcessGameFrameTick;
  *
  * Block script until entity's frame index reaches the target. */
@@ -423,11 +401,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x3D: {                            /* WAIT_KIND2_FRAME
  * Ghidra case 0x3D:
- * e = FindUpdateRegistration(2, reg_id); // kind=2 sprite slot
- * if (e) {
- * target = a1;
- * while (e->+0x30 != target) ProcessGameFrameTick;
- * }
  *
  * Blocks the calling script until the kind=2 entity bound to
  * `reg_id` has its current frame index equal to `a1`. */
@@ -450,12 +423,9 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * 0x10 (actor 0), 0x11 (actor 1), 0x12 (both, with 50-tick
  * head-start). Original case 0x10:
  *
- * if (actor.+0x22 != uVar31 || // = a0 (X)
  * actor.+0x24 != local_158[2]) { // = a1 (Y)
  * ...
- * UpdateActorMovement(uVar31, local_158[2]);
  * // wait loop on actor walker fields
- * }
  *
  * Confirmed via concrete bytecode: verb 7 (exit-left) at
  * 0x00427BB0 encodes `12 02 1E 00 72 01 00 00` = op 0x12 walking
@@ -492,7 +462,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x33: {                            /* RESET_BOTH_ACTORS —
  *:
  * (g_actor[0]); // reset state
- * walk_target_id = -1; // walk-target id reset
  * g_actor[0].+0x2C = *(int*)(stage+0xC) + 0x10; // idle bytecode
  * (g_actor[1]);
  * = -1;
@@ -611,15 +580,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             ScriptCallShowText(reg_id, text);
             /* Block until balloon dismisses — case 9
  * wait loop (Ghidra @ lines ~462-475):
- *
- * g_panel_cursor_redirect2 = 0;
- * do {
- * if (speech_dismiss_ticks == 0) break;
- * g_lmb_handled = g_panel_cursor_redirect2;
  * ProcessGameFrameTick;
- * if (speech_dismiss_ticks < g_frame_delta_ticks) speech_dismiss_ticks = 0;
- * else speech_dismiss_ticks -= g_frame_delta_ticks;
- * } while (g_panel_cursor_redirect2 == '\0');
  *
  * = pump frames until: dismiss timer hits 0,
  * OR user click (g_panel_cursor_redirect2 != 0).
@@ -670,13 +631,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x0E: {                            /* SET_ENTITY_SCRIPT
  *:
  *
- * iVar1 = (verb_id); // find by verb
- * if (iVar1) {
- * (iVar1); // reset state
- * entity[+0x2C] = bytecode_ptr; // bind new script
- * entity[+0x30] = 0; // frame = 0
- * }
- *
  * Used by 0x00423E28 ELSE branch to bind Ebek's idle script
  * (0x004230A8) and Fjej's (0x00423280). Earlier mis-port
  * treated this as "destroy dialog balloon" → wiped both
@@ -706,13 +660,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x0F: {                            /* SET_ENTITY_ANIM —
  * (lines 522-530):
- *
- * iVar20 = (2, uVar29); // kind=2 entity by id
- * if (iVar20) {
- * (iVar20); // FULL state reset
- * entity[+0x30] = 0; // frame = 0
- * entity[+0x2C] = *(dword)(pc+4); // bind new bytecode
- * }
  *
  * (full reset) clears +0x32, +0x34, +0x36, +0x38,
  * +0x3A&~5, +0x3C, +0x40, +0x42, +0x4C, +0x50. Earlier port
@@ -747,22 +694,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x19: {                            /* QUEUE_DIALOG
  * (line 745):
- *
- * if (uVar13 < 6) {
- * iVar20 = 0;
- * if (local_124 != uVar29) { // slot 0 not match
- * puVar15 = &local_124;
- * do {
- * if (uVar13 <= iVar20) break; // scan up to current
- * puVar15 += 5; iVar20++; // 10-byte stride
- * } while (*puVar15 != uVar29); // until match
- * }
- * // iVar20 = matching slot OR uVar13 (append)
- * slot[iVar20].speaker = uVar29;
- * slot[iVar20].ptr = *(u32)(pc+4);
- * slot[iVar20].data = *(u32)(pc+8);
- * uVar13++; // ALWAYS, not just on append
- * }
  *
  * Note the ALWAYS-increment behaviour: even if scan found an
  * existing slot, uVar13 still grows. The slot index becomes
@@ -870,14 +801,12 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x1C: {
             /*
- * if ( != 0); // page-next
  */
             if (InventoryPageNext()) PanelPageSwap();
             break;
         }
         case 0x1D: {
             /*
- * if ( != 0); // page-prev
  */
             if (InventoryPagePrev()) PanelPageSwap();
             break;
@@ -905,10 +834,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x2B: {
             /*:
- * if (((ushort)(uVar29 - 0x29) < 0x8e) || (uVar29 == 0x26))
- * g_held_item = uVar29; // g_held_item
- *
- * uVar29 = RESOLVED reg_id (this/that-mapped), NOT raw a0.
  * Earlier port read raw `a0` — when scripts use 0x28 (this)
  * or 0x27 (that) as operand, port tested 0x28/0x27 against
  * 0x29 range (both < 0x29 so unsigned underflow → fails)
@@ -970,10 +895,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x30: {                            /* SPAWN_ENTITY (16 bytes) */
             /* operand layout per Ghidra dump:
- * uVar29 = local_158[6] // halfword @ +0xc = flags
- * iVar20 = *(int *)(local_158 + 2) // dword @ +4 = click_payload addr
- * iVar3 = *(int *)(local_158 + 4) // dword @ +8 = script bytecode addr
- * uVar31 = a0 // id
  */
             uint16_t flags2 = (len >= 4) ? pc[6] : 0;
             uint32_t click_addr = 0, script_addr = 0;
@@ -1006,14 +927,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * (lines 1108-1119): adds (dx,dy)
  * to the entity's draw AND raw positions.
  *
- * e = (reg_id); // FindEntityByVerbId
- * if (e) {
- * e->draw_x += local_158[2]; (+10)
- * e->raw_x += local_158[2]; (+0x22)
- * e->draw_y += local_158[3]; (+0xc)
- * e->raw_y += local_158[3]; (+0x24)
- * }
- *
  * Used for scripted nudges (an NPC stepping aside, prop
  * tipping over). Earlier port used FindUpdateRegistration(2,
  * reg_id) — wrong lookup table. The original walks the click
@@ -1033,15 +946,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x4B: {                            /* QUERY_ENTITY_X
  *:
- *
- * g_return_reg = 0;
- * e = (reg_id);
- * if (e) {
- * atlas = e[+0x28];
- * g_return_reg = e[+0x0a]; // drawn X
- * if (atlas != 0 && (e[+0x3a] & 2) != 0)
- * g_return_reg = e[+0x22]; // anchor X
- * }
  *
  * Tests +0x28 (atlas), NOT +0x2C (bytecode). Earlier port read
  * +0x2C — would pick anchor for any scripted entity even if it
@@ -1083,13 +987,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x27: {                            /* SET_TAGGED_FIELD — 
  * with Ghidra case 0x27:
  *
- * ptr = *(char**)(local_158+2); // dword @ +4
- * idx = FindKeyInTaggedTable(ptr, '\x15', -1);
- * if (idx != 0) {
- * ((short*)ptr)[idx*1 + 1] = local_158[4]; // X
- * ((short*)ptr)[idx*1 + 2] = local_158[5]; // Y
- * }
- *
  * Used by exit verb scripts (e.g. verb 7 mal_l) to plant the
  * actor's walk-out destination INSIDE the actor's per-entity
  * bytecode block. The bytecode then drives the walk via the
@@ -1117,15 +1014,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * dispatch alias is normally this_id for op 0x28's a0==0x28
  * special case, but can be other ids if the script uses the
  * raw form).
- *
- * e = (reg_id); // FindEntityByVerbId
- * if (e) {
- * e->draw_x = local_158[2]; (+10)
- * e->raw_x = local_158[2]; (+0x22)
- * e->draw_y = local_158[3]; (+0xc)
- * e->raw_y = local_158[3]; (+0x24)
  * // (+ attached-prop offset path for bit 2 of +0x3a)
- * }
  *
  * Used pervasively to plant actors / props at scripted spawn
  * points (Ebek/Fjej initial position, NPC initial pose, etc.).
@@ -1145,11 +1034,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                 *(uint16_t *)(eb + 0x0C) = y;       /* drawn Y — initial */
                 /* Foot-anchor compensation — case 0x28
  * @ Ghidra line 866-873:
- * iVar3 = entity[+0x28]; // atlas ptr
- * if (iVar3 && (entity[+0x3a] & 2)) { // FLAG_2 = foot-anchor active
- * drawn_x += atlas->x_tab[frame];
- * drawn_y += atlas->y_tab[frame];
- * }
  * Without this the script-positioned actor renders with
  * foot at the requested (x,y) but the sprite isn't
  * offset by the atlas hot-spot — so a -37px foot-X
@@ -1173,7 +1057,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         /* ---- call / tail-call ---------------------------------------- */
         case 0x24: {                            /* TAILCALL
  * case 0x24 (, line ~817):
- * param_3 = *(ushort **)(local_158 + 2); // base = dword@+4
  *
  * End-of-iteration: `pc = base` (not advanced) because op was
  * 0x24/0x25. No stack push. Effectively a jump replacing the
@@ -1193,15 +1076,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x25: {                            /* CALL_SUB
- * case 0x25 (, line ~820):
- * if (bVar2 < 10) {
- * puVar15 = *(ushort **)(local_158 + 2); // new_base = dword@+4
- * auStack_84[bVar2] = param_3; // save base
- * aiStack_ac[bVar2] = (int)local_158; // save pc (raw)
  * bVar2++;
- * param_3 = puVar15; // base = new
- * }
- * // (else: param_3 unchanged, end-of-iteration sets pc = base
  * // → effectively re-enters the current script at offset 0)
  *
  * End-of-iteration code (line ~1382):
@@ -1260,11 +1135,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * stubbed. See TASKS-2 T36 polish notes. */
         case 0x41: {
             /*:
- * (reg_id, local_158[2], *(u32)(local_158 + 4),
- * local_158[3]);
- *
- * local_158 is ushort*. local_158[2] = a1 (ushort at byte +4).
- * `local_158 + 4` is pointer arithmetic = byte offset +8. So
  * the u32 argument is at byte +8 of the instruction, NOT +4.
  * Earlier port passed i32_at4 (= u32 at byte +4) which fed
  * the wrong dword into the sound id slot. */
@@ -1296,16 +1166,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         /* ---- subanim toggles ---------------------------------------- */
         case 0x50: {                            /* SUBANIM_HIDE_TOGGLE — 
  * with Ghidra case 0x50:
- *
- * asset = (1, id); // kind=1 by id
- * frame = local_158[2]; // arg2
- * if (asset && frame < asset->frame_count) {
- * mask_e = walk mask_list_head looking for entry
  * whose +0x16 == asset->pixel_ptrs[frame];
- * if (mask_e) {
- * if (local_158[3] == 0) mask_e[+0x14] &= ~0x8000; // show
- * else mask_e[+0x15] |= 0x80; // hide
- * }
  * } */
             extern void *FindUpdateRegistration(uint16_t kind, uint16_t id);
             extern int   EntityListCount(int);
@@ -1423,16 +1284,8 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * Ghidra case 0x54: (*(char**)(local_158 + 2)).
  *
  * (name):
- * LoadFileFromDta(name, &raw);
- * pic = (w, h, raw+0x308, 0, 1); // PIC builder
- * local_8 = 0xFFFF;
- * while (g_panel_cursor_redirect2 == 0 && uVar2 != 0) {
  *; // pump events
  *; // mm-tick
- * uVar2 -= g_frame_delta_ticks; // decrement by frame_delta
- * }
- * g_panel_cursor_redirect2 = 0;
- * FreeAsset(pic);
  *
  * Loads + displays a .pic file fullscreen, waits up to ~0xFFFF
  * frame-deltas (or until user clicks LMB). */

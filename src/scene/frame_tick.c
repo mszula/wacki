@@ -58,10 +58,6 @@ void ProcessGameFrameTickInner(void)
  * ghost interp and the speech-balloon dismiss timer all see fresh
  * deltas for THIS frame.
  *
- * uint32_t now = g_tick_counter;
- * int dt = now - ;
- * if (dt > 0x32) dt = 0x32;
- * g_frame_delta_ticks = dt;
  * = now;
  *
  * The original mmtimer (timeSetEvent @ 0x00403D84 with PUSH 0xa)

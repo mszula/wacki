@@ -40,9 +40,6 @@ void ActorWalkToBlocking(int idx, int16_t tx, int16_t ty)
     }
 
     /* Pump frames until walker drains OR user clicks (interrupt).
- * case 0x10/0x11 wait loop:
- * do { PGFT; if (walker drained) goto LAB; } while (g_lmb_clicked == 0);
- * g_lmb_handled = 1;
  * LAB: g_lmb_clicked = 0; var[4] = g_lmb_handled; g_lmb_handled = 0;
  *
  * So loop exits early on user click (g_lmb_clicked nonzero AFTER

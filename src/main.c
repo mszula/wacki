@@ -70,10 +70,6 @@ int g_no_pacing = 0;
  * SDL_RenderSetLogicalSize, keeping the framebuffer 640×480 but
  * scaling on present.
  *
- * g_scale_factor = 0 → use SDL's default (1x, no scaling)
- * g_scale_factor = N → request N×640 × N×480 window with logical 640×480
- * g_scale_mode = "nearest" (default) | "linear" | "best"
- *
  * Set via --scale N / --scaler MODE args or WACKI_SCALE/WACKI_SCALER env.
  * Used by PlatformInit to size the window + set RENDER_SCALE_QUALITY hint. */
 int        g_scale_factor = 0;

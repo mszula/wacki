@@ -71,25 +71,10 @@ int  VisibleMaskGetEx(int i, AnimAsset **a, uint16_t *f,
 
 /* ScriptCallRegMaskList —
  *
- * asset = (1, id);
  * if (!asset || asset->frame_count == 0) return;
- * uint16_t pool_idx = 0;
- * for (uint16_t frame = 0; frame < asset->frame_count; ++frame) {
- * mask = (w[f], h[f], drawX[f], drawY[f], pixels[f]);
- * RegisterEntityForUpdate(mask, 3, id);
- * LinkEntityToList(target_table, mask, 0);
- * if (asset->flag_22 & 2) mask->+0x14 = 0x8001; // VISIBLE
- * else mask->+0x15 |= 0x80; // HIDDEN
- * if (click_ptr) {
- * payload = malloc(0x14); memset(payload, 0, 0x14);
  * payload->+0x12 = click_ptr[pool_idx + 1]; // verb_id for this frame
  * payload->+0x0A = mask; // owner
  * payload->+0x08 = 2; // kind=2 click
- * LinkEntityToList(&click_list, payload, 0);
- * RegisterEntityForUpdate(payload, 4, id);
- * if (pool_idx < click_ptr[0] - 1) ++pool_idx;
- * }
- * }
  *
  * `verb_table` flag selects the mask-list head (E6D8 for op 0x2E, E700
  * for op 0x2F). Our port doesn't render kind=3 masks separately yet

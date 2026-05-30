@@ -324,7 +324,6 @@ void BlitSpriteScaledColorKeyFlip(int16_t dx, int16_t dy,
  * The "rich" ANIM encoding (asset kind=3 in LoadAssetFromDtaBase, i.e.
  * frame_count > 16 and first-frame's first param non-zero) stores each
  * frame as an RLE stream with a 3-byte header:
- * header[0] = fill_value (the colour to emit for skip runs;
  * usually 0 = palette idx 0 = transparent)
  * header[1] = marker_A (any input byte equal to A introduces a
  * run of fill_value)
@@ -550,9 +549,6 @@ static uint8_t sample_box_2d(const uint8_t *p, int width, int src_stride,
  * but we take individual args for clarity.
  *
  * Modes:
- * 0 = nearest-neighbor with x-step LUT (each src pixel maps 1→N dst)
- * 1 = 1D horizontal box filter (averages along rows)
- * 2 = 2D box filter (averages over `step_y` rows × `step_x` cols)
  *
  * Returns immediately if any dim is 0 or > 0x400 (matches original guard). */
 /* BlitAlphaScaledToBackbuffer — convenience wrapper that allocates a

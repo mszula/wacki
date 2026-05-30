@@ -77,13 +77,8 @@ void ScriptCallPalLoad(uint16_t fade_step, uint32_t selector, int with_fade)
 }
 
 /* ScriptCallPalFadeStep —:
- * if (progress < 100) {
- * progress += step;
  * (source, target, work, progress);
  * (work, 0);
- * return 0;
- * }
- * return previous_value (= 1 when fade not active).
  *
  * Returns 1 when fade complete (poll-loop exit condition). */
 int ScriptCallPalFadeStep(void)

@@ -730,9 +730,6 @@ post_exec:
  * perspective-scaled (ENT_PFLAG_PERSPECTIVE):
  * drawn += hot * scale_pct / 100
  * 2× doubled (ENT_PFLAG_DOUBLED):
- * drawn += hot * 2
- * else ():
- * drawn += hot
  *
  * NOTE: the "perspective" path also fires whenever scale_pct is
  * actually being applied by the renderer — the original engine

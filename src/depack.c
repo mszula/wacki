@@ -105,10 +105,6 @@ static inline uint32_t bs_bits(uint8_t n)
  * and an unsigned lo nibble (b & 0x0F).
  * On the FIRST iteration only, the carry latches to hi[0]; subsequent
  * iterations use that same carry. Result:
- * out[0] = hi[0]
- * out[1] = lo[0] + hi[0]
- * out[2i] = hi[i] + hi[0] (i >= 1)
- * out[2i+1]= lo[i] + hi[0] (i >= 1)
  */
 static void unpack_widths(uint8_t out[12], const uint8_t *six)
 {
@@ -134,9 +130,6 @@ static void precompute_bases(void)
     }
 
     /* base_off: 4 groups of 3. In each group, starts fresh (no -1):
- * base[3g+0] = (1 << tab_off_bits[3g+0])
- * base[3g+1] = base[3g+0] + (1 << tab_off_bits[3g+1])
- * base[3g+2] = base[3g+1] + (1 << tab_off_bits[3g+2])
  */
     for (int g = 0; g < 4; ++g) {
         int i = g * 3;

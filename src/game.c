@@ -248,7 +248,6 @@ int LoadStage(uint16_t stage)
     FindScriptByStageAndRoom(g_scripts_obj, buf, "[komnata]");
 
     /* load stage panel —:
- * g_panel_asset = LoadAssetFromDtaBase(g_stage->+0x1c);
  * The asset has 6 frames (one per button slot) sharing a single
  * (panel_x, panel_y) origin on its 0th frame, used by PanelHitTest
  * to convert cursor coords into panel-local space.
@@ -458,10 +457,7 @@ static int HandleMainMenuClick(int trigger)
 
     /*'s trailing block:
  * if ( && (anim_frame_index < 0xF || 0x12 < anim_frame_index)) {
- * cVar3 = '\a'; // rc = 7
  * &= ~1;
- * anim_delay_counter = 1;
- * }
  * i.e. once the Maluch click latch (s_save_request) is set AND the
  * background flipbook is OUTSIDE the "doors closing" frames 15..18,
  * actually return 7 to the caller (= RunMainGameLoop case 7 = prologue
@@ -913,24 +909,7 @@ static void play_bomb_explosion(void)
  * RunMainGameLoop — 0x0040BBF0
  *
  *'s two-loop structure:
- *
- * do { <-- OUTER
- * PlaySceneCutsceneAvi("Dane_10.dta");
- * bVar1 = true;
- * do { <-- INNER (menu re-entry loop)
- * rc = RunMenuScene(main_menu);
- * switch (rc) {
- * case 4/8: rc2 = RunMenuScene(Pytanie);
- * if (rc2 == 3) { bomb_script; bVar9 = false; }
  * // either way: inner loop CONTINUES (rc2==4 → menu)
- * break;
- * case 5: LoadSaveSlot; RunGameStageLoop(0x10); break;
- * case 6: intro script; bVar1 = false; break; // restart outer
- * case 7: prelude script; RunGameStageLoop(2); break;
- * case 9: PlayAVI("Dane_12.dta"); break;
- * }
- * } while (bVar1);
- * } while (bVar9);
  *
  * Crucially: NIE from Pytanie does NOT replay the intro — control returns
  * to the inner do/while which re-enters RunMenuScene with the main menu.
@@ -1053,9 +1032,6 @@ void RunMainGameLoop(void)
                 return;
             }
             /* Loop back to the map ONLY for stage-progress signals:
- * 3 = chapter-select (stage cleared, pick next)
- * 4 = auto stage-end (outros played, mark done)
- * 1 = death (replay via map)
  * Everything else — explicit quit (2 from F12+TAK / ESC /
  * opszyns→Quit), hard-quit (99), or any other unknown code
  * — means "user wants out of the dev session". Return to the
@@ -1115,8 +1091,6 @@ void RunMainGameLoop(void)
             }
             case 5: {                   /* Start at selected save slot */
                 /* @ 0x0040BC4A:
- * LoadSaveSlot(g_selected_save_slot);
- * RunGameStageLoop(0x10);
  *
  * LoadSaveSlot restores g_cur_komnata (g_cur_komnata) +
  * g_script_vars (script_vars) + g_entity_state (entity_state)
@@ -1274,7 +1248,6 @@ static void play_fiacik_intro(void)
  * pic_w, pic_h,
  * pic_pixels);
  * FlushFrameToPrimary;
- * InstallPalette(pic + 8, 0); // 
  *
  * No animation — it's a static drop while assets stream. We hold it for
  * ~1.5 s as the visible "loading time" placeholder.
@@ -1335,17 +1308,10 @@ typedef struct DemoScene {
  * full per-room script execution is up).
  *
  * Room indices (per dispatch):
- * 1 = maluch.pic (entry: Maluch parked, Wacki gets out)
- * 2 = klatka2.pic (apartment-block entrance)
- * 3 = kiosk21.pic (newspaper kiosk)
- * 4 = plac.pic (town square / "plac")
  */
 /* T28 retired (Fix #26) — hardcoded s_demo_scenes[] / find_demo_scene
  * removed. LoadKomnataScene now ALWAYS synthesizes the DemoScene from
  * the komnata name + g_cur_etap + g_cur_komnata (Fix #24):
- * bg_pic = komnata name (from komnata table — exact .pic the script names)
- * fld_file = basename + ".fld"
- * music = "Tlo_<etap>_<komnata>a.wav"
  * Walk box is FLD-derived (off_drawX/Y/widths/heights[0]) — the
  * old hardcoded walk_x0..y1 values match FLD output exactly for stage 1
  * (verified maluch=628x79@(6,315), kiosk=628x112@(6,281), etc.).
@@ -1416,7 +1382,6 @@ void LoadKomnataScene(uint16_t id)
         *(uint16_t *)(eb + 0x54) = 0;
         *(uint16_t *)(eb + 0x56) = 0;
         /* Bind entry [5] idle bytecode ( line
- * g_actor[0xb] = *(int *)(stage+0xC) + 0x14;
  * = anim_tab[+0x14] = entry [5]). */
         if (sd) {
             uint32_t anim_tab_va =
@@ -1452,9 +1417,6 @@ void LoadKomnataScene(uint16_t id)
 
     /* Step 4 — synthesize the DemoScene from the komnata name + current
  * stage (Fix #26 — hardcoded s_demo_scenes[] removed):
- * bg_pic = `<name>` (the .pic the script names)
- * fld_file = `<basename>.fld` (swap extension)
- * music = `Tlo_<etap>_<komnata-id>a.wav`
  * walk_x0..y1 are left at 0; the actual walk box comes from FLD
  * (off_drawX/Y/widths/heights[0]) loaded below — g_walk_x0..y1
  * fallback is only used when no FLD is present. */
@@ -1707,9 +1669,6 @@ static int SolundClick(int trigger)
     default: toggled = 0; break;       /* idle per-frame call (trigger=-1) */
     }
     /* Refresh the SceneDef button frames so on/off state shows visually.
- * Original code:
- * hover = -(ushort)(flag != 0) & 0xC; // 12 when ON, 0 when OFF
- * def = hover + 6;
  * Atlas layout (24 frames): 0..5 = OFF hover, 6..11 = OFF def,
  * 12..17 = ON hover, 18..23 = ON def. Buttons 0..4 (5 toggles) get
  * the ON/OFF treatment; button 5 (exit at id 0x17) stays at def=11,
@@ -1719,11 +1678,6 @@ static int SolundClick(int trigger)
  * on/off state stays in sync with s_opt_* flags even when scene is
  * re-entered. Original reaches via default fall-through. */
     /* T103: button index mapping (post-fix Solund semantics):
- * buttons[0] = music (0x12)
- * buttons[1] = subtitles (0x13)
- * buttons[2] = voice (0x14)
- * buttons[3] = dialogues (0x15)
- * buttons[4] = extra (0x16)
  * buttons[5] = exit (0x17, no toggle visual) */
     g_solund_scene.buttons[0].hover_anim = (uint16_t)(s_opt_music      ? 12 : 0);
     g_solund_scene.buttons[0].def_anim   = (uint16_t)(s_opt_music      ? 18 : 6);
@@ -1776,12 +1730,6 @@ SceneDef g_solund_scene = {
  *
  * Atlas (Grafika.wyc) frame layout — 12 frames per redraw.
  * (Ghidra decompile of ):
- *
- * uVar1 = -(flagN != 0) & 0xfffd; // 0 (OFF) or 0xfffd (ON)
- * button[0].def = uVar1 + 3; // ON=0, OFF=3
- * button[0].hover = uVar1 + 9; // ON=6, OFF=9
- * button[1].def = uVar1 + 4; // ON=1, OFF=4
- * button[1].hover = uVar1 + 10; // ON=7, OFF=10
  * button[2] (exit) — static def=8, hover=2.
  * scene.flags |= 1; // SCENE_FLAG_REDRAW every call
  *
@@ -2600,14 +2548,6 @@ void HandleSceneInput(void)
  * route this as use-on-item (verb 0x0F) instead of overwriting
  * the held verb. @ 0x0040C081-C0A0:
  *
- * bVar6 = g_held_item != 0x26; // held active
- * g_held_item = 0x26; // clear held
- * if (bVar6 && g_hover_panel_verb != 0x26) { // also panel-hover
- * uVar16 = 0xF; // use-on-item verb
- * g_pickup_target_verb = g_hover_panel_verb; // var[0x0F] = target
- * }
- * DispatchClickEvent(this=held, that=verb_or_F);
- *
  * Original wires this from the same dispatch path as world-on-
  * item — both routes set var[0x0F] = target verb and fire
  * verb-0x0F script with this=held_item. */
@@ -2657,7 +2597,6 @@ void HandleSceneInput(void)
                        s_mouse_y >= 412 && s_mouse_y < 442) {
                 /* ▲ page-prev arrow — guziki#1.wyc frame 2 at (600,412)
  * size 30x30. Original spawns this as an entity in the
- * enter_script (3 guziki spawns + 1 pasek for page bar);
  * click on it would run an entity verb-script that calls
  * op 0x1D (InventoryPagePrev + PanelPageSwap). The port's
  * entity click-list doesn't currently catch panel-area
@@ -3132,29 +3071,17 @@ static const char *play_demo_scene(const DemoScene *scene)
  *
  * Original control flow (decoded from ):
  *
- * g_game_over_code = 0; // clear game-over
- * if (flags & 2) {
  * zero script_vars + entity_state;
  *; // ResetInventory
- * LoadStage(1); // 
- * }
- * bVar22 = need_load = true;
- * do {
- * if (key_pending) { SPACE→toggle actor; F12→Pytanie menu }
- * if ((flags & 2) || g_cur_komnata == 0) { reset state; }
- * if (need_load) {
  *;; // clear lists + reset panel
  * if (stage && !(flags & 0x10)) PlaySceneCutsceneAvi(intro_avi);
  * (g_cur_komnata); // LoadKomnata
- * flags &= 0xEE; need_load = false;
- * }
  * // click dispatch with use-on-item / actor-toggle branch
  * // save UI if requested
  * // SPACE-mid-frame toggle
  * ProcessGameFrameTick;
  * // game-over handling (cases 1/3/4)
  * if (exit_signal) return;
- * } while (true);
  *
  * Flags:
  * bit 1 (0x02) = FULL RESET (new game): zero vars + ResetInventory + LoadStage
@@ -3296,11 +3223,6 @@ void RunGameStageLoop(uint8_t flags)
  * then DROP into the menu so the user sees the assembled
  * ACME on the map and can click the green "finale" button
  * (id=0x16). @ 0x0040C3F4:
- * if (bVar22) {
- * PlaySceneCutsceneAvi("Dane_13.dta");
- * g_default_world_state = 5; // = button_count
- * } else { g_default_world_state = 4; }
- * RunMenuScene(0, sel_tlo);
  * LoadStage((ushort));
  * — note no early bail. The previous port version `break`ed
  * here, which meant the player never saw the green button
@@ -3346,10 +3268,7 @@ void RunGameStageLoop(uint8_t flags)
         case 4:                                   /* stage-end —
  * @ 0x0040C328:
  *;;
- * PlaySceneCutsceneAvi(stage->alt_avi);
- * pcVar15 = stage->alt3_avi;
  * // fall through to common epilogue:
- * PlaySceneCutsceneAvi(pcVar15);
  *
  * Plays BOTH outro (alt_avi) and transition (alt3_avi)
  * back-to-back without the chapter-select menu between

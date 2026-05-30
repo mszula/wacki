@@ -229,14 +229,6 @@ advance:
 /* ------------------------------------------------------------------------- *
  * MeasureTextLine —
  *
- * uVar7 = 0;
- * for each char c in text:
- * idx = clamp(c, first_char, last_char) - first_char
- * if (kern_tab) uVar7 += be16(kern_tab[idx*2]);
- * if (uVar7 < 0) uVar7 = 0;
- * if (advance_tab) uVar7 += be16(advance_tab[idx*2]); // psVar7[0x17]
- * else uVar7 += font.advance; // default em
- *
  * Returns pixel width of `text` rendered with `font`. Used by op 0x09
  * SHOW_TEXT to compute speech balloon width.
  *
