@@ -18,27 +18,7 @@
 extern void *xmalloc(uint32_t sz);
 extern void  xfree  (void *p);
 
-/* ========================================================================= *
- * Pointer-slot intern table — needed because Entity's pointer fields are
- * 4-byte slot IDs (to preserve binary 32-bit offsets) but we run on a
- * 64-bit host with 8-byte real pointers. Each unique pointer gets a slot
- * ID; entity stores the ID; runtime resolves ID → real pointer.
- * ========================================================================= */
-#define ENT_PTR_SLOTS 1024
-static void *g_ent_ptr_tbl[ENT_PTR_SLOTS];
-static int   g_ent_ptr_n = 1;       /* slot 0 reserved for NULL */
-
-uint32_t ent_ptr_intern(void *p) {
-    if (!p) return 0;
-    for (int i = 1; i < g_ent_ptr_n; ++i)
-        if (g_ent_ptr_tbl[i] == p) return (uint32_t)i;
-    if (g_ent_ptr_n >= ENT_PTR_SLOTS) return 0;
-    g_ent_ptr_tbl[g_ent_ptr_n] = p;
-    return (uint32_t)g_ent_ptr_n++;
-}
-void *ent_ptr_resolve(uint32_t slot) {
-    return (slot && slot < (uint32_t)g_ent_ptr_n) ? g_ent_ptr_tbl[slot] : NULL;
-}
+/* ent_ptr_intern / ent_ptr_resolve moved to src/actor/intern.c. */
 
 /* per-frame entity dispatch — 500 slots (DAT_00450480, DAT_00451424) */
 struct UpdateRegEntry { Entity *e; uint16_t kind; uint16_t id; };
