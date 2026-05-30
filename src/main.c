@@ -2,13 +2,13 @@
  * main.c — portable entry point.
  *
  * On Windows the original binary entered via 'entry' @ 0x004161C0 and then
- * WinMain @ 0x004043B0. In this portable build we use a normal int main()
- * that forwards to WackiMain(); SDL2 supplies SDL_main.
+ * WinMain @ 0x004043B0. In this portable build we use a normal int main
+ * that forwards to WackiMain; SDL2 supplies SDL_main.
  *
  * Original logic preserved:
- *   • CheckCdRomDrive  loop (volume label WACKI_1)
- *   • CheckDirectSoundVersion  (always succeeds in the SDL build)
- *   • PlatformInit -> InitializeGameSubsystems -> RunMainGameLoop
+ * • CheckCdRomDrive loop (volume label WACKI_1)
+ * • CheckDirectSoundVersion (always succeeds in the SDL build)
+ * • PlatformInit -> InitializeGameSubsystems -> RunMainGameLoop
  */
 #include "wacki.h"
 #include <SDL.h>
@@ -36,7 +36,7 @@ void StatsDump(void)
     extern uint32_t g_tick_counter;
     uint32_t elapsed = g_tick_counter - g_stats.boot_tick;
     /* Tick is multimedia timer at ~1kHz on the original; SDL timer at
-     * same cadence in port. Display as mm:ss for human readability. */
+ * same cadence in port. Display as mm:ss for human readability. */
     uint32_t secs = elapsed / 1000;
     fprintf(stderr,
         "[stats] elapsed=%02u:%02u clicks=%u dialogs=%u komnata-loads=%u "
@@ -70,9 +70,9 @@ int g_no_pacing = 0;
  * SDL_RenderSetLogicalSize, keeping the framebuffer 640×480 but
  * scaling on present.
  *
- *   g_scale_factor = 0 → use SDL's default (1x, no scaling)
- *   g_scale_factor = N → request N×640 × N×480 window with logical 640×480
- *   g_scale_mode   = "nearest" (default) | "linear" | "best"
+ * g_scale_factor = 0 → use SDL's default (1x, no scaling)
+ * g_scale_factor = N → request N×640 × N×480 window with logical 640×480
+ * g_scale_mode = "nearest" (default) | "linear" | "best"
  *
  * Set via --scale N / --scaler MODE args or WACKI_SCALE/WACKI_SCALER env.
  * Used by PlatformInit to size the window + set RENDER_SCALE_QUALITY hint. */
@@ -155,7 +155,7 @@ static void sigint_handler(int sig)
 {
     (void)sig;
     /* SDL_QUIT push is async-signal-safe enough on Unix; the main loop
-     * polls it via PlatformShouldQuit and unwinds normally. */
+ * polls it via PlatformShouldQuit and unwinds normally. */
     SDL_Event ev = {0};
     ev.type = SDL_QUIT;
     SDL_PushEvent(&ev);
@@ -169,21 +169,21 @@ static void sigint_handler(int sig)
 int WackiMain(int argc, char **argv)
 {
     /* T133 — SIGINT (Ctrl-C) → graceful shutdown. Installed first so it
-     * covers init phase too. */
+ * covers init phase too. */
     signal(SIGINT, sigint_handler);
 
 
     /* T45 — parse --headless before any SDL init. Env var WACKI_HEADLESS=1
-     * works equivalently for CI runners that can't easily change argv. */
+ * works equivalently for CI runners that can't easily change argv. */
     uint32_t seed_override = 0;
     int      seed_set      = 0;
     const char *play_avi   = NULL;     /* T29/T30 — single-AVI test mode */
     int test_cutscenes     = 0;        /* T29 — batch test all cutscenes */
     int start_stage        = 0;        /* DEV — --start-stage N: skip menu+intro,
-                                        * mark stages 1..(N-1) as completed, jump
-                                        * straight into stage N gameplay. Useful
-                                        * during testing to avoid replaying earlier
-                                        * stages on every iteration. */
+ * mark stages 1..(N-1) as completed, jump
+ * straight into stage N gameplay. Useful
+ * during testing to avoid replaying earlier
+ * stages on every iteration. */
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--headless") == 0) g_headless = 1;
         else if (strcmp(argv[i], "--start-stage") == 0 && i + 1 < argc) {
@@ -191,15 +191,15 @@ int WackiMain(int argc, char **argv)
             if (start_stage < 1 || start_stage > 5) start_stage = 0;
         }
         /* T44 — deterministic smoke harness: --seed N sets WackiRand
-         * seed before any rand call. Combined with --headless gives a
-         * reproducible smoke run for CI assertions. */
+ * seed before any rand call. Combined with --headless gives a
+ * reproducible smoke run for CI assertions. */
         else if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
             seed_override = (uint32_t)strtoul(argv[++i], NULL, 0);
             seed_set      = 1;
         }
         /* T54 — HiDPI scaling. --scale N enlarges window NxN, keeps
-         * framebuffer at native 640×480 via SDL_RenderSetLogicalSize.
-         * --scaler nearest|linear|best controls upscale filtering. */
+ * framebuffer at native 640×480 via SDL_RenderSetLogicalSize.
+ * --scaler nearest|linear|best controls upscale filtering. */
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
             g_scale_factor = atoi(argv[++i]);
             if (g_scale_factor < 1) g_scale_factor = 1;
@@ -209,20 +209,20 @@ int WackiMain(int argc, char **argv)
             g_scale_mode = argv[++i];
         }
         /* T29/T30 — play a single cutscene then exit. Useful for QA
-         * runs without needing to drive the game to the death/intro
-         * trigger. Usage: ./wacki --play-avi DANE_14.DTA */
+ * runs without needing to drive the game to the death/intro
+ * trigger. Usage: ./wacki --play-avi DANE_14.DTA */
         else if (strcmp(argv[i], "--play-avi") == 0 && i + 1 < argc) {
             play_avi = argv[++i];
         }
         /* T29 — iterate over all known cutscene files (intros, alts,
-         * death), play each briefly, report success/failure. Designed
-         * for headless CI to catch decoder regressions. */
+ * death), play each briefly, report success/failure. Designed
+ * for headless CI to catch decoder regressions. */
         else if (strcmp(argv[i], "--test-cutscenes") == 0) {
             test_cutscenes = 1;
             g_no_pacing    = 1;     /* batch mode: don't sleep per frame */
         }
         /* T29 — force-fast decode for cutscenes (no SDL_Delay between
-         * frames). Useful for single-AVI verification too. */
+ * frames). Useful for single-AVI verification too. */
         else if (strcmp(argv[i], "--no-pacing") == 0) {
             g_no_pacing = 1;
         }
@@ -258,8 +258,8 @@ int WackiMain(int argc, char **argv)
     }
     if (g_headless) {
         /* Force SDL's null video backend so SDL_Init doesn't try to
-         * connect to Cocoa/X11/Wayland. Caller can still override by
-         * setting SDL_VIDEODRIVER before launch (rare). */
+ * connect to Cocoa/X11/Wayland. Caller can still override by
+ * setting SDL_VIDEODRIVER before launch (rare). */
         setenv("SDL_VIDEODRIVER", "dummy", 0);
         setenv("SDL_AUDIODRIVER", "dummy", 0);
         fprintf(stderr, "[wacki] headless mode\n");
@@ -282,10 +282,10 @@ int WackiMain(int argc, char **argv)
     fprintf(stderr, "[wacki] data source: %s\n", g_cd_path);
 
     /* Optional: load WACKI.EXE as a passive PE image so xlat_binary_ptr
-     * can resolve original .data/.rdata/.text addresses (verb tables,
-     * scripts, etc.) that haven't been manually transcribed into the
-     * port's binary_data.c. Missing or unreadable → port falls back to
-     * the manually-embedded blobs only (current behaviour). */
+ * can resolve original .data/.rdata/.text addresses (verb tables,
+ * scripts, etc.) that haven't been manually transcribed into the
+ * port's binary_data.c. Missing or unreadable → port falls back to
+ * the manually-embedded blobs only (current behaviour). */
     extern int PeLoaderInit(const char *exe_path);
     {
         char p[512];
@@ -306,11 +306,11 @@ int WackiMain(int argc, char **argv)
     }
 
     /* T29/T30 — cutscene test modes. Run AFTER InitializeGameSubsystems
-     * (which mounts archives + builds stage table) so PlaySceneCutsceneAvi
-     * can find the .dta files via the standard try_play_at chain, and
-     * BEFORE RunMainGameLoop so we don't load menu state we'll throw
-     * away. Both modes exit after their run instead of dropping into
-     * the menu. */
+ * (which mounts archives + builds stage table) so PlaySceneCutsceneAvi
+ * can find the .dta files via the standard try_play_at chain, and
+ * BEFORE RunMainGameLoop so we don't load menu state we'll throw
+ * away. Both modes exit after their run instead of dropping into
+ * the menu. */
     if (play_avi) {
         fprintf(stderr, "[cutscene-test] play '%s'\n", play_avi);
         PlaySceneCutsceneAvi(play_avi);
@@ -320,24 +320,24 @@ int WackiMain(int argc, char **argv)
     }
     if (test_cutscenes) {
         /* Walks every known cutscene file. Each call blocks until the
-         * AVI finishes (or fails to open); we log start/end so a CI
-         * runner can grep for failures. */
+ * AVI finishes (or fails to open); we log start/end so a CI
+ * runner can grep for failures. */
         static const char *cutscenes[] = {
             "DANE_10.DTA",          /* engine intro */
             "DANE_11.DTA",          /* alt-stage 5 (credits roll?) */
             "DANE_12.DTA",          /* mid-game */
             "DANE_13.DTA",          /* ? */
             "DANE_14.DTA",          /* death */
-            "DANE_21.DTA",          /* stage 1 alt  */
+            "DANE_21.DTA",          /* stage 1 alt */
             "DANE_22.DTA",          /* stage 1 alt3 */
             "DANE_30.DTA",          /* stage 2 intro */
-            "DANE_31.DTA",          /* stage 2 alt  */
+            "DANE_31.DTA",          /* stage 2 alt */
             "DANE_32.DTA",          /* stage 2 alt3 */
             "DANE_40.DTA",          /* stage 3 intro */
-            "DANE_41.DTA",          /* stage 3 alt  */
+            "DANE_41.DTA",          /* stage 3 alt */
             "DANE_42.DTA",          /* stage 3 alt3 */
             "DANE_50.DTA",          /* stage 4 intro */
-            "DANE_51.DTA",          /* stage 4 alt  */
+            "DANE_51.DTA",          /* stage 4 alt */
             "DANE_52.DTA",          /* stage 4 alt3 */
         };
         fprintf(stderr, "[cutscene-test] batch %zu files\n",

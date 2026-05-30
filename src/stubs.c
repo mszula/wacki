@@ -3,9 +3,9 @@
  * engine references through `extern` but whose full implementation we
  * deferred from the Ghidra reverse. Each stub:
  *
- *   • carries a one-line note with the original FUN_* / DAT_* address
- *   • has minimal-but-typed behaviour (no-ops, sane defaults)
- *   • exists so that the engine LINKS cleanly and the SDL build runs
+ * • carries a one-line note with the original FUN_* / DAT_* address
+ * • has minimal-but-typed behaviour (no-ops, sane defaults)
+ * • exists so that the engine LINKS cleanly and the SDL build runs
  *
  * If you ever fully port the binary, replace each stub with the
  * corresponding decompiled body.
@@ -17,7 +17,7 @@
 #include <time.h>
 
 /* =========== globals ====================================================
- * Only the ones not owned by another module live here.  See game.c
+ * Only the ones not owned by another module live here. See game.c
  * (g_tick_counter, g_lmb_handled, g_stage_table, …), script.c
  * (g_active_actor, g_perspective_*) and assets.c (g_persp_band_count).
  */
@@ -28,36 +28,36 @@ int16_t   g_persp_profile[0x22*2];      /* DAT_0044E5F8 */
 /* g_next_cd_check removed — rule #7. */
 
 /* T22 phase A/B staging globals removed in T42:
- *   - g_pending_komnata: replaced by in-place LoadKomnataScene call
- *   - g_komnata_loaded_by_op20: outer-loop guard no longer needed
- *     after play_first_scene_demo collapsed to single play_demo_scene
- *     call (T22 phase B). */
+ * - g_pending_komnata: replaced by in-place LoadKomnataScene call
+ * - g_komnata_loaded_by_op20: outer-loop guard no longer needed
+ * after play_first_scene_demo collapsed to single play_demo_scene
+ * call (T22 phase B). */
 
 /* Scene transitions (ScriptGoToKomnata) → src/scene/navigation.c
  * Actor walking (ActorWalkToBlocking, ActorWalkBothBlocking) →
- *     src/scene/actor_walk.c
+ * src/scene/actor_walk.c
  * Stage descriptors (BuildStageTable, LoadActorWalkAnims, the
- *     g_stage_table/g_stage_va_table/g_actor_walk_anim globals,
- *     and g_default_world_state) → src/scene/stage.c */
+ * g_stage_table/g_stage_va_table/g_actor_walk_anim globals,
+ * and g_default_world_state) → src/scene/stage.c */
 
 /* LoadKomnata moved to src/scene/komnata.c. */
 
 /* ActorWalkToBlocking — 1:1 with op 0x10/0x11/0x12 wait-for-walk
  * loop from Ghidra @ RunScriptInterpreter 0x00407820 case 0x10:
  *
- *   if (actor[+0x22] != tx || actor[+0x24] != ty) {
- *     DAT_0044e6a4 = idx;                  // swap active to this actor
- *     DAT_0044e5ac = 1;                    // synthesize click pending
- *     DAT_0044e5a4 = 1;                    // synthesize walker-bind flag
- *     DAT_0044e570 = -1;                   // walk-target id reset
- *     actor[+0x4C] = 0; actor[+0x50] = 0;
- *     UpdateActorMovement(tx, ty);         // binds walker via standard path
- *     DAT_0044e6a4 = saved_active;
- *     do {
- *       DAT_0044e5ac = 0; DAT_0044e5a4 = 0;
- *       ProcessGameFrameTick();
- *     } while (actor[+0x4C] != 0 || actor[+0x50] != 0 || DAT_0044e570 != -1);
- *   }
+ * if (actor[+0x22] != tx || actor[+0x24] != ty) {
+ * DAT_0044e6a4 = idx; // swap active to this actor
+ * DAT_0044e5ac = 1; // synthesize click pending
+ * DAT_0044e5a4 = 1; // synthesize walker-bind flag
+ * DAT_0044e570 = -1; // walk-target id reset
+ * actor[+0x4C] = 0; actor[+0x50] = 0;
+ * UpdateActorMovement(tx, ty); // binds walker via standard path
+ * DAT_0044e6a4 = saved_active;
+ * do {
+ * DAT_0044e5ac = 0; DAT_0044e5a4 = 0;
+ * ProcessGameFrameTick;
+ * } while (actor[+0x4C] != 0 || actor[+0x50] != 0 || DAT_0044e570 != -1);
+ * }
  *
  * EACH per-entity VM tick inside ProcessGameFrameTick advances the
  * walker via op 0x15/0x16's step loop — step size = walker bytecode's
@@ -74,17 +74,17 @@ extern int  BindActorWalker(int actor_idx, int target_x, int target_y);
 extern int  PlatformShouldQuit(void);
 
 /* DAT_0044E448 — komnata flag bits (set from komnata table entry[+4]
- * inside FUN_00402A50 / LoadKomnata):
- *   bit 0 = panel visible (read by FUN_00407260 PanelHitTest)
- *   bit 1 = actors active (read by actor.c — UpdateActorMovement gate)
- *   bit 2 = link the kind=3/4 default entities (cursor + krazek)
+ * inside / LoadKomnata):
+ * bit 0 = panel visible (read by PanelHitTest)
+ * bit 1 = actors active (read by actor.c — UpdateActorMovement gate)
+ * bit 2 = link the kind=3/4 default entities (cursor + krazek)
  * Default is 2 (actors-only) so the menu/cutscene path doesn't render
  * the panel; LoadKomnata raises bit 0 for in-game rooms. */
 uint16_t  g_settings_anim_active = 2;   /* DAT_0044E448 — komnata flags
-                                          * (T121: u16 not u8 — high bits
-                                          * 8-15 needed by
-                                          * ScriptCallBgMaskSetup perspective
-                                          * band count `(flags & 0xff02) << 1`). */
+ * (T121: u16 not u8 — high bits
+ * 8-15 needed by
+ * ScriptCallBgMaskSetup perspective
+ * band count `(flags & 0xff02) << 1`). */
 uint16_t  g_active_target_y = 0;        /* DAT_0044E5A8 */
 uint16_t  g_selected_save_slot = 0;
 int       g_cd_drive_letter_present = 1;/* DAT_00475A54 */
@@ -118,7 +118,7 @@ uint16_t  g_hover_scene_verb  = 0x26;
 
 /* =========== version / file helpers ===================================== */
 
-/* FUN_0040F8D0 — GetFileVersionInfo() probe; portable build can't probe a
+/* — GetFileVersionInfo probe; portable build can't probe a
  * .dll version, so always claim a sufficiently new one. */
 uint32_t GetDllPackedVersion(const char *dll) { (void)dll; return 0x00500004; }
 
@@ -199,8 +199,8 @@ uint32_t g_frame_delta_ms = 16;
 
 /* Frame delta in 10 ms TICKS — 1:1 with DAT_0044E578 in the PE. The
  * original game arms timeSetEvent (call site at 0x00403D84) with a 10 ms
- * periodic timer whose ISR (FUN_00403E40) does `INC DAT_0044E454`. That
- * counter is sampled in FUN_004024D0 into DAT_0044E578 = (now - prev)
+ * periodic timer whose ISR does `INC DAT_0044E454`. That
+ * counter is sampled in into DAT_0044E578 = (now - prev)
  * 10 ms units. EVERY in-PE site that reads DAT_0044E578 (cursor anim
  * accumulator, entity VM frame countdown +0x3C, dialog/prop timer, op
  * 0x14 WAIT_MS countdown, op 0x26/0x3D anim-frame waits, dialog choice
@@ -222,28 +222,28 @@ uint16_t g_frame_delta_ticks = 1;
 
 /* Palette fade machinery — 1:1 port of cases 0x48/0x49/0x4A.
  *
- *   case 0x48 (full fade): DAT_004549E0 = 0; DAT_00455000 = step;
- *                          load target into DAT_00451DC8;
- *                          zero DAT_00454A00 work buffer.
- *   case 0x49 (step):      if (progress < 100) {
- *                              progress += step;
- *                              FUN_004140e0(work, target, out, progress%);
- *                              FUN_00412d10(out, 0);   // install
- *                              return 0;
- *                          }
- *                          // else return previous value
- *   case 0x4A (instant?):  similar to 0x48 but without progress reset.
+ * case 0x48 (full fade): DAT_004549E0 = 0; DAT_00455000 = step;
+ * load target into DAT_00451DC8;
+ * zero DAT_00454A00 work buffer.
+ * case 0x49 (step): if (progress < 100) {
+ * progress += step;
+ * (work, target, out, progress%);
+ * (out, 0); // install
+ * return 0;
+ * }
+ * // else return previous value
+ * case 0x4A (instant?): similar to 0x48 but without progress reset.
  *
- * FUN_004140e0 linearly interpolates each palette byte between source
+ * linearly interpolates each palette byte between source
  * (DAT_00454A00, snapshot of pal at fade start) and target
- * (DAT_00451DC8) by progress/100, writing result to DAT_00454D00.
+ * by progress/100, writing result to DAT_00454D00.
  *
  * Port state mirrors:
- *   g_palette_rgb       = DAT_00454D00 / live pal (256 entries × 3 RGB)
- *   s_pal_fade_source   = DAT_00454A00 (snapshot at fade start)
- *   s_pal_fade_target   = DAT_00451DC8 (loaded by case 0x48)
- *   s_pal_fade_progress = DAT_004549E0 (0..100)
- *   s_pal_fade_step     = DAT_00455000 (per-step advance) */
+ * g_palette_rgb = DAT_00454D00 / live pal (256 entries × 3 RGB)
+ * s_pal_fade_source = DAT_00454A00 (snapshot at fade start)
+ * s_pal_fade_target = DAT_00451DC8 (loaded by case 0x48)
+ * s_pal_fade_progress = DAT_004549E0 (0..100)
+ * s_pal_fade_step = DAT_00455000 (per-step advance) */
 /* Palette fade (ScriptCallPalLoad + ScriptCallPalFadeStep) moved to
  * src/script_bridge/palette.c. */
 
@@ -264,7 +264,7 @@ extern void    LinkEntityToList(Entity **head, Entity *e, int position);
 extern Entity *g_render_list_head;
 extern Entity *g_click_list_head;
 extern void    RegisterEntityForUpdate(Entity *e, uint16_t kind, uint16_t id);
-extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);  /* FUN_00405D80 */
+extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);  /* */
 extern const void *xlat_binary_ptr(uint32_t);
 
 /* ------------------------------------------------------------------------- *
@@ -272,17 +272,17 @@ extern const void *xlat_binary_ptr(uint32_t);
  *
  * Original engine pre-spawns both actors at game start with their atlas
  * (ebek.wyc / fjej.wyc) bound and verb_id = 1/2 in the click payload, so
- *   - op 0x28 SET_ENTITY_XY id=1  → FUN_00404C30(1) finds Ebek's click
- *     entity → returns its owner render entity → moves it.
- *   - op 0x28 SET_ENTITY_XY id=2  → same for Fjej.
- *   - DispatchClickEvent + verb_table searches resolve actor verb_ids.
+ * - op 0x28 SET_ENTITY_XY id=1 → (1) finds Ebek's click
+ * entity → returns its owner render entity → moves it.
+ * - op 0x28 SET_ENTITY_XY id=2 → same for Fjej.
+ * - DispatchClickEvent + verb_table searches resolve actor verb_ids.
  *
  * Returns the spawned render entity (= g_actor[idx]). Owns:
- *   - kind=2 render entity registered (kind=2, id) in update table,
- *     linked to render list
- *   - kind=4 click entity (offset+8 = 1 in click list), bound to
- *     a tiny 1-entry verb table { count=1, verb_id }, linked to
- *     click list + registered (kind=4, id) in update table          */
+ * - kind=2 render entity registered (kind=2, id) in update table,
+ * linked to render list
+ * - kind=4 click entity (offset+8 = 1 in click list), bound to
+ * a tiny 1-entry verb table { count=1, verb_id }, linked to
+ * click list + registered (kind=4, id) in update table */
 extern Entity *AllocEntity(uint16_t w, uint16_t h, uint16_t kind, uint16_t flags);
 
 /* SpawnActorEntity + ScriptCallSpawnEntity moved to

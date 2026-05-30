@@ -2,21 +2,21 @@
  *
  * The largest single domain extracted from stubs.c. Three concerns:
  *
- *   1. Text-translation LUT (TextTranslationLutInit): build a glyph
- *      remap table that converts Polish accented characters to their
- *      ASCII fallbacks for fonts that don't carry the full character
- *      set.
+ * 1. Text-translation LUT (TextTranslationLutInit): build a glyph
+ * remap table that converts Polish accented characters to their
+ * ASCII fallbacks for fonts that don't carry the full character
+ * set.
  *
- *   2. Speech balloon (ScriptCallShowText + TickSpeechBalloon):
- *      script opcode 0x09 SHOW_TEXT path. Builds a kind=1 entity that
- *      carries the rendered glyphs, positions it above the speaker,
- *      and arms a dismiss timer based on text length. The per-frame
- *      TickSpeechBalloon advances the dismiss countdown and tears
- *      down the entity when it expires.
+ * 2. Speech balloon (ScriptCallShowText + TickSpeechBalloon):
+ * script opcode 0x09 SHOW_TEXT path. Builds a kind=1 entity that
+ * carries the rendered glyphs, positions it above the speaker,
+ * and arms a dismiss timer based on text length. The per-frame
+ * TickSpeechBalloon advances the dismiss countdown and tears
+ * down the entity when it expires.
  *
- *   3. Dialog end (ScriptCallDialogEnd): op 0x53 tail — pops the
- *      dialog stack, restores the panel verb table, and signals the
- *      result_key to the calling script.
+ * 3. Dialog end (ScriptCallDialogEnd): op 0x53 tail — pops the
+ * dialog stack, restores the panel verb table, and signals the
+ * result_key to the calling script.
  *
  * The balloon and dialog state live in module-static globals
  * (g_speech_balloon, g_speech_tick, g_speech_dismiss_ticks,
@@ -48,11 +48,11 @@ uint16_t g_speech_dismiss_ticks  = 0;
 Entity *g_speech_balloon = NULL;
 
 /* Speaker animation unbind state — mirrors the original op 0x09 epilogue
- * (RunScriptInterpreter case 9, line ~480 of FUN_00407820):
+ * (RunScriptInterpreter case 9, line ~480 of ):
  *
- *   if (local_164 < dlg_count) {
- *       FUN_00401210(slot[local_164].speaker, slot[local_164].DATA);
- *   }
+ * if (local_164 < dlg_count) {
+ * (slot[local_164].speaker, slot[local_164].DATA);
+ * }
  *
  * The original re-binds the speaker entity to the dialog slot's `data`
  * bytecode (idle animation) AFTER the balloon dismisses. Without it the
@@ -64,15 +64,15 @@ uint16_t g_speech_unbind_speaker = 0;
 uint32_t g_speech_unbind_data    = 0;
 
 /* T117 — Polish-diacritic → Futura-glyph translation table (1:1 with
- * FUN_0040C740 init @ 0x0040C740). The original engine maps 18 CP-1250
+ * init @ 0x0040C740). The original engine maps 18 CP-1250
  * Polish characters to custom Futura.30 glyph slots @ indices 0xC2..0xFB.
  * Identity for all other bytes. Source pairs lifted from
  * DAT_00445E40 (source CP-1250) + DAT_00445E58 (target Futura slot) in PE.
  *
  * Without this LUT, op 0x09 SHOW_TEXT would either:
- *   (a) render Polish chars as wrong glyphs (whatever lives at CP-1250
- *       codepoint in Futura.30 — possibly garbage), or
- *   (b) render them as blanks (if outside font's first..last_char range).
+ * (a) render Polish chars as wrong glyphs (whatever lives at CP-1250
+ * codepoint in Futura.30 — possibly garbage), or
+ * (b) render them as blanks (if outside font's first..last_char range).
  *
  * Called once at engine boot (PreloadCommonAssets tail) so it's ready
  * before any op 0x09 fires. */
@@ -82,11 +82,11 @@ static int     g_text_lut_built = 0;
 void TextTranslationLutInit(void)
 {
     if (g_text_lut_built) return;
-    /* Identity mapping for all 256 bytes (1:1 z FUN_0040C740 head). */
+    /* Identity mapping for all 256 bytes (1:1 z head). */
     for (int i = 0; i < 256; ++i) g_text_translation_lut[i] = (uint8_t)i;
     /* Override 18 entries — Polish diacritics → Futura slots. Table
-     * lifted byte-for-byte from PE: source @ 0x00445E40, target @
-     * 0x00445E58 (each 18 bytes). */
+ * lifted byte-for-byte from PE: source @ 0x00445E40, target @
+ * 0x00445E58 (each 18 bytes). */
     static const uint8_t src[18] = {
         0xA5, 0xC6, 0xCA, 0xA3, 0xD1, 0xD3, 0x8C, 0xAF, 0x8F,   /* Ą Ć Ę Ł Ń Ó Ś Ż Ź */
         0xB9, 0xE6, 0xEA, 0xB3, 0xF1, 0xF3, 0x9C, 0x9F, 0xBF    /* ą ć ę ł ń ó ś ź ż */
@@ -100,7 +100,7 @@ void TextTranslationLutInit(void)
 }
 
 /* T117 — translate input text via LUT into output buffer. 1:1 with
- * FUN_0040C780 @ 0x0040C780. Stops on NUL byte in TRANSLATED stream
+ *. Stops on NUL byte in TRANSLATED stream
  * (an override mapping a char to 0x00 would terminate early — the
  * Polish-diacritic LUT never does this so we're safe in practice). */
 static void translate_script_text(const char *in, char *out, size_t out_sz)
@@ -135,41 +135,41 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     extern uint32_t g_tick_counter;
     extern FontHandle *g_default_font;
     if (!text || !*text || !g_default_font) return;
-    /* T103 — gate on g_subtitles_on (DAT_00455121). When disabled in
-     * Solund menu, op 0x09 SHOW_TEXT no-ops (audio still plays via
-     * separate path if voice_on is set; only the visible balloon is
-     * suppressed). */
+    /* T103 — gate on g_subtitles_on. When disabled in
+ * Solund menu, op 0x09 SHOW_TEXT no-ops (audio still plays via
+ * separate path if voice_on is set; only the visible balloon is
+ * suppressed). */
     if (!g_subtitles_on) {
         fprintf(stderr, "[say] suppressed (subtitles_on=0): %.60s\n", text);
         return;
     }
     /* T117 — translate raw CP-1250 input via Polish-diacritic LUT before
-     * any layout/render. 1:1 with original op 0x09 dispatch calling
-     * FUN_0040C780(text) → DAT_00475950 (translated buffer). */
+ * any layout/render. op 0x09 dispatch calling
+ * (text) → DAT_00475950 (translated buffer). */
     char translated[256];
     translate_script_text(text, translated, sizeof translated);
     text = translated;
     fprintf(stderr, "[say] actor=%u: %.120s\n", actor, text);
 
     /* 1:1 with op 0x09 (RunScriptInterpreter case 9):
-     *
-     *   1. FUN_0040C780 copies the text into work buffer (DAT_00475950).
-     *   2. Split on '|' into up to 10 lines (local_d4[]).
-     *   3. Measure each line width via FUN_004138B0(font, line),
-     *      track max in uVar24, set total height = lines * font.advance.
-     *   4. piVar22 = AllocEntity(maxW, totalH, kind=1, 1).
-     *   5. Zero the pixel buffer.
-     *   6. Set up render desc DAT_004549E8..:
-     *        stride=maxW height=totalH font=DAT_0045500C color=0xFD
-     *      and render each line centred at (maxW - line_w)/2.
-     *   7. FUN_00404BC0(speaker_id) → speaker click entity.
-     *      If kind=1/2: X = drawX + (w - text_w)/2, Y = drawY - text_h.
-     *      Else: Y=0x50, X centred.
-     *   8. Clamp X to [0, screen_w - text_w], Y to >= 0.
-     *   9. FUN_00405FC0(DAT_0045147C, balloon) — link to render list.
-     *  10. Wait loop ticks down DAT_00455004 by g_frame_delta_ms per
-     *      ProcessGameFrameTick; exit when zero or DAT_0044E5AC click.
-     *  11. Set balloon hidden bit (+0x09 & 0x80) on exit.                */
+ *
+ * 1. copies the text into work buffer.
+ * 2. Split on '|' into up to 10 lines (local_d4[]).
+ * 3. Measure each line width via (font, line),
+ * track max in uVar24, set total height = lines * font.advance.
+ * 4. piVar22 = AllocEntity(maxW, totalH, kind=1, 1).
+ * 5. Zero the pixel buffer.
+ * 6. Set up render desc DAT_004549E8..:
+ * stride=maxW height=totalH font=DAT_0045500C color=0xFD
+ * and render each line centred at (maxW - line_w)/2.
+ * 7. (speaker_id) → speaker click entity.
+ * If kind=1/2: X = drawX + (w - text_w)/2, Y = drawY - text_h.
+ * Else: Y=0x50, X centred.
+ * 8. Clamp X to [0, screen_w - text_w], Y to >= 0.
+ * 9. (DAT_0045147C, balloon) — link to render list.
+ * 10. Wait loop ticks down DAT_00455004 by g_frame_delta_ms per
+ * ProcessGameFrameTick; exit when zero or DAT_0044E5AC click.
+ * 11. Set balloon hidden bit (+0x09 & 0x80) on exit. */
 
     /* --- 1: copy text + split on '|' --- */
     char buf[256];
@@ -186,8 +186,8 @@ void ScriptCallShowText(uint16_t actor, const char *text)
         p = bar + 1;
     }
 
-    /* --- 2: measure widths via MeasureTextLine (= FUN_004138B0
-     * 1:1 port — per-glyph width_tab + kern_tab sums). --- */
+    /* --- 2: measure widths via MeasureTextLine (= 
+ * 1:1 port — per-glyph width_tab + kern_tab sums). --- */
     int line_w[10] = {0};
     int max_w = 0;
     for (int i = 0; i < line_count; ++i) {
@@ -201,7 +201,7 @@ void ScriptCallShowText(uint16_t actor, const char *text)
 
     /* --- 3: AllocEntity kind=1 with primary plane (group_flags=1) --- */
     /* Free any previous balloon — original op 0x09 keeps only one at
-     * a time (the previous one is hidden via +0x09 |= 0x80 then GC'd). */
+ * a time (the previous one is hidden via +0x09 |= 0x80 then GC'd). */
     if (g_speech_balloon) {
         UnlinkEntity(g_speech_balloon);
         if (g_speech_balloon->pixels) xfree(g_speech_balloon->pixels);
@@ -216,14 +216,14 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     memset(e->pixels, 0, (size_t)max_w * (size_t)total_h);
 
     /* --- 4: render each line into the buffer ---
-     * RenderTextLineToBuffer writes at td.pixels + stride*baseline.
-     * Per-line Y advance via offsetting base pointer. Color 0xFD
-     * (DAT_004549F8 from Ghidra).
-     *
-     * Native-pointer TextRenderTarget struct (replaces the original's
-     * 32-bit uint32_t[5] descriptor) — see wacki.h. The legacy uint32_t
-     * array truncated 64-bit pointers and crashed when malloc returned
-     * addresses above the 4 GB boundary. */
+ * RenderTextLineToBuffer writes at td.pixels + stride*baseline.
+ * Per-line Y advance via offsetting base pointer. Color 0xFD
+ * (DAT_004549F8 from Ghidra).
+ *
+ * Native-pointer TextRenderTarget struct (replaces the original's
+ * 32-bit uint32_t[5] descriptor) — see wacki.h. The legacy uint32_t
+ * array truncated 64-bit pointers and crashed when malloc returned
+ * addresses above the 4 GB boundary. */
     for (int i = 0; i < line_count; ++i) {
         int cx = (max_w - line_w[i]) / 2;
         if (cx < 0) cx = 0;
@@ -237,9 +237,9 @@ void ScriptCallShowText(uint16_t actor, const char *text)
         RenderTextLineToBuffer(&td, (const uint8_t *)lines[i]);
     }
 
-    /* --- 5: position above speaker — 1:1 with case 9 FUN_00404BC0
-     * lookup. Use FindEntityByVerbId; if found, position above its
-     * draw rect. Else fallback: Y=0x50, X centred. */
+    /* --- 5: position above speaker — 1:1 with case 9 
+ * lookup. Use FindEntityByVerbId; if found, position above its
+ * draw rect. Else fallback: Y=0x50, X centred. */
     int bx, by;
     extern Entity *FindEntityByVerbId(uint16_t verb);
     Entity *spk = FindEntityByVerbId(actor);
@@ -271,33 +271,33 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     g_speech_balloon = e;
 
     /* --- 7: dismissal timer (Ghidra: DAT_00455004 = chars*10 - 0x7D20
-     * + (lines+4)*0x19; ticks down by g_frame_delta_ms each frame). --- */
+ * + (lines+4)*0x19; ticks down by g_frame_delta_ms each frame). --- */
     size_t n_chars = strlen(text);
     /* Dismiss-timer formula — 1:1 with Ghidra case 9:
-     *
-     *   DAT_00455004 = (short)pcVar5 * 10 + -0x7d20 + (lines+4) * 0x19;
-     *
-     * `pcVar5` is the NUL-terminator pointer (= buffer_start +
-     * text_chars). The `(short)pcVar5 * 10 - 0x7D20` term resolves to
-     * `text_chars * 10` IF the buffer starts at the original game's
-     * fixed address `0x475950` (whose low word 0x5950 = 22864 satisfies
-     * `22864 * 10 mod 65536 == 0x7D20`). That calibration cancels the
-     * fixed buffer-base contribution leaving the char count.
-     *
-     * Our heap-allocated buffer doesn't match the original's address,
-     * so we compute the semantic equivalent directly:
-     *   dur (ms) = text_chars * 10 + (lines+4) * 25
-     *
-     * For 50 chars, 1 line: 500 + 125 = 625 ms.
-     * For 200 chars, 2 lines: 2000 + 150 = 2150 ms.
-     * Result is read by TickSpeechBalloon each frame and decremented by
-     * g_frame_delta_ms (real ms) — when ≤ 0 the balloon is GC'd. */
+ *
+ * DAT_00455004 = (short)pcVar5 * 10 + -0x7d20 + (lines+4) * 0x19;
+ *
+ * `pcVar5` is the NUL-terminator pointer (= buffer_start +
+ * text_chars). The `(short)pcVar5 * 10 - 0x7D20` term resolves to
+ * `text_chars * 10` IF the buffer starts at the original game's
+ * fixed address `0x475950` (whose low word 0x5950 = 22864 satisfies
+ * `22864 * 10 mod 65536 == 0x7D20`). That calibration cancels the
+ * fixed buffer-base contribution leaving the char count.
+ *
+ * Our heap-allocated buffer doesn't match the original's address,
+ * so we compute the semantic equivalent directly:
+ * dur (ms) = text_chars * 10 + (lines+4) * 25
+ *
+ * For 50 chars, 1 line: 500 + 125 = 625 ms.
+ * For 200 chars, 2 lines: 2000 + 150 = 2150 ms.
+ * Result is read by TickSpeechBalloon each frame and decremented by
+ * g_frame_delta_ms (real ms) — when ≤ 0 the balloon is GC'd. */
     int dur = (int)n_chars * 10 + (line_count + 4) * 0x19;
     if (dur < 60)   dur = 60;       /* safety: ensure at least ~1s show */
     if (dur > 5000) dur = 5000;     /* cap absurdly long text at 5s */
     /* Keep legacy fields for the overlay-renderer transition window
-     * — they'll be retired once the entity render path is the sole
-     * draw site for kind=1 balloons. */
+ * — they'll be retired once the entity render path is the sole
+ * draw site for kind=1 balloons. */
     g_speech_text[0]        = 0;             /* disable old overlay */
     g_speech_actor          = actor;
     g_speech_tick           = g_tick_counter;
@@ -315,22 +315,22 @@ void TickSpeechBalloon(void)
     if (!g_speech_balloon) return;
     if ((g_tick_counter - g_speech_tick) >= g_speech_dismiss_ticks) {
         /* Hide + unlink + free. Mirrors `balloon[+9] |= 0x80` then
-         * normal entity GC; we GC explicitly since render list owns
-         * the pointer. */
+ * normal entity GC; we GC explicitly since render list owns
+ * the pointer. */
         UnlinkEntity(g_speech_balloon);
         if (g_speech_balloon->pixels) xfree(g_speech_balloon->pixels);
         xfree(g_speech_balloon);
         g_speech_balloon = NULL;
 
-        /* Speaker animation UNBIND — 1:1 with original case 9 epilogue:
-         *
-         *   if (local_164 < dlg_count) {
-         *       FUN_00401210(slot[local_164].speaker, slot[local_164].data);
-         *   }
-         *
-         * Re-bind the speaker to the dlg_data idle-animation bytecode
-         * so they return to neutral pose. Identical to op 0x0E body
-         * (FUN_00401210). */
+        /* Speaker animation UNBIND — case 9 epilogue:
+ *
+ * if (local_164 < dlg_count) {
+ * (slot[local_164].speaker, slot[local_164].data);
+ * }
+ *
+ * Re-bind the speaker to the dlg_data idle-animation bytecode
+ * so they return to neutral pose. Identical to op 0x0E body
+ *. */
         if (g_speech_unbind_speaker != 0 && g_speech_unbind_data != 0) {
             Entity *sp = FindEntityByVerbId(g_speech_unbind_speaker);
             if (sp) {
@@ -357,22 +357,22 @@ void TickSpeechBalloon(void)
     }
 }
 
-/* ScriptCallDialogBegin — partial port of FUN_0040C6A0 (DialogPush) +
- * FUN_00409DD0 (DialogRunner) ops 0x52 / 0x53.
+/* ScriptCallDialogBegin — partial port of (DialogPush) +
+ * (DialogRunner) ops 0x52 / 0x53.
  *
  * Full original flow:
- *   op 0x52 = FUN_0040C6A0 — push dialog onto an internal stack with:
- *       slot.entity = speaker entity (looked up by reg_id)
- *       slot.atlas_backup = entity[+0x28]
- *       slot.script_backup = entity[+0x2C]
- *       slot.hash = horner-fold(opts bytes)
- *       slot.asset = LoadAssetFromDtaBase(dialog_name)
- *   op 0x53 = FUN_00409DD0 — run the interactive loop:
- *       FindSection(Gadki.scr, "[rozmowa]", dialog_name, "[animacja]")
- *       for each text line in section:
- *         allocate speech bubble, play audio, ProcessGameFrameTick wait
- *         while audio playing; process per-frame events; advance
- *       on user choice (panel click): return result_key
+ * op 0x52 = — push dialog onto an internal stack with:
+ * slot.entity = speaker entity (looked up by reg_id)
+ * slot.atlas_backup = entity[+0x28]
+ * slot.script_backup = entity[+0x2C]
+ * slot.hash = horner-fold(opts bytes)
+ * slot.asset = LoadAssetFromDtaBase(dialog_name)
+ * op 0x53 = — run the interactive loop:
+ * FindSection(Gadki.scr, "[rozmowa]", dialog_name, "[animacja]")
+ * for each text line in section:
+ * allocate speech bubble, play audio, ProcessGameFrameTick wait
+ * while audio playing; process per-frame events; advance
+ * on user choice (panel click): return result_key
  *
  * Partial port goal: at least make the dialog NAME look up the section
  * in Gadki.scr and display the first text line as a speech balloon so
@@ -390,18 +390,18 @@ extern const uint8_t *ScriptObjGetSectionEnd  (void *self);
  * Gadki.scr [rozmowa] sections have NO inline text — the audio file IS
  * the dialog content. Each line is structured as:
  *
- *   [sampl] fjgut04a.wav
- *   [fj] Optional spoken text (speaker = fj = Fjej)
- *   [sampl] fjgut04b.wav
- *   [eb] Another line (speaker = eb = Ebek)
- *   [nic]                                  ← silent / no text
+ * [sampl] fjgut04a.wav
+ * [fj] Optional spoken text (speaker = fj = Fjej)
+ * [sampl] fjgut04b.wav
+ * [eb] Another line (speaker = eb = Ebek)
+ * [nic] ← silent / no text
  *
- * 1:1 with FUN_00409DD0 @ 0x00409DD0 outer loop, which:
- *   1. Finds next [sampl] tag
- *   2. Copies filename after it (skipping whitespace, until next ws)
- *   3. Plays the WAV
- *   4. Inside playback wait loop, scans forward for [eb]/[fj]/[nic]
- *      and renders a speech bubble per tag found
+ * outer loop, which:
+ * 1. Finds next [sampl] tag
+ * 2. Copies filename after it (skipping whitespace, until next ws)
+ * 3. Plays the WAV
+ * 4. Inside playback wait loop, scans forward for [eb]/[fj]/[nic]
+ * and renders a speech bubble per tag found
  *
  * Earlier port treated lines as inline text — bailed on the first '['
  * character. That's why `[dialog] section 'X' played 0 lines` —
@@ -445,9 +445,9 @@ static int dialog_extract_line(const uint8_t **pss, const uint8_t *se,
     out_wav[n] = 0;
 
     /* Lowercase for DTA lookup case-insensitivity (DTA names live as
-     * sent in archive; the archive lookup is case-sensitive but assets
-     * are stored lowercase. Original GetFileBySection does its own
-     * normalisation; we mirror just enough of it for the .wav path). */
+ * sent in archive; the archive lookup is case-sensitive but assets
+ * are stored lowercase. Original GetFileBySection does its own
+ * normalisation; we mirror just enough of it for the .wav path). */
     for (size_t i = 0; i < n; ++i) {
         if (out_wav[i] >= 'A' && out_wav[i] <= 'Z') out_wav[i] += 32;
     }
@@ -514,7 +514,7 @@ static int dialog_extract_line(const uint8_t **pss, const uint8_t *se,
 
 /* Play a single dialog line as a speech bubble, then wait for it to
  * dismiss before returning. Mirrors the original per-line loop inside
- * FUN_00409DD0 (which also pumps audio + timer until the line is done). */
+ * (which also pumps audio + timer until the line is done). */
 extern void ScriptCallShowText(uint16_t actor, const char *text);
 
 /* dialog_make_audio_name — retired in T20b. The WAV name is now taken
@@ -538,8 +538,8 @@ static void dialog_play_line(uint16_t actor, const char *text)
 /* dialog_play_line_indexed — T6 / T20b: dialog with per-line audio.
  *
  * `wav_name` is the .wav filename extracted from a [sampl] tag (1:1 with
- * FUN_00409DD0 — it copies the name into DAT_004550b8 then calls
- * FUN_0040a110 to load + play). NULL or empty = silent line (text-only,
+ * — it copies the name into DAT_004550b8 then calls
+ * to load + play). NULL or empty = silent line (text-only,
  * matches the [nic] tag case). The earlier port built names from
  * `<section_name><idx>.wav` which was an unverified guess — actual
  * WAV filenames in Gadki.scr [sampl] tags don't match that convention
@@ -560,8 +560,8 @@ static void dialog_play_line_indexed(uint16_t actor, const char *text,
                                      const char *wav_name, int line_idx)
 {
     /* Either we have audio, or we have text, or both — silent + textless
-     * means there's nothing to do (this happens for orphan [sampl] entries
-     * that point at missing files plus an empty bubble). */
+ * means there's nothing to do (this happens for orphan [sampl] entries
+ * that point at missing files plus an empty bubble). */
     int has_text = text && *text;
     int has_audio = wav_name && *wav_name;
     if (!has_text && !has_audio) return;
@@ -576,24 +576,24 @@ static void dialog_play_line_indexed(uint16_t actor, const char *text,
     }
 
     /* T108 — bind the speaker entity to dialog atlas + mouth-cycle
-     * bytecode via DialogActivateTopSpeaker. Per-entity VM
-     * (ExecEntityScript) advances frames natively from the bytecode
-     * each tick — no manual DialogTickMouth needed any more. On line
-     * end DialogRestoreTopSpeaker swaps back to the actor's pre-dialog
-     * idle anim. */
+ * bytecode via DialogActivateTopSpeaker. Per-entity VM
+ * (ExecEntityScript) advances frames natively from the bytecode
+ * each tick — no manual DialogTickMouth needed any more. On line
+ * end DialogRestoreTopSpeaker swaps back to the actor's pre-dialog
+ * idle anim. */
     DialogActivateTopSpeaker();
 
     extern Entity *g_speech_balloon;
     extern uint8_t g_lmb_clicked;
     extern uint16_t g_speech_dismiss_ticks;
     /* When audio is playing, allow up to ~30s safety (longer than any
-     * realistic dialog line). Without audio, ~10s. Without text bubble
-     * the loop simply waits on audio completion. We arm a grace period
-     * (~5 frames ≈ 165 ms) before checking IsDialogLinePlaying so the
-     * mixer has time to actually enqueue the WAV — without this the
-     * audio-only path can break out on frame 0 because PlayDialogLine
-     * returns synchronously but the audio thread hasn't transitioned
-     * the channel into the "playing" state yet. */
+ * realistic dialog line). Without audio, ~10s. Without text bubble
+ * the loop simply waits on audio completion. We arm a grace period
+ * (~5 frames ≈ 165 ms) before checking IsDialogLinePlaying so the
+ * mixer has time to actually enqueue the WAV — without this the
+ * audio-only path can break out on frame 0 because PlayDialogLine
+ * returns synchronously but the audio thread hasn't transitioned
+ * the channel into the "playing" state yet. */
     int safety = audio_started ? 1800 : 600;
     int audio_grace = audio_started ? 5 : 0;
     while (safety-- > 0) {
@@ -601,9 +601,9 @@ static void dialog_play_line_indexed(uint16_t actor, const char *text,
         if (!has_text && audio_grace == 0 && !IsDialogLinePlaying()) break;
         if (audio_grace > 0) --audio_grace;
         /* T108 — mouth animation is now bytecode-driven. The per-entity
-         * VM tick (called inside ProcessGameFrameTick → EntityWalkerTick →
-         * ExecEntityScript) cycles frames per the bound talk_anim
-         * bytecode automatically. No manual DialogTickMouth needed. */
+ * VM tick (called inside ProcessGameFrameTick → EntityWalkerTick →
+ * ExecEntityScript) cycles frames per the bound talk_anim
+ * bytecode automatically. No manual DialogTickMouth needed. */
         ProcessGameFrameTick();
         extern int PlatformShouldQuit(void);
         if (PlatformShouldQuit()) break;
@@ -616,71 +616,71 @@ static void dialog_play_line_indexed(uint16_t actor, const char *text,
             break;
         }
         /* T6 lip-sync: if audio is the timing source, wait until BOTH
-         * (a) audio finishes AND (b) text dismiss-timer expires.
-         * If audio finished but text still has time, that's fine —
-         * the loop naturally exits when text expires. */
+ * (a) audio finishes AND (b) text dismiss-timer expires.
+ * If audio finished but text still has time, that's fine —
+ * the loop naturally exits when text expires. */
         if (audio_started && !IsDialogLinePlaying()) {
             /* Audio done. Fast-forward text dismiss so the line snaps
-             * away on next tick (1:1 with original behavior where
-             * FUN_0040A400 progress-poll returns 0 then text clears). */
+ * away on next tick ( behavior where
+ * progress-poll returns 0 then text clears). */
             g_speech_dismiss_ticks = 0;
             ProcessGameFrameTick();
             break;
         }
         /* Throttle to ~60 fps so the loop doesn't spin CPU + so the
-         * safety iteration counter matches a realistic time budget. */
+ * safety iteration counter matches a realistic time budget. */
         SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
     }
     /* T20c — line over; flip atlas back to the speaker's original pose
-     * so they don't stay frozen in talking-head form between lines. */
+ * so they don't stay frozen in talking-head form between lines. */
     DialogRestoreTopSpeaker();
 }
 
 /* T20b — Activate / restore the speaker's dialog atlas during line
- * playback. Original FUN_0040C570 toggles entity[+0x28] (atlas) and
+ * playback. Original toggles entity[+0x28] (atlas) and
  * entity[+0x2C] (bytecode) per-slot:
- *   ACTIVATE (mode 1): atlas → slot.asset (e.g. fjgadap.wyc),
- *                      bytecode → slot.talk_anim_va (mouth-cycling
- *                                                    bytecode ptr)
- *   RESTORE (mode 0):  atlas → slot.atlas_backup,
- *                      bytecode → slot.bytecode_backup
+ * ACTIVATE (mode 1): atlas → slot.asset (e.g. fjgadap.wyc),
+ * bytecode → slot.talk_anim_va (mouth-cycling
+ * bytecode ptr)
+ * RESTORE (mode 0): atlas → slot.atlas_backup,
+ * bytecode → slot.bytecode_backup
  *
  * Port shortcut: we don't read the original mouth-cycling bytecode
  * (param_4 of op 0x52) — that requires deeper RE of the slot[+0x0C]
  * pointer layout. Instead we:
- *   - Swap atlas only (visible "talking pose"). Entity VM continues
- *     running the backed-up bytecode, which references frame indices
- *     that may not all exist in the dialog atlas. We CLAMP frame
- *     index to atlas->frame_count in the renderer (existing safety
- *     net), so the worst case is a static talking face.
- *   - Drive mouth open/closed frame cycling manually: toggle frame 0
- *     ↔ 1 (or 0↔frame_count-1 if 2-frame atlas) every ~150 ms while
- *     audio is playing. Matches the visual cadence the original gets
- *     from its mouth-cycle bytecode. */
+ * - Swap atlas only (visible "talking pose"). Entity VM continues
+ * running the backed-up bytecode, which references frame indices
+ * that may not all exist in the dialog atlas. We CLAMP frame
+ * index to atlas->frame_count in the renderer (existing safety
+ * net), so the worst case is a static talking face.
+ * - Drive mouth open/closed frame cycling manually: toggle frame 0
+ * ↔ 1 (or 0↔frame_count-1 if 2-frame atlas) every ~150 ms while
+ * audio is playing. Matches the visual cadence the original gets
+ * from its mouth-cycle bytecode. */
 /* Definitions of DialogActivateTopSpeaker / DialogRestoreTopSpeaker /
  * DialogTickMouth moved AFTER the DialogStackSlot type and
  * s_dialog_stack array decl below — they need that struct visible. */
 
-/* T21 — DialogPush/Pop stack (1:1 with FUN_0040C6A0 + FUN_0040C500).
+/* T21 — DialogPush/Pop stack ( + ).
  *
  * Original layout: each pushed slot is 0x18 bytes inside a dynamically
- * grown vector (FUN_00407570 grow helper). Layout per slot:
- *   +0x00  entity ptr           — speaker entity
- *   +0x04  opts_hash            — horner-folded opts bytes (used by some
- *                                  internal lookup; unused in our partial
- *                                  port but stored for fidelity)
- *   +0x08  loaded asset ptr     — LoadAssetFromDtaBase(dialog_name)
- *   +0x0C  opts count           — number of choice entries
- *   +0x10  entity[+0x28] backup — atlas at push time
- *   +0x14  entity[+0x2C] backup — bytecode at push time
+ * grown vector ( grow helper). Layout per slot:
+ * +0x00 entity ptr — speaker entity
+ * +0x04 opts_hash — horner-folded opts bytes (used by some
+ * internal lookup; unused in our partial
+ * port but stored for fidelity)
+ * +0x08 loaded asset ptr — LoadAssetFromDtaBase(dialog_name)
+ * +0x0C opts count — number of choice entries
+ * +0x10 entity[+0x28] backup — atlas at push time
+ * +0x14 entity[+0x2C] backup — bytecode at push time
  *
- * On pop (FUN_0040C500), for each pushed slot, in iteration order:
- *   - Restore entity[+0x28] to backup via FUN_00407600 (which also
- *     reallocs entity bitmap if the restored atlas needs more space).
- *   - Run FUN_00402500 walker-state reset on entity.
- *   - Clear entity[+0x30] (script pc) to 0.
- *   - Restore entity[+0x2C] from backup.
- *   - Free the loaded asset (FUN_00405A60 = FreeAsset).
+ * On pop, for each pushed slot, in iteration order:
+ * - Restore entity[+0x28] to backup via (which also
+ * reallocs entity bitmap if the restored atlas needs more space).
+ * - Run walker-state reset on entity.
+ * - Clear entity[+0x30] (script pc) to 0.
+ * - Restore entity[+0x2C] from backup.
+ * - Free the loaded asset ( = FreeAsset).
  *
  * Original dialog stack lives in RunScriptInterpreter's local_15c (per-
  * invocation). Our port uses a process-global stack since
@@ -692,11 +692,11 @@ typedef struct DialogStackSlot {
     AnimAsset *asset;            /* loaded dialog asset (FreeAsset on pop) */
     uint32_t  opts_hash;         /* horner fold of opts bytes — port fidelity */
     uint32_t  talk_anim_va;      /* T108: PE VA of mouth-cycle bytecode
-                                  * (= op 0x52's 4th arg / slot+0x0C in
-                                  * the original 0x18-byte slot). Bound to
-                                  * entity[+0x2C] by ACTIVATE, restored
-                                  * from bytecode_backup by RESTORE. Earlier
-                                  * field was misnamed `opts_count`. */
+ * (= op 0x52's 4th arg / slot+0x0C in
+ * the original 0x18-byte slot). Bound to
+ * entity[+0x2C] by ACTIVATE, restored
+ * from bytecode_backup by RESTORE. Earlier
+ * field was misnamed `opts_count`. */
     uint32_t  atlas_backup;      /* entity[+0x28] at push time (intern slot) */
     uint32_t  bytecode_backup;   /* entity[+0x2C] at push time (intern slot) */
 } DialogStackSlot;
@@ -705,22 +705,22 @@ typedef struct DialogStackSlot {
 static DialogStackSlot s_dialog_stack[DIALOG_STACK_MAX];
 static int             s_dialog_stack_n = 0;
 
-/* T108 — Dialog ACTIVATE/RESTORE helpers (1:1 with FUN_0040C570 @ 0x0040C570).
+/* T108 — Dialog ACTIVATE/RESTORE helpers.
  * Per Ghidra:
  *
- *   void FUN_0040C570(stack, int mode) {
- *       for each slot in stack:
- *           if (mode == 0) {  // RESTORE
- *               FUN_00407600(entity, slot[+0x10]);   // restore atlas_backup
- *               FUN_00402500(entity);                 // walker reset
- *               entity[+0x2C] = slot[+0x14];          // restore bytecode_backup
- *           } else {            // ACTIVATE
- *               FUN_00407600(entity, slot[+0x08]);   // bind dialog asset
- *               FUN_00402500(entity);                 // walker reset
- *               entity[+0x2C] = slot[+0x0C];          // bind talk_anim bytecode
- *           }
- *           entity[+0x30] = 0;                        // reset frame pc
- *   }
+ * void (stack, int mode) {
+ * for each slot in stack:
+ * if (mode == 0) { // RESTORE
+ * (entity, slot[+0x10]); // restore atlas_backup
+ * (entity); // walker reset
+ * entity[+0x2C] = slot[+0x14]; // restore bytecode_backup
+ * } else { // ACTIVATE
+ * (entity, slot[+0x08]); // bind dialog asset
+ * (entity); // walker reset
+ * entity[+0x2C] = slot[+0x0C]; // bind talk_anim bytecode
+ * }
+ * entity[+0x30] = 0; // reset frame pc
+ * }
  *
  * Earlier port (T20c) only swapped the atlas and drove a hardcoded
  * frame 0↔1 toggle via DialogTickMouth — that was a port shortcut
@@ -743,8 +743,8 @@ static void DialogActivateTopSpeaker(void)
     uint8_t *eb = (uint8_t *)e;
     /* Atlas: bind loaded dialog asset (= slot[+0x08]). */
     *(uint32_t *)(eb + 0x28) = ent_ptr_intern(slot->asset);
-    /* Walker reset — 1:1 with FUN_00402500 partial reset (clears walker
-     * busy + delays so the new bytecode runs fresh from pc=0). */
+    /* Walker reset partial reset (clears walker
+ * busy + delays so the new bytecode runs fresh from pc=0). */
     *(uint16_t *)(eb + 0x3A) &= (uint16_t)~5u;
     *(uint16_t *)(eb + 0x38) = 0;
     *(uint16_t *)(eb + 0x36) = 0;
@@ -756,8 +756,8 @@ static void DialogActivateTopSpeaker(void)
     *(uint32_t *)(eb + 0x50) = 0;
     *(uint32_t *)(eb + 0x4C) = 0;
     /* Bytecode: bind talk_anim_va — the mouth-cycle program from PE.
-     * Per-entity VM (FUN_004012E0 / ExecEntityScript) advances frames
-     * automatically per its op 0x06/op 0x08/etc. instructions. */
+ * Per-entity VM ( / ExecEntityScript) advances frames
+ * automatically per its op 0x06/op 0x08/etc. instructions. */
     if (slot->talk_anim_va) {
         const void *bc = xlat_binary_ptr(slot->talk_anim_va);
         if (bc) *(uint32_t *)(eb + 0x2C) = ent_ptr_intern((void *)bc);
@@ -775,7 +775,7 @@ static void DialogRestoreTopSpeaker(void)
     uint8_t *eb = (uint8_t *)e;
     /* Restore atlas + bytecode from backups taken at push time. */
     *(uint32_t *)(eb + 0x28) = slot->atlas_backup;
-    /* Walker reset (1:1 FUN_00402500 — same as ACTIVATE path). */
+    /* Walker reset (1:1 — same as ACTIVATE path). */
     *(uint16_t *)(eb + 0x3A) &= (uint16_t)~5u;
     *(uint16_t *)(eb + 0x38) = 0;
     *(uint16_t *)(eb + 0x36) = 0;
@@ -796,7 +796,7 @@ static void DialogRestoreTopSpeaker(void)
  * DialogActivateTopSpeaker. Function deleted; remove the forward decl
  * up near dialog_play_line_indexed if linkage breaks. */
 
-/* DialogStackPush — 1:1 with FUN_0040C6A0. Allocates asset, stores
+/* DialogStackPush Allocates asset, stores
  * speaker entity backups. Returns the stack depth after push, or
  * -1 on overflow / asset load failure (mirrors original: original
  * only commits the slot if LoadAssetFromDtaBase succeeded). */
@@ -816,7 +816,7 @@ static int DialogStackPush(Entity *speaker, const char *dialog_name,
     slot->entity        = speaker;
     slot->talk_anim_va  = talk_anim_va;
 
-    /* Horner fold (1:1 with FUN_0040C6A0 inner loop: `h = h*2 + b`). */
+    /* Horner fold ( inner loop: `h = h*2 + b`). */
     uint32_t h = 0;
     if (opts_bytes) {
         for (const uint8_t *p = opts_bytes; *p; ++p)
@@ -825,13 +825,13 @@ static int DialogStackPush(Entity *speaker, const char *dialog_name,
     slot->opts_hash = h;
 
     /* Backup atlas + bytecode slots (intern handles — match script-byte
-     * layout). Even if some are 0 (no current atlas) we still record. */
+ * layout). Even if some are 0 (no current atlas) we still record. */
     uint8_t *eb = (uint8_t *)speaker;
     slot->atlas_backup    = *(uint32_t *)(eb + 0x28);
     slot->bytecode_backup = *(uint32_t *)(eb + 0x2C);
 
     /* Load dialog asset. Original commits the slot ONLY if load
-     * succeeded; we mirror that: on failure, don't bump count. */
+ * succeeded; we mirror that: on failure, don't bump count. */
     AnimAsset *a = LoadAssetFromDtaBase(dialog_name);
     if (!a) {
         fprintf(stderr, "[dialog] push: asset '%s' load failed — skip\n",
@@ -844,7 +844,7 @@ static int DialogStackPush(Entity *speaker, const char *dialog_name,
     return s_dialog_stack_n;
 }
 
-/* DialogStackPop — 1:1 with FUN_0040C500. Iterates slots from BOTTOM
+/* DialogStackPop Iterates slots from BOTTOM
  * to TOP (matches original loop direction) restoring entity state +
  * freeing per-slot asset. Resets stack count to 0 (clear all). */
 static void DialogStackPop(void)
@@ -854,17 +854,17 @@ static void DialogStackPop(void)
         Entity *e = slot->entity;
         if (e) {
             uint8_t *eb = (uint8_t *)e;
-            /* FUN_00407600 atlas restore — write atlas backup into
-             * entity[+0x28]. We skip the size-realloc branch (original
-             * checks new_atlas dims vs entity bitmap bytes and reallocs
-             * via FUN_00405920); on restore the backup atlas was the
-             * speaker's original, so dims match what the entity already
-             * carries — no realloc needed in 99% of cases. If the dialog
-             * asset was larger and the bitmap was grown during dialog,
-             * the restored atlas now references a smaller frame range —
-             * still works, just over-allocated buffer (benign). */
+            /* atlas restore — write atlas backup into
+ * entity[+0x28]. We skip the size-realloc branch (original
+ * checks new_atlas dims vs entity bitmap bytes and reallocs
+ * via ); on restore the backup atlas was the
+ * speaker's original, so dims match what the entity already
+ * carries — no realloc needed in 99% of cases. If the dialog
+ * asset was larger and the bitmap was grown during dialog,
+ * the restored atlas now references a smaller frame range —
+ * still works, just over-allocated buffer (benign). */
             *(uint32_t *)(eb + 0x28) = slot->atlas_backup;
-            /* FUN_00402500 walker-state reset (1:1). */
+            /* walker-state reset (1:1). */
             *(uint16_t *)(eb + 0x3A) &= (uint16_t)0xFFFAu;
             *(uint16_t *)(eb + 0x38) = 0;
             *(uint16_t *)(eb + 0x36) = 0;
@@ -889,8 +889,8 @@ static void DialogStackPop(void)
 }
 
 /* T20 — 1:1 with Ghidra dialog flow:
- *   op 0x52 (FUN_0040C6A0) = PUSH only (entity backups + asset load)
- *   op 0x53 (FUN_00409DD0 + FUN_0040C500) = play [sampl] WAVs + pop
+ * op 0x52 = PUSH only (entity backups + asset load)
+ * op 0x53 (+ ) = play [sampl] WAVs + pop
  *
  * Lines come from Gadki.scr [rozmowa]<result_key> section. Each entry
  * is a [sampl] tag with the WAV filename, optionally followed by [eb]/
@@ -903,7 +903,7 @@ static void dialog_play_section_lines(uint16_t actor, const char *section_name)
     if (!ScriptObjFindSection(g_dialogues_obj, "[rozmowa]",
                               section_name, "[animacja]"))
     {
-        /* 1:1 with FUN_00409DD0: silent return if section missing. */
+        /*: silent return if section missing. */
         fprintf(stderr, "[dialog] section '%s' not in Gadki.scr — skip\n",
                 section_name);
         return;
@@ -912,8 +912,8 @@ static void dialog_play_section_lines(uint16_t actor, const char *section_name)
     const uint8_t *se = ScriptObjGetSectionEnd  (g_dialogues_obj);
     if (!ss || !se) return;
 
-    /* Iterate over [sampl] blocks (1:1 with FUN_00409DD0 outer loop).
-     * Each block: WAV filename + optional speaker text bubble. */
+    /* Iterate over [sampl] blocks ( outer loop).
+ * Each block: WAV filename + optional speaker text bubble. */
     char wav[64];
     char text[256];
     char speaker = 0;
@@ -922,10 +922,10 @@ static void dialog_play_section_lines(uint16_t actor, const char *section_name)
         if (!dialog_extract_line(&ss, se, wav, sizeof wav,
                                  text, sizeof text, &speaker)) break;
         /* Speaker actor verb — Ebek=0x29? Fjej=0x2A? — placeholder
-         * "actor" arg keeps the existing speech-balloon positioning
-         * (centred on screen) since we don't yet thread the speaker
-         * verb through DialogStackPush. T20c future: pass speaker
-         * verb from g_dialog_stack[top].entity click-payload. */
+ * "actor" arg keeps the existing speech-balloon positioning
+ * (centred on screen) since we don't yet thread the speaker
+ * verb through DialogStackPush. T20c future: pass speaker
+ * verb from g_dialog_stack[top].entity click-payload. */
         (void)speaker;
         fprintf(stderr, "[dialog] line %d wav='%s' speaker=%c text='%s'\n",
                 i + 1, wav[0] ? wav : "(none)",
@@ -952,9 +952,9 @@ uint8_t g_dialogues_on = 1;       /* DAT_00455122 mirror — gates op 0x52/0x53 
 int ScriptCallDialogBegin(uint16_t actor, const char *dialog_name,
                           const uint8_t *opts, uint32_t talk_anim_va)
 {
-    /* T103 — gate on g_dialogues_on (DAT_00455122). Original op 0x52
-     * @ 0x00408BC8 wraps the FUN_0040C6A0 call in `if (DAT_00455122 != 0)`.
-     * If dialogues are disabled in Solund, we no-op the entire op. */
+    /* T103 — gate on g_dialogues_on. Original op 0x52
+ * @ 0x00408BC8 wraps the call in `if (DAT_00455122 != 0)`.
+ * If dialogues are disabled in Solund, we no-op the entire op. */
     if (!g_dialogues_on) {
         fprintf(stderr, "[dlg] op 0x52 BEGIN suppressed (dialogues_on=0)\n");
         return 0;
@@ -966,9 +966,9 @@ int ScriptCallDialogBegin(uint16_t actor, const char *dialog_name,
 
     if (!dialog_name || !*dialog_name) return 0;
 
-    /* op 0x52 = PUSH only (1:1 FUN_0040C6A0). T108 — pass talk_anim_va
-     * (= op 0x52's 4th arg / PE VA of mouth-cycle bytecode) so
-     * DialogActivateTopSpeaker can bind it to entity[+0x2C] later. */
+    /* op 0x52 = PUSH only (1:1 ). T108 — pass talk_anim_va
+ * (= op 0x52's 4th arg / PE VA of mouth-cycle bytecode) so
+ * DialogActivateTopSpeaker can bind it to entity[+0x2C] later. */
     extern Entity *FindEntityByVerbId(uint16_t verb);
     Entity *speaker = FindEntityByVerbId(actor);
     DialogStackPush(speaker, dialog_name, opts, talk_anim_va);
@@ -983,16 +983,16 @@ void ScriptCallDialogEnd(const char *result)
         return;
     }
     /* op 0x53 = play lines from [rozmowa]<result> + pop (1:1
-     * FUN_00409DD0 + FUN_0040C500). */
+ * + ). */
     fprintf(stderr, "[dlg] op 0x53 END result=%s (stack=%d) var[4]=0x%04X\n",
             result ? result : "(null)", s_dialog_stack_n,
             (unsigned)(g_script_vars[4] & 0xFFFF));
 
     /* Speaker actor verb from the top of dialog stack. The dialog
-     * stack stores Entity*, but ScriptCallShowText needs a verb_id
-     * for balloon positioning. For now pass actor=0 — balloon centres
-     * on screen instead of speaker (acceptable until we extract the
-     * verb from the entity's click payload). */
+ * stack stores Entity*, but ScriptCallShowText needs a verb_id
+ * for balloon positioning. For now pass actor=0 — balloon centres
+ * on screen instead of speaker (acceptable until we extract the
+ * verb from the entity's click payload). */
     dialog_play_section_lines(0, result);
     DialogStackPop();
     if (s_dialog_stack_n == 0) g_dialog_active = 0;

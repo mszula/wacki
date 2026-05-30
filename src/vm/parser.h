@@ -5,17 +5,17 @@
  * for IF/ELSE skip and label jumps.
  *
  * Bytecode format (instruction is a u16 array; pc is `const uint16_t *`):
- *   - byte +0:  opcode
- *   - byte +1:  len in DWORDS (instruction size = len * 4 bytes = len * 2 u16s)
- *   - +2 .. +6: operand u16s
+ * - byte +0: opcode
+ * - byte +1: len in DWORDS (instruction size = len * 4 bytes = len * 2 u16s)
+ * - +2 .. +6: operand u16s
  *
  * Structural opcodes referenced here:
- *   ops < 6     — IF family (any condition); opens a conditional block
- *   op 6        — ENDIF; closes a conditional block at the current depth
- *   op 7        — ELSE; matches a still-open IF at depth 0
- *   op 0x16     — LABEL; jump target for op 0x17 JUMP_LABEL etc.
- *   op 0x56     — END (the only opcode that terminates a scan; op 0x55
- *                 END_HARD only terminates execution, NOT scanning)
+ * ops < 6 — IF family (any condition); opens a conditional block
+ * op 6 — ENDIF; closes a conditional block at the current depth
+ * op 7 — ELSE; matches a still-open IF at depth 0
+ * op 0x16 — LABEL; jump target for op 0x17 JUMP_LABEL etc.
+ * op 0x56 — END (the only opcode that terminates a scan; op 0x55
+ * END_HARD only terminates execution, NOT scanning)
  */
 
 #ifndef WACKI_VM_PARSER_H

@@ -3,15 +3,15 @@
  * Wacki ships its scripts as text-tagged files (.scr extension). A
  * file is a flat blob of mixed UTF-8 prose tags and binary bytecode:
  *
- *   [etap]N           ← stage N start
- *     [komnata]M      ← room M start (binary bytecode follows)
- *       <bytecode>
- *     [komnata]M2
- *       ...
- *   [etap]N2
- *     ...
- *   [rozmowa]<name>   ← dialog by name (Gadki.scr)
- *   [sampl]<asset>    ← per-asset sample table (Wacky.scr)
+ * [etap]N ← stage N start
+ * [komnata]M ← room M start (binary bytecode follows)
+ * <bytecode>
+ * [komnata]M2
+ * ...
+ * [etap]N2
+ * ...
+ * [rozmowa]<name> ← dialog by name (Gadki.scr)
+ * [sampl]<asset> ← per-asset sample table (Wacky.scr)
  *
  * The loader (LoadScriptFile) reads the file once. The lookup helpers
  * (FindScriptByStageAndRoom, ScriptObjFindSection) advance the

@@ -6,11 +6,11 @@
  * format here, walking the AVI container ourselves.
  *
  * Frame chunk types (the only ones the Wacki AVIs use in practice):
- *   COLOR_256 (4)   palette update, 6-bit DAC scaled to 8-bit
- *   DELTA_FLC (7)   line-based delta with skip / RLE / runs of 2-byte words
- *   BLACK     (13)  fill the whole frame with colour 0
- *   BRUN      (15)  byte run-length (used for the first/key frame)
- *   COPY      (16)  uncompressed
+ * COLOR_256 (4) palette update, 6-bit DAC scaled to 8-bit
+ * DELTA_FLC (7) line-based delta with skip / RLE / runs of 2-byte words
+ * BLACK (13) fill the whole frame with colour 0
+ * BRUN (15) byte run-length (used for the first/key frame)
+ * COPY (16) uncompressed
  *
  * The Wacki AVIs are 640×480, 8-bit, ~10 fps, paletted.
  */
@@ -96,7 +96,7 @@ static int avi_open(AviCtx *c, const char *path)
     { free(c->buf); return 0; }
 
     /* Walk hdrl LIST to find 'avih', then each 'strl' to learn about the
-     * video ('vids') and audio ('auds') streams. */
+ * video ('vids') and audio ('auds') streams. */
     uint32_t p = 12;
     int stream_idx = 0;
     (void)stream_idx;       /* counted for diagnostic; not consumed here */
@@ -129,13 +129,13 @@ static int avi_open(AviCtx *c, const char *path)
                         is_audio = (fcc == 0x73647561 /* "auds" */);
                     } else if (t2 == 0x66727473 /* "strf" */ && is_audio) {
                         /* WAVEFORMATEX:
-                         *   +0  word wFormatTag
-                         *   +2  word nChannels
-                         *   +4  dword nSamplesPerSec
-                         *   +8  dword nAvgBytesPerSec
-                         *   +12 word nBlockAlign
-                         *   +14 word wBitsPerSample
-                         */
+ * +0 word wFormatTag
+ * +2 word nChannels
+ * +4 dword nSamplesPerSec
+ * +8 dword nAvgBytesPerSec
+ * +12 word nBlockAlign
+ * +14 word wBitsPerSample
+ */
                         c->audio_channels        = *(uint16_t *)(c->buf + q + 8 + 2);
                         c->audio_samples_per_sec = rd_u32(c->buf + q + 8 + 4);
                         c->audio_bits            = *(uint16_t *)(c->buf + q + 8 + 14);
@@ -181,8 +181,8 @@ static int avi_next_video(AviCtx *c, uint8_t **out_data, uint32_t *out_size)
         if (tag == 0x62773130 /* "01wb" */ && s_audio_open && sz) {
             SDL_QueueAudio(s_audio_dev, c->buf + c->cursor + 8, sz);
             /* T38 audio sync sanity — log when the queue gets very deep
-             * (>4 sec at the active spec). Indicates video is decoding
-             * too slow or chunks are unevenly distributed. */
+ * (>4 sec at the active spec). Indicates video is decoding
+ * too slow or chunks are unevenly distributed. */
             uint32_t qbytes = SDL_GetQueuedAudioSize(s_audio_dev);
             uint32_t bps = (uint32_t)s_audio_spec_cur.freq *
                            s_audio_spec_cur.channels *
@@ -193,8 +193,8 @@ static int avi_next_video(AviCtx *c, uint8_t **out_data, uint32_t *out_size)
             }
         }
         /* Safety: a malformed chunk that would jump past movi_end means
-         * the AVI is truncated or has a corrupt size field — treat as
-         * EOF rather than reading garbage past the buffer. */
+ * the AVI is truncated or has a corrupt size field — treat as
+ * EOF rather than reading garbage past the buffer. */
         if (next <= c->cursor || next > c->movi_end) return 0;
         c->cursor = next;
     }
@@ -263,7 +263,7 @@ static void flic_brun(const uint8_t *p, uint32_t sz, int w, int h)
 {
     (void)sz;
     /* one byte per scanline = packet count; then packets. Each packet:
-     *  signed byte n: n > 0 → copy n literal bytes; n < 0 → |n| run of next byte. */
+ * signed byte n: n > 0 → copy n literal bytes; n < 0 → |n| run of next byte. */
     for (int y = 0; y < h; ++y) {
         uint8_t *dst = g_back_shadow + (size_t)y * w;
         ++p;                                /* packet count — unused */
@@ -272,7 +272,7 @@ static void flic_brun(const uint8_t *p, uint32_t sz, int w, int h)
             int8_t n = (int8_t)*p++;
             if (n >= 0) {
                 /* In BRUN the convention is inverted vs DELTA: n positive
-                 * means "n repetitions of next byte". */
+ * means "n repetitions of next byte". */
                 uint8_t v = *p++;
                 for (int i = 0; i < n; ++i) {
                     if (x < w) dst[x++] = v;
@@ -401,9 +401,9 @@ int PlayFlicAviFile(const char *path)
                 (g_key_state & 0xFF) != 0)
             {
                 /* Skip: stop audio NOW (pause device + clear queue) and
-                 * stop decoding further frames. This is 1:1 with the
-                 * original MCI behaviour where StopAviPlayback aborts
-                 * both video and audio immediately. */
+ * stop decoding further frames. This is 1:1 with the
+ * original MCI behaviour where StopAviPlayback aborts
+ * both video and audio immediately. */
                 g_lmb_clicked = 0;
                 g_rmb_clicked = 0;
                 g_key_state &= 0xFF00;

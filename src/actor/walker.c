@@ -2,20 +2,20 @@
  *
  * Drives the two controllable actors (Ebek, Fjej):
  *
- *   - Per-frame work (UpdateActorMovement): refresh perspective scale
- *     so actors shrink as they walk into scene depth.
+ * - Per-frame work (UpdateActorMovement): refresh perspective scale
+ * so actors shrink as they walk into scene depth.
  *
- *   - On-click binding (BindActorWalker / BindActorWalkerDirect):
- *     given a target click position, choose a directional walk anim
- *     (L/R/U/D) and patch op 0x15 in the walker bytecode so the
- *     per-entity VM steps the actor toward the target on its next tick.
- *     If a straight-line path is blocked by scene geometry, fall back
- *     to a waypoint chain via the scene's perspective bands.
+ * - On-click binding (BindActorWalker / BindActorWalkerDirect):
+ * given a target click position, choose a directional walk anim
+ * (L/R/U/D) and patch op 0x15 in the walker bytecode so the
+ * per-entity VM steps the actor toward the target on its next tick.
+ * If a straight-line path is blocked by scene geometry, fall back
+ * to a waypoint chain via the scene's perspective bands.
  *
- *   - Per-frame waypoint advance (PerActorWaypointAdvanceTick): when
- *     a waypoint-routed walker reaches the current leg's target,
- *     bind the next leg. Continues until the walker is on the final
- *     (originally-requested) target leg.
+ * - Per-frame waypoint advance (PerActorWaypointAdvanceTick): when
+ * a waypoint-routed walker reaches the current leg's target,
+ * bind the next leg. Continues until the walker is on the final
+ * (originally-requested) target leg.
  *
  * The waypoint graph (ActorWaypoints) is built once per scene from
  * the FILD body's perspective bands. Nodes are bands, edges connect
@@ -184,8 +184,8 @@ void UpdateActorMovement(int16_t target_x, int16_t target_y)
  * time; the starting pixel is not checked (assumed to be the actor's
  * own anchor, which they're standing on).
  *
- *   line_reaches: returns 1 iff every intermediate pixel is walkable
- *   line_clip:    same walk, but also returns the last walkable pixel
+ * line_reaches: returns 1 iff every intermediate pixel is walkable
+ * line_clip: same walk, but also returns the last walkable pixel
  * =================================================================== */
 static int line_reaches(int sx, int sy, int tx, int ty)
 {
@@ -289,7 +289,7 @@ void ActorWaypointsSceneInit(int actor_idx)
     wp->path_active = 0;
 
     /* Perimeter slots stay zero — populated only when a partner-actor
-     * obstacle perimeter is active (not currently exercised). */
+ * obstacle perimeter is active (not currently exercised). */
     for (int i = 0; i < WP_FIRST_SCENE_BAND; ++i) {
         wp->band_x[i] = 0;
         wp->band_y[i] = 0;
@@ -303,7 +303,7 @@ void ActorWaypointsSceneInit(int actor_idx)
     }
 
     /* Pre-build edges between all scene bands so per-click work only
-     * adds source/target pseudo-edges. */
+ * adds source/target pseudo-edges. */
     if (WP_FIRST_SCENE_BAND < n - 1) {
         for (int i = WP_FIRST_SCENE_BAND; i < n - 1; ++i) {
             wp_add_edges_from(wp, wp->band_x[i], wp->band_y[i],
@@ -416,7 +416,7 @@ static int wp_find_path(ActorWaypoints *wp,
     }
 
     /* Walk the predecessor chain: selected_path[0] = source-side band,
-     * selected_path[last] = target-side band. */
+ * selected_path[last] = target-side band. */
     int idx = 0;
     int cur = best_band;
     while (cur != WP_BAND_TARGET && idx < WP_MAX_BANDS) {
@@ -562,20 +562,20 @@ int BindActorWalkerDirect(int actor_idx, int target_x, int target_y)
 /* =================================================================== *
  * BindActorWalker — full three-phase pathfinding entry point.
  *
- *   Phase 1: if the target pixel itself is non-walkable, walk the line
- *            from target toward source until we hit a walkable pixel.
- *            (User clicked on scenery — go as close as we can.)
+ * Phase 1: if the target pixel itself is non-walkable, walk the line
+ * from target toward source until we hit a walkable pixel.
+ * (User clicked on scenery — go as close as we can.)
  *
- *   Phase 2: walk the line from source to target, recording the last
- *            walkable pixel along the way. If we reach the target, no
- *            path-finding is needed.
+ * Phase 2: walk the line from source to target, recording the last
+ * walkable pixel along the way. If we reach the target, no
+ * path-finding is needed.
  *
- *   Phase 3: if the line clipped early, run the BFS Dijkstra over the
- *            waypoint graph. Bind the walker to the first hop;
- *            PerActorWaypointAdvanceTick takes over from there.
+ * Phase 3: if the line clipped early, run the BFS Dijkstra over the
+ * waypoint graph. Bind the walker to the first hop;
+ * PerActorWaypointAdvanceTick takes over from there.
  *
- *   Fallback: if Phase 3 finds no path either, just bind to the
- *             Phase-2 clip point (the actor walks as far as they can).
+ * Fallback: if Phase 3 finds no path either, just bind to the
+ * Phase-2 clip point (the actor walks as far as they can).
  * =================================================================== */
 int BindActorWalker(int actor_idx, int target_x, int target_y)
 {
@@ -618,10 +618,10 @@ int BindActorWalker(int actor_idx, int target_x, int target_y)
     }
 
     /* NOTE: scenes with walkable pixels under visible obstacles
-     * (kind=3 walk-behind sprites flagged 0x8008) aren't blocked here
-     * — our port only consults the single bg-mask-setup FLD bitmap.
-     * BFS may route a "shortcut through a building" in those rare
-     * scenes. Full fix requires porting the per-entity walkability
-     * overlay chain; documented for future work. */
+ * (kind=3 walk-behind sprites flagged 0x8008) aren't blocked here
+ * — our port only consults the single bg-mask-setup FLD bitmap.
+ * BFS may route a "shortcut through a building" in those rare
+ * scenes. Full fix requires porting the per-entity walkability
+ * overlay chain; documented for future work. */
     return BindActorWalkerDirect(actor_idx, clip_x, clip_y);
 }

@@ -5,9 +5,9 @@
  * dispatches one tick's worth of those instructions for every
  * registered entity each game frame:
  *
- *   EntityWalkerTick()
- *     → walks the render list (kind=0)
- *     → for each entity with an atlas bound: ExecEntityScript()
+ * EntityWalkerTick
+ * → walks the render list (kind=0)
+ * → for each entity with an atlas bound: ExecEntityScript
  *
  * Bytecode format is `[op:u8 +0][dlt:u8 +1][operand:u16 +2]…` with a
  * stride of `dlt * 2` bytes (half of the main script VM's `len * 4`).
@@ -136,7 +136,7 @@ extern void        EnqueueClickEvent(uint16_t obj, uint16_t verb);
 /* Resolve a PE-binary virtual address to a usable pointer in the host
  * address space. Some scripts reference oscillation / lookup tables by
  * their original PE VA — the PE loader maps the original image and
- * xlat_binary_ptr() translates the address. Fallback to a raw cast for
+ * xlat_binary_ptr translates the address. Fallback to a raw cast for
  * addresses outside the loaded PE range (handful of edge cases). */
 static const int16_t *resolve_pe_table(uint32_t addr)
 {
@@ -223,13 +223,13 @@ static void ExecEntityScript(Entity *e)
     const int16_t *osc_table_y = NULL;
 
     /* Frame-delta gate. Decrement the per-entity delay counter by this
-     * frame's tick budget; if it's still positive, skip the opcode loop
-     * and jump straight to post-exec (entity yields this frame).
-     *
-     * Once the delay reaches zero, optionally reload it from the
-     * "period" field at +0x3E — SET_DELAY (op 0x09) writes both fields
-     * with the same value so an entity that needs a steady cadence
-     * (e.g. blinking light) re-arms automatically. */
+ * frame's tick budget; if it's still positive, skip the opcode loop
+ * and jump straight to post-exec (entity yields this frame).
+ *
+ * Once the delay reaches zero, optionally reload it from the
+ * "period" field at +0x3E — SET_DELAY (op 0x09) writes both fields
+ * with the same value so an entity that needs a steady cadence
+ * (e.g. blinking light) re-arms automatically. */
     int16_t delay = (int16_t)EOFF(e, ENT_OFF_DELAY, uint16_t);
     delay = (int16_t)(delay - (int16_t)g_frame_delta_ticks);
     EOFF(e, ENT_OFF_DELAY, uint16_t) = (uint16_t)delay;
@@ -241,18 +241,18 @@ static void ExecEntityScript(Entity *e)
     }
 
     /* Safety counter — bail after a fixed number of iterations to
-     * guarantee we never wedge the whole game on a malformed script
-     * (e.g. unresolved SUBSCRIPT_CALL with a backward jump and no
-     * STOP). The original VM doesn't bound the loop; it relies on
-     * every script having a reachable STOP_TICK, which doesn't hold
-     * for the partially-ported subset. */
+ * guarantee we never wedge the whole game on a malformed script
+ * (e.g. unresolved SUBSCRIPT_CALL with a backward jump and no
+ * STOP). The original VM doesn't bound the loop; it relies on
+ * every script having a reachable STOP_TICK, which doesn't hold
+ * for the partially-ported subset. */
     int safety = MAX_INTERPRETER_ITERS;
     while (keep_running && safety-- > 0) {
         /* Re-read bytecode pointer at the top of each iteration:
-         * SUBSCRIPT_CALL mutates +0x2C and the very next instruction
-         * must come from the new program. Caching the pointer at
-         * function entry would silently keep executing the OLD
-         * bytecode after a tail-call. */
+ * SUBSCRIPT_CALL mutates +0x2C and the very next instruction
+ * must come from the new program. Caching the pointer at
+ * function entry would silently keep executing the OLD
+ * bytecode after a tail-call. */
         bytecode = (const uint8_t *)ent_ptr_resolve(EOFF(e, ENT_OFF_BYTECODE_SLOT, uint32_t));
         if (!bytecode) break;
 
@@ -282,9 +282,9 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_X_OSCILLATE: {
             /* Operand at p+4 is a PE virtual address pointing to a small
-             * table {count, offset[0], offset[1], ...}. Counter at +0x40
-             * advances through the table; the post-exec block adds
-             * `osc_table_x[counter]` to the drawn anchor X. */
+ * table {count, offset[0], offset[1], ...}. Counter at +0x40
+ * advances through the table; the post-exec block adds
+ * `osc_table_x[counter]` to the drawn anchor X. */
             uint32_t tbl_addr;
             memcpy(&tbl_addr, p + 4, 4);
             osc_table_x = resolve_pe_table(tbl_addr);
@@ -316,9 +316,9 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SET_POS_FROM_FRAME: {
             /* Use the current frame's per-frame anchor from the atlas
-             * tables. NOTE: clamp frame to in-range; SWAP_ATLAS (0x23)
-             * preserves +0x30 across atlas swap, so a stale high frame
-             * index on a smaller new atlas could OOB the lookup. */
+ * tables. NOTE: clamp frame to in-range; SWAP_ATLAS (0x23)
+ * preserves +0x30 across atlas swap, so a stale high frame
+ * index on a smaller new atlas could OOB the lookup. */
             uint16_t fid = EOFF(e, ENT_OFF_FRAME, uint16_t);
             if (atlas->frame_count && fid >= atlas->frame_count) {
                 fid = (uint16_t)(atlas->frame_count - 1);
@@ -330,8 +330,8 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_IF_FRAME:
             /* Sets the "frame ready" bit when current frame == arg.
-             * Used in combination with JUMP_IF_*_BIT0 to take a branch
-             * when reaching a specific frame in an animation. */
+ * Used in combination with JUMP_IF_*_BIT0 to take a branch
+ * when reaching a specific frame in an animation. */
             if (arg == EOFF(e, ENT_OFF_FRAME, uint16_t)) {
                 EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_FRAME_READY;
             } else {
@@ -341,9 +341,9 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_FRAME_RANGE_CHECK: {
             /* Coerce `arg` into the current frame index iff the current
-             * frame is inside [lo, hi]. Falls through to SET_FRAME, so
-             * the effect is "if frame ∈ [lo, hi], keep it; otherwise
-             * snap to `arg`". */
+ * frame is inside [lo, hi]. Falls through to SET_FRAME, so
+ * the effect is "if frame ∈ [lo, hi], keep it; otherwise
+ * snap to `arg`". */
             uint16_t fid = EOFF(e, ENT_OFF_FRAME, uint16_t);
             uint16_t lo  = (uint16_t)(p[4] | (p[5] << 8));
             uint16_t hi  = (uint16_t)(p[6] | (p[7] << 8));
@@ -353,14 +353,14 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SET_FRAME: {
             /* Clamp into the atlas's valid frame range, then fire the
-             * per-frame SFX trigger.
-             *
-             * NOTE: the SFX gate has been simplified vs the original.
-             * The original engine attaches a [sampl] table to each
-             * asset at load time and only fires when that table is
-             * non-NULL. The port keeps a scene-wide table keyed by
-             * (asset_name, frame), so TriggerFrameSfx is called
-             * unconditionally — it's a no-op when no entry matches. */
+ * per-frame SFX trigger.
+ *
+ * NOTE: the SFX gate has been simplified vs the original.
+ * The original engine attaches a [sampl] table to each
+ * asset at load time and only fires when that table is
+ * non-NULL. The port keeps a scene-wide table keyed by
+ * (asset_name, frame), so TriggerFrameSfx is called
+ * unconditionally — it's a no-op when no entry matches. */
             uint16_t fc = atlas->frame_count;
             if (fc && arg >= fc) arg = (uint16_t)(fc - 1);
             EOFF(e, ENT_OFF_FRAME, uint16_t) = arg;
@@ -371,8 +371,8 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SET_DELAY:
             /* Writes BOTH the current delay and the period so the
-             * frame-delta gate at function top re-arms with the same
-             * value after each yield. */
+ * frame-delta gate at function top re-arms with the same
+ * value after each yield. */
             EOFF(e, ENT_OFF_DELAY,       uint16_t) = arg;
             EOFF(e, ENT_OFF_DELAY_RESET, uint16_t) = arg;
             break;
@@ -392,12 +392,12 @@ static void ExecEntityScript(Entity *e)
             uint16_t cnt = EOFF(e, off, uint16_t);
             if ((uint32_t)(cnt + 1) < arg) {
                 /* Counter not yet at limit: jump back to the matching
-                 * label. NOTE: assign next_pc unconditionally — if the
-                 * label isn't found, scan_for_label returns 0 and the
-                 * loop wraps to the bytecode head. That's the intended
-                 * behavior for malformed scripts (matches the original);
-                 * silently skipping the jump would corrupt control flow
-                 * by continuing past the body. */
+ * label. NOTE: assign next_pc unconditionally — if the
+ * label isn't found, scan_for_label returns 0 and the
+ * loop wraps to the bytecode head. That's the intended
+ * behavior for malformed scripts (matches the original);
+ * silently skipping the jump would corrupt control flow
+ * by continuing past the body. */
                 int16_t  want  = (int16_t)(p[4] | (p[5] << 8));
                 uint16_t found = scan_for_label(bytecode,
                                                 want < 0 ? LABEL_WILDCARD : (uint16_t)want);
@@ -411,7 +411,7 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SET_RAND_FRAME: {
             /* Pick a random frame in [0, arg) and trigger the per-frame
-             * SFX, same as PVM_SET_FRAME. */
+ * SFX, same as PVM_SET_FRAME. */
             uint16_t fc = atlas->frame_count;
             if (fc && arg > fc) arg = fc;
             uint16_t f = (uint16_t)WackiRand(arg);
@@ -438,10 +438,10 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_ADVANCE_FRAME: {
             /* arg < 0x80 → wrap to 0 on overflow (looping anim).
-             * arg ≥ 0x80 → clamp to last frame (one-shot anim).
-             * The bit selects which behavior — used by scripts that want
-             * an idle animation to loop but a special-action animation
-             * to "finish and stop". */
+ * arg ≥ 0x80 → clamp to last frame (one-shot anim).
+ * The bit selects which behavior — used by scripts that want
+ * an idle animation to loop but a special-action animation
+ * to "finish and stop". */
             EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_FRAME_READY;
             uint16_t f = (uint16_t)(EOFF(e, ENT_OFF_FRAME, uint16_t) + arg);
             EOFF(e, ENT_OFF_FRAME, uint16_t) = f;
@@ -471,9 +471,9 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_WALK_TO_X:
             /* WALK_TO_X reads Y from the operand at p+4..5; WALK_TO_XY
-             * reuses the entity's current anchor Y. Both opcodes have
-             * dlt=4 in every shipped script — reading p[4..7] is safe.
-             * Falls through into WALK_TO_XY. */
+ * reuses the entity's current anchor Y. Both opcodes have
+ * dlt=4 in every shipped script — reading p[4..7] is safe.
+ * Falls through into WALK_TO_XY. */
         case PVM_WALK_TO_XY: {
             EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_FRAME_READY;
 
@@ -499,9 +499,9 @@ static void ExecEntityScript(Entity *e)
                 }
 
                 /* Promote cx/cy to uint16 before shifting so the
-                 * resulting accumulator has the same bit pattern as
-                 * the original — defined behavior for off-screen
-                 * entries where cx/cy may be negative. */
+ * resulting accumulator has the same bit pattern as
+ * the original — defined behavior for off-screen
+ * entries where cx/cy may be negative. */
                 EOFF(e, ENT_OFF_WALKER_X,        int32_t) = (int32_t)((uint32_t)(uint16_t)cx << 16);
                 EOFF(e, ENT_OFF_WALKER_Y,        int32_t) = (int32_t)((uint32_t)(uint16_t)cy << 16);
                 EOFF(e, ENT_OFF_WALKER_DX_REM,   int32_t) = inc_x;
@@ -512,7 +512,7 @@ static void ExecEntityScript(Entity *e)
             }
 
             /* Step count from the operand (with scale_pct applied for
-             * perspective-doubled actors). */
+ * perspective-doubled actors). */
             uint16_t step = (op == PVM_WALK_TO_X)
                             ? (uint16_t)(p[6] | (p[7] << 8))
                             : (uint16_t)(p[4] | (p[5] << 8));
@@ -522,15 +522,15 @@ static void ExecEntityScript(Entity *e)
             if ((int16_t)step == 0) step = 1;
 
             /* NOTE: aliasing-safe loop. The high half of the int32
-             * accumulator at +0x44 / +0x48 is read separately as an
-             * int16 at +0x46 / +0x4A — same memory aliased through two
-             * types. Under `-fstrict-aliasing` the compiler may reorder
-             * the int32 += with the subsequent int16 ==, causing the
-             * walker to overshoot the target by 1 px per tick and then
-             * never zero +0x4C/+0x50 → walker keeps stepping past.
-             * The per-iteration local-variable copies force a fresh
-             * read each iteration; `-fno-strict-aliasing` in the
-             * Makefile is the belt-and-braces. */
+ * accumulator at +0x44 / +0x48 is read separately as an
+ * int16 at +0x46 / +0x4A — same memory aliased through two
+ * types. Under `-fstrict-aliasing` the compiler may reorder
+ * the int32 += with the subsequent int16 ==, causing the
+ * walker to overshoot the target by 1 px per tick and then
+ * never zero +0x4C/+0x50 → walker keeps stepping past.
+ * The per-iteration local-variable copies force a fresh
+ * read each iteration; `-fno-strict-aliasing` in the
+ * Makefile is the belt-and-braces. */
             for (uint16_t k = 0; k < step; ++k) {
                 int16_t pre_x = EOFF(e, ENT_OFF_WALKER_X_HI, int16_t);
                 int16_t tgt_x = EOFF(e, ENT_OFF_WALKER_TGT_X, int16_t);
@@ -558,8 +558,8 @@ static void ExecEntityScript(Entity *e)
                 EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) &= (uint16_t)~ENT_FLAG_FRAME_READY;
             }
             /* Walker tick always counts as a frame-touch — the
-             * walk-tail post-exec hooks need to fire on the moving
-             * tick, not just the arrival tick. */
+ * walk-tail post-exec hooks need to fire on the moving
+ * tick, not just the arrival tick. */
             frame_changed = 1;
             break;
         }
@@ -596,11 +596,11 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SUBSCRIPT_CALL: {
             /* Tail-call into a different bytecode block. NOTE: if the
-             * target address isn't resolvable (subroutine not embedded
-             * in our PE blob yet), terminate the tick and leave +0x2C
-             * pointing at the current bytecode. Otherwise we'd reset
-             * pc to 0 on the SAME bytecode and re-execute this opcode
-             * forever → game hangs. */
+ * target address isn't resolvable (subroutine not embedded
+ * in our PE blob yet), terminate the tick and leave +0x2C
+ * pointing at the current bytecode. Otherwise we'd reset
+ * pc to 0 on the SAME bytecode and re-execute this opcode
+ * forever → game hangs. */
             uint32_t addr;
             memcpy(&addr, p + 4, 4);
             const void *new_bc = xlat_binary_ptr(addr);
@@ -628,9 +628,9 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_ENQUEUE_CLICK: {
             /* Push (obj, verb) onto the deferred click queue. The drain
-             * happens at the tail of ProcessGameFrameTick, after this
-             * walker has finished — running DispatchClickEvent inline
-             * would mutate the entity list we're currently iterating. */
+ * happens at the tail of ProcessGameFrameTick, after this
+ * walker has finished — running DispatchClickEvent inline
+ * would mutate the entity list we're currently iterating. */
             uint16_t obj  = arg;
             uint16_t verb = (uint16_t)(p[4] | (p[5] << 8));
             EnqueueClickEvent(obj, verb);
@@ -639,9 +639,9 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SWAP_ATLAS: {
             /* Swap to a different atlas registered at (kind=1, id=arg)
-             * in the dispatch table. Resets walker + delay state; if
-             * the lookup fails we just fall through to the reset (the
-             * entity keeps its old atlas, which is the safest behavior). */
+ * in the dispatch table. Resets walker + delay state; if
+ * the lookup fails we just fall through to the reset (the
+ * entity keeps its old atlas, which is the safest behavior). */
             AnimAsset *new_atlas = (AnimAsset *)FindUpdateRegistration(1, arg);
             if (new_atlas) {
                 EOFF(e, ENT_OFF_ATLAS_SLOT, uint32_t) = ent_ptr_intern(new_atlas);
@@ -655,7 +655,7 @@ static void ExecEntityScript(Entity *e)
 
         case PVM_SET_FADE:
             /* Mark fading-out (bit 1 of the primary-flag byte) and seed
-             * +0x26 with the script-supplied initial fade level. */
+ * +0x26 with the script-supplied initial fade level. */
             EOFF8(e, 9) |= 2;
             EOFF(e, ENT_OFF_FOOT_Y, uint16_t) = arg;
             frame_changed = 1;
@@ -670,17 +670,17 @@ static void ExecEntityScript(Entity *e)
     }
 
     /* ============================================================== *
-     * Post-exec tidy-up.
-     *
-     * Runs whether or not the opcode loop executed (the delay gate
-     * branches straight here). Order matters: the foot-fade clear at
-     * the very top runs BEFORE the standard foot-Y bake at the bottom,
-     * so when both conditions hit the same tick, the standard bake
-     * wins.
-     * ============================================================== */
+ * Post-exec tidy-up.
+ *
+ * Runs whether or not the opcode loop executed (the delay gate
+ * branches straight here). Order matters: the foot-fade clear at
+ * the very top runs BEFORE the standard foot-Y bake at the bottom,
+ * so when both conditions hit the same tick, the standard bake
+ * wins.
+ * ============================================================== */
 post_exec:
     /* Fading-out + touched-this-tick → zero foot_y so the entity
-     * sinks below visible scenery before the fade pass culls it. */
+ * sinks below visible scenery before the fade pass culls it. */
     if (frame_changed && (EOFF(e, 8, uint16_t) & ENT_PFLAG_FADING_OUT)) {
         EOFF(e, ENT_OFF_FOOT_Y, uint16_t) = 0;
         EOFF(e, 8, uint16_t)             |= ENT_PFLAG_FOOT_BAKED;
@@ -705,9 +705,9 @@ post_exec:
     }
 
     /* Stash the current frame's atlas width / height into the entity
-     * so renderers + hit-tests can pick them up. Clamps the frame
-     * index defensively — SWAP_ATLAS preserves +0x30 across the swap,
-     * so a stale high index on a smaller new atlas could OOB. */
+ * so renderers + hit-tests can pick them up. Clamps the frame
+ * index defensively — SWAP_ATLAS preserves +0x30 across the swap,
+ * so a stale high index on a smaller new atlas could OOB. */
     {
         uint16_t fid = EOFF(e, ENT_OFF_FRAME, uint16_t);
         if (atlas->frame_count && fid >= atlas->frame_count) {
@@ -723,25 +723,25 @@ post_exec:
     }
 
     /* Foot-anchor compensation: ANIM_ACTIVE entities want the drawn
-     * position to reference their per-frame "hot point" so the foot
-     * stays at the script's anchor while the body's silhouette cycles
-     * through poses.
-     *
-     *   perspective-scaled (ENT_PFLAG_PERSPECTIVE):
-     *       drawn += hot * scale_pct / 100
-     *   2× doubled (ENT_PFLAG_DOUBLED):
-     *       drawn += hot * 2
-     *   else (1:1):
-     *       drawn += hot
-     *
-     * NOTE: the "perspective" path also fires whenever scale_pct is
-     * actually being applied by the renderer — the original engine
-     * gates this on ENT_PFLAG_PERSPECTIVE specifically, but actors
-     * spawned via the path we've reproduced don't reliably get that
-     * flag set. Treating any non-trivial scale_pct as perspective
-     * keeps foot anchoring correct both for shrinking (climbing
-     * distance) and growing (leftover scale from another actor's
-     * action). */
+ * position to reference their per-frame "hot point" so the foot
+ * stays at the script's anchor while the body's silhouette cycles
+ * through poses.
+ *
+ * perspective-scaled (ENT_PFLAG_PERSPECTIVE):
+ * drawn += hot * scale_pct / 100
+ * 2× doubled (ENT_PFLAG_DOUBLED):
+ * drawn += hot * 2
+ * else (1:1):
+ * drawn += hot
+ *
+ * NOTE: the "perspective" path also fires whenever scale_pct is
+ * actually being applied by the renderer — the original engine
+ * gates this on ENT_PFLAG_PERSPECTIVE specifically, but actors
+ * spawned via the path we've reproduced don't reliably get that
+ * flag set. Treating any non-trivial scale_pct as perspective
+ * keeps foot anchoring correct both for shrinking (climbing
+ * distance) and growing (leftover scale from another actor's
+ * action). */
     if (EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) & ENT_FLAG_ANIM_ACTIVE) {
         uint16_t fid   = EOFF(e, ENT_OFF_FRAME, uint16_t);
         uint16_t flags = EOFF(e, 8, uint16_t);
@@ -770,9 +770,9 @@ post_exec:
     }
 
     /* Standard foot_y bake: ENT_PFLAG_NO_FOOT_BAKE entities (HUD,
-     * speech balloons) opt out; everything else gets the conventional
-     * "foot = drawn_y + height". This runs AFTER the top-of-post-exec
-     * fade-out clear, so it wins when both fire on the same tick. */
+ * speech balloons) opt out; everything else gets the conventional
+ * "foot = drawn_y + height". This runs AFTER the top-of-post-exec
+ * fade-out clear, so it wins when both fire on the same tick. */
     if (!(EOFF(e, 8, uint16_t) & ENT_PFLAG_NO_FOOT_BAKE)) {
         EOFF(e, ENT_OFF_FOOT_Y, int16_t) = (int16_t)(
             EOFF(e, ENT_OFF_HEIGHT, int16_t) + EOFF(e, ENT_OFF_DRAWN_Y, int16_t));

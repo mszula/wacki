@@ -1,31 +1,31 @@
 /*
  * depack.c — Cygert's "PKv2" LZ77 + Shannon-Fano decoder.
  *
- * Byte-faithful port of FUN_004145C0 + FUN_00414C40 in the original
+ * Byte-faithful port of + in the original
  * WACKI.EXE (string at 0x446038: "Depack routines by Henryk Cygert").
  *
  * The algorithm walks the bit stream BACKWARDS from a trailer that lives
  * at the very end of the buffer. The output is also produced back-to-front.
  *
  * Buffer layout:
- *   +0      uint32 magic = 0x32764B50  "PKv2"
- *   +4      uint32 comp                 (total compressed size = trailer offset)
- *   +8      uint32 unp                  (unpacked size)
- *   +12     ...  compressed payload (consumed back-to-front)
- *   end-32..-29     uint32 init_literal_run_length
- *   end-28          uint8  initial bit_buf
- *   end-27          uint8  initial bit_cnt
- *   end-26..-21     6 bytes  ->  12-nibble table "match-offset bit-widths"
- *   end-20..-15     6 bytes  ->  12-nibble table "literal-length bit-widths"
- *   end-14..-3      12 bytes "scratch"   (copied back to src+0..src+11)
- *   end-2           ignored
- *   end-1           uint8 marker: 0 = raw literal mode, else LZ77
+ * +0 uint32 magic = 0x32764B50 "PKv2"
+ * +4 uint32 comp (total compressed size = trailer offset)
+ * +8 uint32 unp (unpacked size)
+ * +12 ... compressed payload (consumed back-to-front)
+ * end-32..-29 uint32 init_literal_run_length
+ * end-28 uint8 initial bit_buf
+ * end-27 uint8 initial bit_cnt
+ * end-26..-21 6 bytes -> 12-nibble table "match-offset bit-widths"
+ * end-20..-15 6 bytes -> 12-nibble table "literal-length bit-widths"
+ * end-14..-3 12 bytes "scratch" (copied back to src+0..src+11)
+ * end-2 ignored
+ * end-1 uint8 marker: 0 = raw literal mode, else LZ77
  *
- *  (All offsets above are relative to buf+comp = past-the-end.
- *   "end" below means src+comp.)
+ * (All offsets above are relative to buf+comp = past-the-end.
+ * "end" below means src+comp.)
  *
- * Fixed match-length bit widths (DAT_00446030):  {0, 0, 0, 3, 5, 16}
- * Fixed bit-mask LUT          (DAT_00446060):    {0, 1, 3, 7, 15, 31, 63, 127, 255}
+ * Fixed match-length bit widths: {0, 0, 0, 3, 5, 16}
+ * Fixed bit-mask LUT: {0, 1, 3, 7, 15, 31, 63, 127, 255}
  */
 #include "wacki.h"
 #include <string.h>
@@ -100,15 +100,15 @@ static inline uint32_t bs_bits(uint8_t n)
 
 /* Build 12-entry bit-width table from 6 trailer bytes.
  *
- * Per FUN_004145C0 inner table-loops:
- *   For each byte we extract a signed hi nibble (cVar3 = (int8_t)b >> 4)
- *   and an unsigned lo nibble (b & 0x0F).
- *   On the FIRST iteration only, the carry latches to hi[0]; subsequent
- *   iterations use that same carry. Result:
- *     out[0]   = hi[0]
- *     out[1]   = lo[0] + hi[0]
- *     out[2i]  = hi[i] + hi[0]      (i >= 1)
- *     out[2i+1]= lo[i] + hi[0]      (i >= 1)
+ * Per inner table-loops:
+ * For each byte we extract a signed hi nibble (cVar3 = (int8_t)b >> 4)
+ * and an unsigned lo nibble (b & 0x0F).
+ * On the FIRST iteration only, the carry latches to hi[0]; subsequent
+ * iterations use that same carry. Result:
+ * out[0] = hi[0]
+ * out[1] = lo[0] + hi[0]
+ * out[2i] = hi[i] + hi[0] (i >= 1)
+ * out[2i+1]= lo[i] + hi[0] (i >= 1)
  */
 static void unpack_widths(uint8_t out[12], const uint8_t *six)
 {
@@ -123,7 +123,7 @@ static void unpack_widths(uint8_t out[12], const uint8_t *six)
     }
 }
 
-/* FUN_00414C40 — precompute the three "base" tables. */
+/* — precompute the three "base" tables. */
 static void precompute_bases(void)
 {
     /* base_mlen[0] = 2; base_mlen[i+1] = base_mlen[i] + (bits[i+1] ? 1<<bits[i+1] : 1) */
@@ -133,11 +133,11 @@ static void precompute_bases(void)
         base_mlen[i] = base_mlen[i - 1] + (bw == 0 ? 1u : (1u << bw));
     }
 
-    /* base_off: 4 groups of 3.  In each group, starts fresh (no -1):
-     *   base[3g+0] = (1 << tab_off_bits[3g+0])
-     *   base[3g+1] = base[3g+0] + (1 << tab_off_bits[3g+1])
-     *   base[3g+2] = base[3g+1] + (1 << tab_off_bits[3g+2])
-     */
+    /* base_off: 4 groups of 3. In each group, starts fresh (no -1):
+ * base[3g+0] = (1 << tab_off_bits[3g+0])
+ * base[3g+1] = base[3g+0] + (1 << tab_off_bits[3g+1])
+ * base[3g+2] = base[3g+1] + (1 << tab_off_bits[3g+2])
+ */
     for (int g = 0; g < 4; ++g) {
         int i = g * 3;
         base_off[i + 0] = 1u << tab_off_bits[i + 0];
@@ -181,26 +181,26 @@ void DepackPkv2Buffer(void *src_, void *dst_, void (*progress)(int))
     }
 
     /* Reproduce the original side-effect: copy the last 12 bytes of the
-     * compressed payload over the first 12 bytes of the buffer. For
-     * in-place callers (where src == dst) this seeds the first 12 dst
-     * bytes — the LZ77 decoder is expected to overwrite them with the
-     * final iterations' literals/back-refs. */
+ * compressed payload over the first 12 bytes of the buffer. For
+ * in-place callers (where src == dst) this seeds the first 12 dst
+ * bytes — the LZ77 decoder is expected to overwrite them with the
+ * final iterations' literals/back-refs. */
     if (src == dst) memcpy(src, eot - 0x0C, 0x0C);
 
     /* Read the two 6-byte → 12-entry bit-width tables.
-     *   eot - 0x12 == &byte[comp-19]  — six bytes for tab_off_bits
-     *   eot - 0x18 == &byte[comp-25]  — six bytes for tab_lit_bits */
+ * eot - 0x12 == &byte[comp-19] — six bytes for tab_off_bits
+ * eot - 0x18 == &byte[comp-25] — six bytes for tab_lit_bits */
     unpack_widths(tab_off_bits, eot - 0x12);
     unpack_widths(tab_lit_bits, eot - 0x18);
     precompute_bases();
 
 
     /* Initial bit-stream state — read from the bytes right BEFORE the two
-     * width tables (i.e. immediately above the literal/dictionary stream).
-     *   bs_cnt at offset (comp - 26) = eot - 0x19
-     *   bs_buf at offset (comp - 27) = eot - 0x1A
-     *   bs_ptr at offset (comp - 31) = eot - 0x1E
-     */
+ * width tables (i.e. immediately above the literal/dictionary stream).
+ * bs_cnt at offset (comp - 26) = eot - 0x19
+ * bs_buf at offset (comp - 27) = eot - 0x1A
+ * bs_ptr at offset (comp - 31) = eot - 0x1E
+ */
     bs_cnt = *(eot - 0x19);
     bs_buf = *(eot - 0x1A);
     bs_ptr = eot - 0x1E;
@@ -212,13 +212,13 @@ void DepackPkv2Buffer(void *src_, void *dst_, void (*progress)(int))
     }
 
     /* The initial literal run sits just before the init_lit DWORD.
-     *   memcpy(dst + unp - init_lit, bs_ptr - init_lit, init_lit)
-     * After the memcpy, the bit stream walks bytes <= (bs_ptr - init_lit - 1). */
+ * memcpy(dst + unp - init_lit, bs_ptr - init_lit, init_lit)
+ * After the memcpy, the bit stream walks bytes <= (bs_ptr - init_lit - 1). */
     bs_ptr -= init_lit;
     /* In-place callers (src == dst) pre-load bytes 0..11 of the buffer with
-     * the scratch (= the asset header, conveniently stashed at the end of
-     * the compressed payload). The encoder is free to encode bit-stream
-     * data right up to src+0, so we let bs_ptr walk down to the very start. */
+ * the scratch (= the asset header, conveniently stashed at the end of
+ * the compressed payload). The encoder is free to encode bit-stream
+ * data right up to src+0, so we let bs_ptr walk down to the very start. */
     bs_floor = src;
 
     uint8_t *out = dst + (unp - init_lit);
@@ -259,12 +259,12 @@ void DepackPkv2Buffer(void *src_, void *dst_, void (*progress)(int))
         if (sg2 != 0) llen += base_lit[il - 1] + 1;
 
         /* 6. back-ref copy. T127 audit (2026-05-27): clamp on overshoot
-         * verified DEAD across all 1782 DANE_02.DTA entries — never
-         * triggers in practice. Earlier port had a "1-byte short last
-         * iteration" tolerance that turned out to be a WIP-era artifact
-         * (likely fixed by subsequent bs_ptr/header parsing tweaks).
-         * Now bail with log if it ever happens — safer than silent
-         * truncation. */
+ * verified DEAD across all 1782 DANE_02.DTA entries — never
+ * triggers in practice. Earlier port had a "1-byte short last
+ * iteration" tolerance that turned out to be a WIP-era artifact
+ * (likely fixed by subsequent bs_ptr/header parsing tweaks).
+ * Now bail with log if it ever happens — safer than silent
+ * truncation. */
         if (mlen > (uint32_t)(out - dst)) {
             fprintf(stderr, "[depack] iter %u: mlen=%u overshoots remaining %u — bail\n",
                     iters, mlen, (uint32_t)(out - dst));
@@ -289,8 +289,8 @@ void DepackPkv2Buffer(void *src_, void *dst_, void (*progress)(int))
             return;
         }
         /* In-place: src buffer == dst buffer. Near the end of decoding, the
-         * source and destination ranges can overlap (bs_ptr just ahead of
-         * out). Use memmove for defined behavior. */
+ * source and destination ranges can overlap (bs_ptr just ahead of
+ * out). Use memmove for defined behavior. */
         memmove(out, bs_ptr, llen);
 
         if (progress) {

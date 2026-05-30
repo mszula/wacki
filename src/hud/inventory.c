@@ -10,11 +10,11 @@
  * page index (`g_panel_page_idx`) selects which six slots are visible.
  * Page navigation:
  *
- *   - PagePrev: scroll left (does nothing on page 0)
- *   - PageNext: scroll to the next page that contains at least one
- *     non-empty slot, capped at page 9 (= 10 pages × 6 = 60 slots)
- *   - PageCollapse: after removing an item, drop back to the rightmost
- *     non-empty page so the panel doesn't show a blank row
+ * - PagePrev: scroll left (does nothing on page 0)
+ * - PageNext: scroll to the next page that contains at least one
+ * non-empty slot, capped at page 9 (= 10 pages × 6 = 60 slots)
+ * - PageCollapse: after removing an item, drop back to the rightmost
+ * non-empty page so the panel doesn't show a blank row
  *
  * Add/Remove/Has are straightforward: linear scan over the 60 slots.
  * Drop is special — it parks the item entity off-screen and strips its
@@ -47,10 +47,10 @@ extern uint32_t g_scene_snapshot[0x1E];     /* backing storage for inventory */
 #define ITEM_VERB_RANGE            0x8E           /* 142 distinct items */
 
 /* Entity-state layout (per-item, 8-byte stride indexed by item-0x29):
- *   +0  u16  panel_verb_id  (what shows up in inventory slot)
- *   +2  u16  in_inventory   (0 = no, 0xFFFF = yes)
- *   +4  u16  state_a
- *   +6  u16  state_b */
+ * +0 u16 panel_verb_id (what shows up in inventory slot)
+ * +2 u16 in_inventory (0 = no, 0xFFFF = yes)
+ * +4 u16 state_a
+ * +6 u16 state_b */
 #define ENTITY_STATE_STRIDE_U16    4              /* 8 bytes = 4 u16s */
 #define ENTITY_STATE_OFF_VERB      0
 #define ENTITY_STATE_OFF_IN_INV    1

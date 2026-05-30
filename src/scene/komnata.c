@@ -4,18 +4,18 @@
  * routine. It walks the current stage's komnata table for the
  * requested id, then performs a full room reset:
  *
- *   1. Look up the komnata's name + flags + enter/secondary script
- *      addresses in the stage descriptor.
- *   2. Tear down the previous room (entity lists, visible masks,
- *      frame SFX state, positional sound queue).
- *   3. Reset perspective globals and actor walker state so the
- *      previous room's biases don't leak into the new one.
- *   4. Parse the new room's [sampl] tags from Wacky.scr.
- *   5. Page-swap the inventory panel.
- *   6. Run the enter script (RunScriptInterpreter at 0x26/0x26).
- *   7. If a secondary script is registered, pump two frame ticks
- *      (lets one-shot BG-blit entities paint to the back-buffer)
- *      then run it too.
+ * 1. Look up the komnata's name + flags + enter/secondary script
+ * addresses in the stage descriptor.
+ * 2. Tear down the previous room (entity lists, visible masks,
+ * frame SFX state, positional sound queue).
+ * 3. Reset perspective globals and actor walker state so the
+ * previous room's biases don't leak into the new one.
+ * 4. Parse the new room's [sampl] tags from Wacky.scr.
+ * 5. Page-swap the inventory panel.
+ * 6. Run the enter script (RunScriptInterpreter at 0x26/0x26).
+ * 7. If a secondary script is registered, pump two frame ticks
+ * (lets one-shot BG-blit entities paint to the back-buffer)
+ * then run it too.
  *
  * Returns the resolved komnata name pointer, or NULL if the lookup
  * failed (id out of range, stage table missing, terminator hit before
@@ -48,25 +48,25 @@ extern const uint8_t *ScriptObjGetSectionStart(void *self);
 extern const uint8_t *ScriptObjGetSectionEnd  (void *self);
 extern int   FindScriptByStageAndRoom(void *self, const char *etap, const char *komnata);
 
-/* LoadKomnata — 1:1 port of FUN_00402A50 @ 0x00402A50.
+/* LoadKomnata —
  *
- *   piVar2 = *DAT_0044A19C;                         // komnata table base
- *   walk entries (14 bytes each) until index == id
- *   if not found: DAT_0044E5DC = 0; return;
- *   DAT_0044E588 = id;                              // g_cur_komnata
- *   DAT_0044E448 = entry[+4];                        // flags
- *   palette fade-out (deferred — see comment below)
- *   FUN_00405F80() + FUN_00402DB0()                  // clear lists
- *   FUN_00402990(name)                               // name-keyed init
- *   FindScriptByStageAndRoom(scripts, etap, name)    // locate Wacky.scr section
- *   FUN_00409970(scripts)                            // parse [sampl] tags
- *   load pal_NN_NN.pal                               // per-komnata palette
- *   if (flags & 1) link kind=3 walk-behind initial entity
- *   if (flags & 2) link kind=2/3/4 default entities (cursor, krazek)
- *   RunScriptInterpreter(0x26, 0x26, entry[+6])      // enter script
- *   palette fade-in
- *   ProcessGameFrameTick × 2
- *   RunScriptInterpreter(0x26, 0x26, entry[+10])     // secondary script
+ * piVar2 = *DAT_0044A19C; // komnata table base
+ * walk entries (14 bytes each) until index == id
+ * if not found: DAT_0044E5DC = 0; return;
+ * DAT_0044E588 = id; // g_cur_komnata
+ * DAT_0044E448 = entry[+4]; // flags
+ * palette fade-out (deferred — see comment below)
+ * + // clear lists
+ * (name) // name-keyed init
+ * FindScriptByStageAndRoom(scripts, etap, name) // locate Wacky.scr section
+ * (scripts) // parse [sampl] tags
+ * load pal_NN_NN.pal // per-komnata palette
+ * if (flags & 1) link kind=3 walk-behind initial entity
+ * if (flags & 2) link kind=2/3/4 default entities (cursor, krazek)
+ * RunScriptInterpreter(0x26, 0x26, entry[+6]) // enter script
+ * palette fade-in
+ * ProcessGameFrameTick × 2
+ * RunScriptInterpreter(0x26, 0x26, entry[+10]) // secondary script
  *
  * Most palette / FUN_0040xxxx side-effects are deferred — what matters
  * for our port is: locate name, clear lists, run enter_script. */
@@ -88,21 +88,21 @@ const char *LoadKomnata(uint16_t id)
     const uint8_t *karr = (const uint8_t *)PeLoaderRead(komnata_arr_va);
     if (!karr) return NULL;
 
-    /* T105 fix — walk komnata table 1:1 with FUN_00402A50 @ 0x00402A55:
-     *   piVar5 = table_base;  iVar6 = 0;
-     *   do {
-     *       if (*piVar5 == 0 && piVar5[1] == 0) { iVar6 = 0; bail; }
-     *       ++iVar6;  piVar5 += 14;
-     *   } while (iVar6 < param_1);
-     *   ++iVar6;                              // post-loop inc
-     *   idx = param_1 - 1;                    // 0-based entry to use
-     *
-     * Walk scans entries 0..(param_1-1), checking each for NULL+0
-     * sentinel mid-walk. If hit, abort. Otherwise use index (param_1-1).
-     *
-     * Earlier port: `for (i<=idx+1 && i<16; ++i)` — bounded by fixed
-     * 16-entry sanity cap. Stages 2-5 with >16 rooms would silently
-     * fail to find them. */
+    /* T105 fix — walk komnata table:
+ * piVar5 = table_base; iVar6 = 0;
+ * do {
+ * if (*piVar5 == 0 && piVar5[1] == 0) { iVar6 = 0; bail; }
+ * ++iVar6; piVar5 += 14;
+ * } while (iVar6 < param_1);
+ * ++iVar6; // post-loop inc
+ * idx = param_1 - 1; // 0-based entry to use
+ *
+ * Walk scans entries 0..(param_1-1), checking each for NULL+0
+ * sentinel mid-walk. If hit, abort. Otherwise use index (param_1-1).
+ *
+ * Earlier port: `for (i<=idx+1 && i<16; ++i)` — bounded by fixed
+ * 16-entry sanity cap. Stages 2-5 with >16 rooms would silently
+ * fail to find them. */
     int idx = (int)id - 1;     /* 1-based → 0-based */
     int found = 0;
     for (int i = 0; i < (int)id; ++i) {
@@ -134,52 +134,52 @@ const char *LoadKomnata(uint16_t id)
     fprintf(stderr, "[load-komnata] %u '%s' flags=0x%04X enter=0x%08X second=0x%08X\n",
             id, name ? name : "(null)", flags, enter_va, second_va);
 
-    /* Clear lists — port mirror of FUN_00405F80 + FUN_00402DB0. */
+    /* Clear lists — port mirror of + . */
     EntityListClearAll();
     VisibleMasksReset();
     ResetFrameSfxState();
-    /* T132 — original FUN_00402DB0 calls FUN_00410D20 (sound queue reset)
-     * as part of room reset. Without this, positional sources from the
-     * previous komnata leak into the new one's aggregate pan. */
+    /* T132 — original calls (sound queue reset)
+ * as part of room reset. Without this, positional sources from the
+ * previous komnata leak into the new one's aggregate pan. */
     SoundQueueReset();
 
-    /* T107 — partial port of FUN_00402DB0 (room reset). The original
-     * does a consolidated clear that we previously split across multiple
-     * code paths; the bits below explicitly cover the gaps so non-op-0x2C
-     * komnaty (= no explicit mask asset) don't carry stale state from the
-     * previous room:
-     *
-     * 1. Perspective band count — original FUN_00402DB0 unconditionally
-     *    `DAT_0044A200 = 0` then `= 4 if (flags & 2)`. Earlier port only
-     *    reset it inside ScriptCallBgMaskSetup (which is called only when
-     *    the room has a mask asset). Rooms without one inherited band
-     *    count from the previous komnata.
-     *
-     * 2. Actor walker state — clear walk-remaining (+0x4C/+0x50) and
-     *    walker-busy flag (+0x3A bit 0) on both g_actor[]. Op 0x15 path
-     *    plant later re-sets them. Without this, an actor mid-walk when
-     *    the player exited the room would resume walking at room entry.
-     *
-     * 3. Actor scale_pct — original sets `+0x16 = 100` (= 1.0×). Without
-     *    this, an actor whose script set their scale in a previous room
-     *    keeps that scale until UpdateActorMovement re-computes from
-     *    anchor Y. Brief visual glitch on room entry.
-     *
-     * Cursor entity link (DAT_0045147C / DAT_00451480) is skipped — see
-     * T106 (deferred). Click queue head, panel verb-tab init, label
-     * strings — all done at engine boot, no need to repeat. */
+    /* T107 — partial port of (room reset). The original
+ * does a consolidated clear that we previously split across multiple
+ * code paths; the bits below explicitly cover the gaps so non-op-0x2C
+ * komnaty (= no explicit mask asset) don't carry stale state from the
+ * previous room:
+ *
+ * 1. Perspective band count — original unconditionally
+ * `DAT_0044A200 = 0` then `= 4 if (flags & 2)`. Earlier port only
+ * reset it inside ScriptCallBgMaskSetup (which is called only when
+ * the room has a mask asset). Rooms without one inherited band
+ * count from the previous komnata.
+ *
+ * 2. Actor walker state — clear walk-remaining (+0x4C/+0x50) and
+ * walker-busy flag (+0x3A bit 0) on both g_actor[]. Op 0x15 path
+ * plant later re-sets them. Without this, an actor mid-walk when
+ * the player exited the room would resume walking at room entry.
+ *
+ * 3. Actor scale_pct — original sets `+0x16 = 100` (= 1.0×). Without
+ * this, an actor whose script set their scale in a previous room
+ * keeps that scale until UpdateActorMovement re-computes from
+ * anchor Y. Brief visual glitch on room entry.
+ *
+ * Cursor entity link (DAT_0045147C / DAT_00451480) is skipped — see
+ * T106 (deferred). Click queue head, panel verb-tab init, label
+ * strings — all done at engine boot, no need to repeat. */
     extern int g_persp_band_count;
     g_persp_band_count = (flags & 2) ? 4 : 0;
-    /* Reset perspective globals (1:1 with FUN_00402DB0 top):
-     *   DAT_0044a198 = 0x78;   // g_cursor_speed   = 120
-     *   DAT_00449878 = 4;       // g_perspective_min  = 4
-     *   DAT_0044987c = 7;       // g_perspective_step = 7
-     * Without this an op 0x40 SET_PERSPECTIVE call from a prior komnata's
-     * action cinematic (which biases perspective so ACTIVE actor scales
-     * toward 0) persists into the next komnata. First UpdateActorMovement
-     * tick after scene-load recomputes +0x58 with stale globals — actor
-     * visibly jumps ~5% between T107 hardcoded 100 and stale-perspective
-     * computed value. */
+    /* Reset perspective globals ( top):
+ * DAT_0044a198 = 0x78; // g_cursor_speed = 120
+ * DAT_00449878 = 4; // g_perspective_min = 4
+ * DAT_0044987c = 7; // g_perspective_step = 7
+ * Without this an op 0x40 SET_PERSPECTIVE call from a prior komnata's
+ * action cinematic (which biases perspective so ACTIVE actor scales
+ * toward 0) persists into the next komnata. First UpdateActorMovement
+ * tick after scene-load recomputes +0x58 with stale globals — actor
+ * visibly jumps ~5% between T107 hardcoded 100 and stale-perspective
+ * computed value. */
     extern uint16_t g_cursor_speed;
     extern uint16_t g_perspective_min;
     extern uint16_t g_perspective_step;
@@ -197,21 +197,21 @@ const char *LoadKomnata(uint16_t id)
         *(uint16_t *)(eb + 0x32) = 0;       /* pc */
         *(uint16_t *)(eb + 0x3C) = 0;       /* delay countdown */
         /* scale_pct lives in +0x58 in our entity layout (T3 walker port);
-         * original was +0x16 in 32-bit struct. UpdateActorMovement
-         * re-computes from anchor Y, so just reset to 100. */
+ * original was +0x16 in 32-bit struct. UpdateActorMovement
+ * re-computes from anchor Y, so just reset to 100. */
         *(uint16_t *)(eb + 0x58) = 100;
     }
 
     /* Find this komnata's section in Wacky.scr + parse [sampl] tags —
-     * 1:1 with FUN_00402A50's FindScriptByStageAndRoom + FUN_00409970
-     * sequence. Replaces hand-transcribed g_frame_sfx[] table for any
-     * asset mentioned in the parsed [komnata]N section. */
+ *'s FindScriptByStageAndRoom + 
+ * sequence. Replaces hand-transcribed g_frame_sfx[] table for any
+ * asset mentioned in the parsed [komnata]N section. */
     extern void *g_scripts_obj;
     if (g_scripts_obj && name) {
         char etap_str[2] = { (char)('0' + g_cur_etap), 0 };
         if (FindScriptByStageAndRoom(g_scripts_obj, etap_str, name)) {
             /* ScriptObj.start / .end are private to script.c; expose
-             * via accessor — see ScriptObjGetSection() decl. */
+ * via accessor — see ScriptObjGetSection decl. */
             extern const uint8_t *ScriptObjGetSectionStart(void *self);
             extern const uint8_t *ScriptObjGetSectionEnd  (void *self);
             ResetDynamicSfxTable();
@@ -221,12 +221,12 @@ const char *LoadKomnata(uint16_t id)
         }
     }
 
-    /* Panel page-swap — 1:1 with FUN_00402A50 @ 0x00402D76 calling
-     * FUN_004071F0 right before enter_script. Loads page[0]'s 6 slots
-     * into the panel verb table so the room starts with the inventory
-     * front page on the bar. */
+    /* Panel page-swap — calling
+ * right before enter_script. Loads page[0]'s 6 slots
+ * into the panel verb table so the room starts with the inventory
+ * front page on the bar. */
     g_settings_anim_active = flags;     /* T121: full u16 from komnata
-                                         * entry[+4] (was truncated to u8). */
+ * entry[+4] (was truncated to u8). */
     PanelPageSwap();
 
     /* Run enter_script (1:1 with `RunScriptInterpreter(0x26, 0x26, ptr)`). */
@@ -236,24 +236,24 @@ const char *LoadKomnata(uint16_t id)
     }
 
     /* TWO frame ticks between enter_va and second_va — 1:1 with
-     * FUN_00402A50:
-     *   RunScriptInterpreter(enter_va);
-     *   palette fade-in;
-     *   ProcessGameFrameTick();        // <-- this
-     *   ProcessGameFrameTick();        // <-- and this
-     *   RunScriptInterpreter(second_va);
-     *
-     * These ticks let EntityRenderAll process one-shot BG-blit entities
-     * (spawn flags = 0x0060 → flag-0x40/0x20 branch in FUN_00406040
-     * paints the atlas to the backbuffer + clears 0x20 + FlushFrameToPrimary).
-     * Without them, second_va's `op 0x31 destroy id=6` removes the BG
-     * entity from the render list BEFORE the renderer ever saw it →
-     * komnata 5 (magaz3j) renders the prior scene's framebuffer because
-     * its real BG (magaz3c.wyc spawned with flags=0x60) was never blitted.
-     *
-     * Stage-1 komnaty have second_va = 0 so this ran as no-op previously;
-     * stage 2 komnata 5 is the first to actually use second_va, which is
-     * why the bug surfaced only here. */
+ * :
+ * RunScriptInterpreter(enter_va);
+ * palette fade-in;
+ * ProcessGameFrameTick; // <-- this
+ * ProcessGameFrameTick; // <-- and this
+ * RunScriptInterpreter(second_va);
+ *
+ * These ticks let EntityRenderAll process one-shot BG-blit entities
+ * (spawn flags = 0x0060 → flag-0x40/0x20 branch in 
+ * paints the atlas to the backbuffer + clears 0x20 + FlushFrameToPrimary).
+ * Without them, second_va's `op 0x31 destroy id=6` removes the BG
+ * entity from the render list BEFORE the renderer ever saw it →
+ * komnata 5 (magaz3j) renders the prior scene's framebuffer because
+ * its real BG (magaz3c.wyc spawned with flags=0x60) was never blitted.
+ *
+ * Stage-1 komnaty have second_va = 0 so this ran as no-op previously;
+ * stage 2 komnata 5 is the first to actually use second_va, which is
+ * why the bug surfaced only here. */
     if (second_va) {
         extern void ProcessGameFrameTick(void);
         ProcessGameFrameTick();

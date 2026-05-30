@@ -4,10 +4,10 @@
  * (encoded into every SPAWN / LOAD_ASSET / REG_VERB_MASK call) to the
  * runtime pointer it represents. Used by:
  *
- *   - op 0x0B TIMER_SET, op 0x0F SET_ENTITY_ANIM  (main VM)
- *   - op 0x23 SWAP_ATLAS_BY_ID                    (per-entity VM)
- *   - op 0x2F REG_VERB_MASK                       (mask click chain)
- *   - op 0x2D LOAD_ASSET                          (registers; SPAWN finds)
+ * - op 0x0B TIMER_SET, op 0x0F SET_ENTITY_ANIM (main VM)
+ * - op 0x23 SWAP_ATLAS_BY_ID (per-entity VM)
+ * - op 0x2F REG_VERB_MASK (mask click chain)
+ * - op 0x2D LOAD_ASSET (registers; SPAWN finds)
  *
  * Scan is LIFO so the most-recent registration shadows earlier ones —
  * scene loaders rely on this to re-key (kind=1, id=N) to the new

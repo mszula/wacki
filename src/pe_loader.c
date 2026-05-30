@@ -64,7 +64,7 @@ int PeLoaderInit(const char *exe_path)
     }
 
     /* COFF header @ pe_off+4: Machine(2) NumberOfSections(2) TimeDateStamp(4)
-     * PtrToSymTable(4) NumberOfSymbols(4) SizeOfOptionalHeader(2) Characteristics(2) */
+ * PtrToSymTable(4) NumberOfSymbols(4) SizeOfOptionalHeader(2) Characteristics(2) */
     uint16_t num_sections    = *(uint16_t *)(file + pe_off + 0x06);
     uint16_t opt_header_size = *(uint16_t *)(file + pe_off + 0x14);
     if (opt_header_size < 0x60) {
@@ -72,15 +72,15 @@ int PeLoaderInit(const char *exe_path)
         free(file); return 0;
     }
     /* Optional header (PE32) — ImageBase at +0x1C of optional header.
-     * Optional header starts at pe_off + 0x18 (after Signature+CoffHeader). */
+ * Optional header starts at pe_off + 0x18 (after Signature+CoffHeader). */
     uint32_t opt_off = pe_off + 0x18;
     uint32_t image_base = *(uint32_t *)(file + opt_off + 0x1C);
 
     /* Section headers immediately follow the optional header. Each is 40 bytes:
-     *   Name[8] VirtualSize(4) VirtualAddress(4) SizeOfRawData(4) PointerToRawData(4)
-     *   PointerToRelocations(4) PointerToLineNumbers(4) NumberOfRelocations(2)
-     *   NumberOfLineNumbers(2) Characteristics(4)
-     */
+ * Name[8] VirtualSize(4) VirtualAddress(4) SizeOfRawData(4) PointerToRawData(4)
+ * PointerToRelocations(4) PointerToLineNumbers(4) NumberOfRelocations(2)
+ * NumberOfLineNumbers(2) Characteristics(4)
+ */
     uint32_t sec_off = opt_off + opt_header_size;
     if (sec_off + (uint32_t)num_sections * 40 > fsz) {
         fprintf(stderr, "[pe] %s: section table out of range\n", exe_path);
@@ -157,7 +157,7 @@ int PeLoaderLoaded(void) { return g_pe_image != NULL; }
  * mapped address range (= original .text/.rdata/.data sections).
  *
  * Used by bytecode handlers to decide whether an operand is a PE VA that
- * needs xlat_binary_ptr() translation, or an already-resolved native
+ * needs xlat_binary_ptr translation, or an already-resolved native
  * pointer that should be cast through (uintptr_t).
  *
  * Earlier port used a hardcoded `[0x00400000, 0x00500000)` check based on

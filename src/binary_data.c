@@ -9,23 +9,23 @@
  * a source of stale-when-edited bugs).
  *
  * What's left:
- *   - `xlat_binary_ptr(va)` — single fallback to `PeLoaderRead(va)`.
- *   - `xlat_asset_name(va)` — thin wrapper returning the same PE bytes
- *     cast to `const char *` (asset filenames live in .data as plain
- *     NUL-terminated strings).
+ * - `xlat_binary_ptr(va)` — single fallback to `PeLoaderRead(va)`.
+ * - `xlat_asset_name(va)` — thin wrapper returning the same PE bytes
+ * cast to `const char *` (asset filenames live in .data as plain
+ * NUL-terminated strings).
  *
  * Removed (now resolved via PE loader):
- *   - s_asset_names[] table (lines 32-47 in pre-cleanup version)
- *   - s_drut_script / s_barstoi_script / s_barstoi_alt_script
- *   - s_button_42[70FC/7100/710C/7110/7114/7118/7120]
- *   - s_data_4251B0 / s_data_4251C8
- *   - s_data_4263EC / s_sub_426418 (kiosk21 payload + sub)
- *   - s_data_42527C (klatka2 click block)
- *   - s_data_425A04 (plac click block)
- *   - s_script_4238A8 / s_script_423A90 / s_script_423B18 …  (~11 blobs)
- *   - s_xlat_table[] aliases (~100 entries)
- *   - g_maluch_enter_script / g_klatka2_enter_script /
- *     g_kiosk21_enter_script / g_plac_enter_script
+ * - s_asset_names[] table (lines 32-47 in pre-cleanup version)
+ * - s_drut_script / s_barstoi_script / s_barstoi_alt_script
+ * - s_button_42[70FC/7100/710C/7110/7114/7118/7120]
+ * - s_data_4251B0 / s_data_4251C8
+ * - s_data_4263EC / s_sub_426418 (kiosk21 payload + sub)
+ * - s_data_42527C (klatka2 click block)
+ * - s_data_425A04 (plac click block)
+ * - s_script_4238A8 / s_script_423A90 / s_script_423B18 … (~11 blobs)
+ * - s_xlat_table[] aliases (~100 entries)
+ * - g_maluch_enter_script / g_klatka2_enter_script /
+ * g_kiosk21_enter_script / g_plac_enter_script
  *
  * Every removal verified byte-for-byte against PE memory before drop.
  * See review document REVIEW-2026-05.md section C1.

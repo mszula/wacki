@@ -44,8 +44,8 @@ void vm_var_set(uint16_t i, uint32_t v)
     g_script_vars[idx] = v;
 
     /* Trace writes to the two end-of-stage signals so a regression in
-     * the death/end-of-stage scripting is observable without a
-     * debugger. */
+ * the death/end-of-stage scripting is observable without a
+ * debugger. */
     if (idx == VAR_INDEX_GAME_OVER && v != 0) {
         fprintf(stderr,
                 "[game-over] script wrote g_script_vars[%d] = %u  "
@@ -63,9 +63,9 @@ void vm_var_set(uint16_t i, uint32_t v)
 const uint16_t *vm_skip_to_endif(const uint16_t *p)
 {
     /* Step past the calling instruction first. Otherwise the IF itself
-     * counts as an opener and the matching ENDIF only brings depth
-     * back to 0 — we'd scan past it forever. After this step,
-     * depth=0 means "looking for THIS IF's matching ENDIF or ELSE". */
+ * counts as an opener and the matching ENDIF only brings depth
+ * back to 0 — we'd scan past it forever. After this step,
+ * depth=0 means "looking for THIS IF's matching ENDIF or ELSE". */
     {
         uint8_t initial_len = ((const uint8_t *)p)[1];
         if (initial_len == 0) return NULL;

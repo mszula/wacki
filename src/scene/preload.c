@@ -23,8 +23,8 @@ extern void BuildStageTable(void);
 int PreloadCommonAssets(void)
 {
     /* T26: populate g_stage_table[] + g_stage_va_table[] from
-     * PTR_PTR_00442FA8 before anything else might consult them
-     * (LoadStage from RunGameStageLoop / save.c). */
+ * PTR_PTR_00442FA8 before anything else might consult them
+ * (LoadStage from RunGameStageLoop / save.c). */
     BuildStageTable();
 
     static const struct { const char *name; AnimAsset **slot; } resident[] = {
@@ -33,7 +33,7 @@ int PreloadCommonAssets(void)
         { "fjej.wyc",     &g_fjej_atlas },  /* T4: singleton, persists scenes */
         { "przedm.wyc",   &g_items_atlas },  /* DAT_0044E6AC — inventory items */
         /* T31 — cursor state atlases (DAT_00451488..0x004514A4 in PE).
-         * Each state maps to a sprite atlas indexed by g_cursor_state. */
+ * Each state maps to a sprite atlas indexed by g_cursor_state. */
         { "olowek1.wyc",  &g_cursor_atlas[0] },  /* state 0 + 6: default arrow */
         { "kaseta.wyc",   &g_cursor_atlas[1] },  /* state 1: idle anim */
         { "magnes1a.wyc", &g_cursor_atlas[2] },  /* state 2: held-item hover */
@@ -47,9 +47,9 @@ int PreloadCommonAssets(void)
         if (resident[i].slot) *resident[i].slot = a;
     }
     /* 1:1 with PreloadCommonAssets @ 0x00403850 trailing block:
-     *     LoadFileFromDta("Futura.30", &DAT_0044E440);
-     *     DAT_0044E598 = ParseFutFontFile(DAT_0044E440);
-     * The bitmap font is used by RenderTextLineToBuffer (op 0x09 / dialog). */
+ * LoadFileFromDta("Futura.30", &DAT_0044E440);
+ * DAT_0044E598 = ParseFutFontFile;
+ * The bitmap font is used by RenderTextLineToBuffer (op 0x09 / dialog). */
     void *fbuf = NULL; uint32_t fsz = 0;
     if (LoadFileFromDta("Futura.30", &fbuf, &fsz) && fbuf) {
         g_default_font = ParseFutFontFile((const uint8_t *)fbuf);
@@ -65,15 +65,15 @@ int PreloadCommonAssets(void)
     }
 
     /* 1:1 with PreloadCommonAssets @ 0x004038F4..0x00403924 — initialise
-     * the per-item entity_state table (DAT_00449D28). The original zeroes
-     * the 0x470-byte block then walks 8-byte strides writing
-     *   entity_state[idx].panel_verb_id = idx + 0x29
-     * for idx in 1..0x8D (entry 0 left zero — verb 0x29 is reserved /
-     * never used as a real inventory item). Without this seed,
-     * FUN_00405730 (InventoryAddItem) reads panel_verb_id = 0 and writes
-     * 0 into g_panel_verb_tab[], and PaintHudOverlay then skips paint
-     * because (0 - 0x29) wraps to >= frame_count. Net effect before the
-     * fix: items appeared "added" to inventory but never rendered. */
+ * the per-item entity_state table. The original zeroes
+ * the 0x470-byte block then walks 8-byte strides writing
+ * entity_state[idx].panel_verb_id = idx + 0x29
+ * for idx in 1..0x8D (entry 0 left zero — verb 0x29 is reserved /
+ * never used as a real inventory item). Without this seed,
+ * (InventoryAddItem) reads panel_verb_id = 0 and writes
+ * 0 into g_panel_verb_tab[], and PaintHudOverlay then skips paint
+ * because (0 - 0x29) wraps to >= frame_count. Net effect before the
+ * fix: items appeared "added" to inventory but never rendered. */
     memset(g_entity_state, 0, sizeof g_entity_state);
     {
         uint16_t *es = (uint16_t *)g_entity_state;

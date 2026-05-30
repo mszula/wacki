@@ -4,8 +4,8 @@
  * speech-balloon path. The allocation strategy is dictated by the
  * `group_flags` argument:
  *
- *   bit 0x01 set → primary plane (the sprite's pixel buffer)
- *   bit 0x04 set → secondary plane (mask / shadow); doubles the buffer
+ * bit 0x01 set → primary plane (the sprite's pixel buffer)
+ * bit 0x04 set → secondary plane (mask / shadow); doubles the buffer
  *
  * Most call sites pass `0x01` for a vanilla single-buffer entity. The
  * dual-buffer mode (0x05) backs entities that need a separate shadow

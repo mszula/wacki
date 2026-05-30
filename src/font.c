@@ -2,26 +2,26 @@
  * font.c — "Futura.30" bitmap font: parse + raster.
  *
  * Original addresses:
- *   ParseFutFontFile         0x00413690
- *   RenderTextLineToBuffer   0x00413970
- *   FindKeyInTaggedTable     0x00401240
+ * ParseFutFontFile 0x00413690
+ * RenderTextLineToBuffer 0x00413970
+ * FindKeyInTaggedTable 0x00401240
  *
  * Format (all multi-byte values are big-endian!):
- *   +0     DWORD magic       = 0x000003F3
- *   +0x18  DWORD sub-magic   = 0x000003E9 (1bpp) or 0x000003EA (color)
- *   +0x60..0x90 character-cell descriptor:
- *     +0x62 byte  cell width
- *     +0x6E word  baseline
- *     +0x70 byte  flags (bit 0x40 = color font)
- *     +0x72 word  ascent
- *     +0x74 word  advance
- *     +0x7A byte  first_char
- *     +0x7B byte  last_char
- *     +0x80 word  glyph stride
- *     +0x82..0x89 offsets to per-glyph width/Y-offset tables (BE DWORD)
- *     +0x90 byte  plane_count (color only)
- *     +0x9A.. (per-plane offsets)
- *   Glyph bitmaps live at file_base + 0x20 + each offset.
+ * +0 DWORD magic = 0x000003F3
+ * +0x18 DWORD sub-magic = 0x000003E9 (1bpp) or 0x000003EA (color)
+ * +0x60..0x90 character-cell descriptor:
+ * +0x62 byte cell width
+ * +0x6E word baseline
+ * +0x70 byte flags (bit 0x40 = color font)
+ * +0x72 word ascent
+ * +0x74 word advance
+ * +0x7A byte first_char
+ * +0x7B byte last_char
+ * +0x80 word glyph stride
+ * +0x82..0x89 offsets to per-glyph width/Y-offset tables (BE DWORD)
+ * +0x90 byte plane_count (color only)
+ * +0x9A.. (per-plane offsets)
+ * Glyph bitmaps live at file_base + 0x20 + each offset.
  */
 #include "wacki.h"
 #include <string.h>
@@ -30,19 +30,19 @@ extern void *xmalloc(uint32_t sz);
 
 /* 0x38-byte parsed font descriptor — 1:1 with ParseFutFontFile output.
  * Original struct layout (Ghidra `psVar7[N]` byte offsets):
- *   +0x00  advance (BE16) — default cursor step when advance_tab is NULL
- *   +0x02  baseline (BE16)
- *   +0x04  glyph_stride (BE16) — bytes per row in shared plane bitmap
- *   +0x06  cell_width (BE16)
- *   +0x08  first_char (u8)
- *   +0x09  last_char (u8)
- *   +0x0A  plane[0..7] — up to 8 plane pointers
- *   +0x2A  width_tab — 4 bytes per glyph: BE16 bit_offset + BE16 bbox_width
- *   +0x2E  advance_tab — 2 bytes per glyph: BE16 cursor advance (was
- *          mislabelled `yoff_tab` in earlier port — actually the post-
- *          render cursor step; T101 fix renamed)
- *   +0x32  kern_tab — 2 bytes per glyph: BE16 signed pre-render kern shift
- *   +0x36  plane_count (u16) */
+ * +0x00 advance (BE16) — default cursor step when advance_tab is NULL
+ * +0x02 baseline (BE16)
+ * +0x04 glyph_stride (BE16) — bytes per row in shared plane bitmap
+ * +0x06 cell_width (BE16)
+ * +0x08 first_char (u8)
+ * +0x09 last_char (u8)
+ * +0x0A plane[0..7] — up to 8 plane pointers
+ * +0x2A width_tab — 4 bytes per glyph: BE16 bit_offset + BE16 bbox_width
+ * +0x2E advance_tab — 2 bytes per glyph: BE16 cursor advance (was
+ * mislabelled `yoff_tab` in earlier port — actually the post-
+ * render cursor step; T101 fix renamed)
+ * +0x32 kern_tab — 2 bytes per glyph: BE16 signed pre-render kern shift
+ * +0x36 plane_count (u16) */
 struct FontHandle {
     uint16_t advance;       /* +0x00 default advance */
     uint16_t baseline;      /* +0x02 */
@@ -53,7 +53,7 @@ struct FontHandle {
     uint8_t *plane[8];      /* +0x0A..+0x29 */
     uint8_t *width_tab;     /* +0x2A — 4 B/glyph: BE16 bit_offset + BE16 bbox_width */
     uint8_t *advance_tab;   /* +0x2E — 2 B/glyph: BE16 cursor advance
-                             *         (was mislabelled `yoff_tab`) */
+ * (was mislabelled `yoff_tab`) */
     uint8_t *kern_tab;      /* +0x32 — 2 B/glyph: BE16 signed kern */
     uint16_t plane_count;   /* +0x36 */
 };
@@ -107,12 +107,12 @@ FontHandle *ParseFutFontFile(const uint8_t *raw)
 /* ------------------------------------------------------------------------- *
  * RenderTextLineToBuffer — 0x00413970
  *
- * target_desc[0] = stride            (= screen width when drawing direct)
- *           [1] = pixels             (uint8 *)
- *           [2] = font (FontHandle *)
- *           [3] = x cursor (in/out)
- *           [4] = color_base palette index
- * text   = NUL-terminated byte string (each byte ∈ [first_char..last_char]).
+ * target_desc[0] = stride (= screen width when drawing direct)
+ * [1] = pixels (uint8 *)
+ * [2] = font (FontHandle *)
+ * [3] = x cursor (in/out)
+ * [4] = color_base palette index
+ * text = NUL-terminated byte string (each byte ∈ [first_char..last_char]).
  *
  * Composed glyphs use the colour `color_base` (1-bpp) or
  * `color_base + plane_bitmap` (multi-plane).
@@ -128,33 +128,33 @@ void RenderTextLineToBuffer(TextRenderTarget *t, const uint8_t *text)
     int16_t  x      = (int16_t)t->x;
     uint8_t  cbase  = t->color_base;
 
-    /* PORT SHORTCUT — original RenderTextLineToBuffer @ 0x00413970:
-     *   target.y_advance (+0x02) = bottom of render area
-     *   target.y_baseline (+0x0E) = top of render area within target
-     *   font[+2] (our `baseline` field — misnamed; actually CELL HEIGHT)
-     *   lines = min(y_advance - y_baseline, font.baseline)
-     *   row0  = pixels + stride * y_baseline
-     *
-     * Our TextRenderTarget doesn't carry y_baseline/y_advance — use
-     * y_baseline=0 (top of buffer) and lines=font.baseline (full glyph
-     * cell height, Futura.30 = 30 rows). Both callers (speech balloon:
-     * e->pixels + i*30*max_w already at line origin; save menu:
-     * g_back_shadow + ry*stride at top of slot row) expect this. */
+    /* NOTE — original RenderTextLineToBuffer @ 0x00413970:
+ * target.y_advance (+0x02) = bottom of render area
+ * target.y_baseline (+0x0E) = top of render area within target
+ * font[+2] (our `baseline` field — misnamed; actually CELL HEIGHT)
+ * lines = min(y_advance - y_baseline, font.baseline)
+ * row0 = pixels + stride * y_baseline
+ *
+ * Our TextRenderTarget doesn't carry y_baseline/y_advance — use
+ * y_baseline=0 (top of buffer) and lines=font.baseline (full glyph
+ * cell height, Futura.30 = 30 rows). Both callers (speech balloon:
+ * e->pixels + i*30*max_w already at line origin; save menu:
+ * g_back_shadow + ry*stride at top of slot row) expect this. */
     uint16_t lines = f->baseline ? f->baseline : 30;
 
     uint8_t *row0 = pixels;
 
-    /* T101 — proper Futura.30 layout per FUN_00413970:
-     *   width_tab[idx*4+0] = bit_offset into the shared plane[] bitmap
-     *                       (= where THIS glyph's bits start, in bits)
-     *   width_tab[idx*4+2] = bbox_width (pixels to draw for this glyph)
-     *   advance_tab[idx*2] = post-render cursor step (typically > bbox_w
-     *                       to add right-side bearing)
-     *   kern_tab[idx*2]    = signed pre-render cursor adjust
-     *
-     * Earlier port read `width_tab[idx*4+0]` as glyph width (it's actually
-     * the BIT OFFSET) and stepped cursor by it — which produced text that
-     * was both rendered from wrong source bits AND spaced wrongly. */
+    /* T101 — proper Futura.30 layout per :
+ * width_tab[idx*4+0] = bit_offset into the shared plane[] bitmap
+ * (= where THIS glyph's bits start, in bits)
+ * width_tab[idx*4+2] = bbox_width (pixels to draw for this glyph)
+ * advance_tab[idx*2] = post-render cursor step (typically > bbox_w
+ * to add right-side bearing)
+ * kern_tab[idx*2] = signed pre-render cursor adjust
+ *
+ * Earlier port read `width_tab[idx*4+0]` as glyph width (it's actually
+ * the BIT OFFSET) and stepped cursor by it — which produced text that
+ * was both rendered from wrong source bits AND spaced wrongly. */
     for (; *text; ++text) {
         uint8_t ch = *text;
         if (ch < f->first_char) ch = f->first_char;
@@ -175,7 +175,7 @@ void RenderTextLineToBuffer(TextRenderTarget *t, const uint8_t *text)
         uint8_t  start_mask = (uint8_t)(0x80u >> (bit_off & 7));
 
         /* Clip glyph_w to remaining stride space so we don't write past
-         * the back-buffer edge. */
+ * the back-buffer edge. */
         if (x + glyph_w > stride) {
             if (x >= stride) goto advance;
             glyph_w = (uint16_t)(stride - x);
@@ -197,8 +197,8 @@ void RenderTextLineToBuffer(TextRenderTarget *t, const uint8_t *text)
                 }
             } else {
                 /* Color font: bits combine across planes → palette index
-                 * `cbase - 1 + bit_mask`. Each plane contributes one bit
-                 * of the result index (plane 0 = LSB). */
+ * `cbase - 1 + bit_mask`. Each plane contributes one bit
+ * of the result index (plane 0 = LSB). */
                 uint32_t plane_pos = row_base;
                 for (uint16_t col = 0; col < glyph_w; ++col) {
                     uint8_t bits = 0;
@@ -215,7 +215,7 @@ void RenderTextLineToBuffer(TextRenderTarget *t, const uint8_t *text)
 
 advance:
         /* Cursor step after render — use advance_tab if present, else
-         * default font.advance (= em width). */
+ * default font.advance (= em width). */
         {
             uint16_t step;
             if (f->advance_tab) step = be16(&f->advance_tab[idx*2]);
@@ -227,15 +227,15 @@ advance:
 }
 
 /* ------------------------------------------------------------------------- *
- * MeasureTextLine — 1:1 port of FUN_004138B0 @ 0x004138B0.
+ * MeasureTextLine —
  *
- *   uVar7 = 0;
- *   for each char c in text:
- *     idx = clamp(c, first_char, last_char) - first_char
- *     if (kern_tab) uVar7 += be16(kern_tab[idx*2]);
- *                   if (uVar7 < 0) uVar7 = 0;
- *     if (advance_tab) uVar7 += be16(advance_tab[idx*2]);   // psVar7[0x17]
- *     else             uVar7 += font.advance;               // default em
+ * uVar7 = 0;
+ * for each char c in text:
+ * idx = clamp(c, first_char, last_char) - first_char
+ * if (kern_tab) uVar7 += be16(kern_tab[idx*2]);
+ * if (uVar7 < 0) uVar7 = 0;
+ * if (advance_tab) uVar7 += be16(advance_tab[idx*2]); // psVar7[0x17]
+ * else uVar7 += font.advance; // default em
  *
  * Returns pixel width of `text` rendered with `font`. Used by op 0x09
  * SHOW_TEXT to compute speech balloon width.

@@ -2,8 +2,8 @@
  * save.c — Wacki.sav read / write / slot restore.
  *
  * Original addresses:
- *   LoadSaveStateOrInitialize  0x0040A5C0
- *   LoadSaveSlot               0x0040BE00
+ * LoadSaveStateOrInitialize 0x0040A5C0
+ * LoadSaveSlot 0x0040BE00
  *
  * The on-disk file is a verbatim dump of the in-memory `g_save` (0x1E0C0 B).
  */
@@ -44,11 +44,11 @@ void LoadSaveStateOrInitialize(void)
     if (!loaded) {
         memset(&g_save, 0, sizeof g_save);
         g_save.magic = WACKI_SAVE_MAGIC;
-        /* T129 — defaults 1:1 with FUN_0040A5C0 (LoadSaveStateOrInitialize)
-         * @ 0x0040A5C0 tail. Per Ghidra: 1, 1, 1, 0, 1, 1, 1 — note that
-         * DAT_0045511F (= sound_on in our struct) defaults to ZERO. Earlier
-         * port defaulted to 1; first-launch sound state was wrong vs
-         * original (original starts with sfx muted, port started unmuted). */
+        /* T129 — defaults (LoadSaveStateOrInitialize)
+ * @ 0x0040A5C0 tail. Per Ghidra: 1, 1, 1, 0, 1, 1, 1 — note that
+ * DAT_0045511F (= sound_on in our struct) defaults to ZERO. Earlier
+ * port defaulted to 1; first-launch sound state was wrong vs
+ * original (original starts with sfx muted, port started unmuted). */
         g_save.settings = (WackiSettings){
             .video_mode = 1, .sound_on = 0, .music_on = 1, .pad0 = 0,
             .voice_on = 1, .subtitles_on = 1, .dialogues_on = 1, .pad1 = 0
@@ -75,16 +75,16 @@ int LoadSaveSlot(uint16_t idx)
     WackiSlot *s = &g_save.slots[idx];
     if (s->stage_indicator == 0) return 0;
 
-    /* T102 — 1:1 with FUN_0040BE00 call order:
-     *   1. g_cur_etap     = slot.etap_id
-     *   2. LoadStage(etap)             ← BEFORE memcpy
-     *   3. g_cur_komnata  = slot.stage_indicator
-     *   4. memcpy of script_vars / entity_state / scene_snapshot
-     *
-     * Earlier port had LoadStage AFTER the memcpy — LoadStage's stage
-     * init + entry_script ran AFTER restoring vars and clobbered them
-     * back to defaults. Quickload (F9) and menu Load silently dropped
-     * all progress flags every time. */
+    /* T102 call order:
+ * 1. g_cur_etap = slot.etap_id
+ * 2. LoadStage(etap) ← BEFORE memcpy
+ * 3. g_cur_komnata = slot.stage_indicator
+ * 4. memcpy of script_vars / entity_state / scene_snapshot
+ *
+ * Earlier port had LoadStage AFTER the memcpy — LoadStage's stage
+ * init + entry_script ran AFTER restoring vars and clobbered them
+ * back to defaults. Quickload (F9) and menu Load silently dropped
+ * all progress flags every time. */
     g_cur_etap = s->etap_id;
     LoadStage(g_cur_etap);
     g_cur_komnata = s->stage_indicator;
@@ -100,13 +100,13 @@ int LoadSaveSlot(uint16_t idx)
 void WriteSaveFile(void)
 {
     /* T131 — atomic write via tmp + rename. Earlier port did naive
-     * fopen("Wacki.sav", "wb") which TRUNCATES immediately; a crash
-     * between open and fwrite (or any partial write) leaves a zero-byte
-     * Wacki.sav, and the next launch silently resets to defaults.
-     *
-     * The original Win32 build had the same flaw — but we improve on
-     * the port side: write to "Wacki.sav.tmp" first, fflush+fsync (best
-     * effort), then atomically rename over the real file. */
+ * fopen("Wacki.sav", "wb") which TRUNCATES immediately; a crash
+ * between open and fwrite (or any partial write) leaves a zero-byte
+ * Wacki.sav, and the next launch silently resets to defaults.
+ *
+ * The original Win32 build had the same flaw — but we improve on
+ * the port side: write to "Wacki.sav.tmp" first, fflush+fsync (best
+ * effort), then atomically rename over the real file. */
     g_save.magic = WACKI_SAVE_MAGIC;
     const char *tmp_path = WACKI_SAVE_FILE ".tmp";
     FILE *fp = fopen(tmp_path, "wb");
@@ -139,8 +139,8 @@ int QuickSaveToSlot(uint16_t idx)
 {
     if (idx >= WACKI_SAVE_SLOTS) return 0;
     /* Refuse to save when the game isn't actually in-progress (cur_etap
-     * == 0 means we're still in the menu). Otherwise the slot would be
-     * written with stage_indicator=0 and LoadSaveSlot would reject it. */
+ * == 0 means we're still in the menu). Otherwise the slot would be
+ * written with stage_indicator=0 and LoadSaveSlot would reject it. */
     if (g_cur_etap == 0 || g_cur_komnata == 0) return 0;
 
     WackiSlot *s = &g_save.slots[idx];
@@ -150,9 +150,9 @@ int QuickSaveToSlot(uint16_t idx)
     memcpy(s->entity_state,   g_entity_state,   sizeof s->entity_state);
     memcpy(s->scene_snapshot, g_scene_snapshot, sizeof s->scene_snapshot);
     /* Slot name is owned by the caller — the Save menu sets it from the
-     * user's inline-edit input (or our auto-generated etap/komnata
-     * default), and the F5 quicksave path stamps a "Quick%u" marker
-     * before calling us. Don't clobber it here. */
+ * user's inline-edit input (or our auto-generated etap/komnata
+ * default), and the F5 quicksave path stamps a "Quick%u" marker
+ * before calling us. Don't clobber it here. */
 
     WriteSaveFile();
     g_stats.total_quicksaves++;             /* T56 */

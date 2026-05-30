@@ -3,20 +3,20 @@
  * Two concerns in one module:
  *
  * 1. Positional queue. The script VM op 0x41 SOUND_PLAY pushes a
- *    (source_x, source_y, sound_id, volume) tuple onto a 16-entry
- *    queue. Per frame, SoundQueueMixForListener walks the queue,
- *    computes distance + pan against the listener position, and
- *    returns an aggregate (L, C, R) gain packet that the mixer can
- *    use to set master volume.
+ * (source_x, source_y, sound_id, volume) tuple onto a 16-entry
+ * queue. Per frame, SoundQueueMixForListener walks the queue,
+ * computes distance + pan against the listener position, and
+ * returns an aggregate (L, C, R) gain packet that the mixer can
+ * use to set master volume.
  *
- *    The original engine doesn't trigger direct playback from op 0x41
- *    either — actual SFX firing is frame-driven via [sampl] tags in
- *    Wacky.scr (handled by TriggerFrameSfx). Op 0x41 just contributes
- *    POSITIONAL state to the aggregate gain calculation.
+ * The original engine doesn't trigger direct playback from op 0x41
+ * either — actual SFX firing is frame-driven via [sampl] tags in
+ * Wacky.scr (handled by TriggerFrameSfx). Op 0x41 just contributes
+ * POSITIONAL state to the aggregate gain calculation.
  *
  * 2. Script bridges. ScriptCallSoundPlay enqueues a positional source
- *    and logs the computed pan; ScriptCallSoundStop resets the queue
- *    and stops menu music.
+ * and logs the computed pan; ScriptCallSoundStop resets the queue
+ * and stops menu music.
  *
  * The pan calculation here is a portable approximation of the
  * original's distance + ftol triple. The shape (left-of-listener is
@@ -131,12 +131,12 @@ uint32_t SoundQueueMixForListener(int16_t listener_x, int16_t listener_y)
 void ScriptCallSoundPlay(uint16_t id, uint16_t a, uint32_t b, uint16_t c)
 {
     /* Op 0x41 maps to: source_x=reg_id, source_y=a1, sound_id=u32, volume=a2.
-     * Source coords are 16-bit signed. */
+ * Source coords are 16-bit signed. */
     SoundQueueEnqueue((int16_t)id, (int16_t)a, b, c);
 
     /* Diagnostic: compute the current aggregate pan relative to the
-     * active actor's position. The result is informational — actual
-     * SFX playback fires frame-driven via TriggerFrameSfx, not here. */
+ * active actor's position. The result is informational — actual
+ * SFX playback fires frame-driven via TriggerFrameSfx, not here. */
     int16_t lx = WACKI_SCREEN_W / 2;
     int16_t ly = WACKI_SCREEN_H / 2;
     if (g_actor[g_active_actor & 1]) {

@@ -2,11 +2,11 @@
  *
  * The engine maintains two parallel linked lists:
  *
- *   render list  — every drawable entity, walked once per tick to
- *                  advance per-entity scripts (EntityWalkerTick) and
- *                  again to paint into the back buffer (EntityRenderAll).
- *   click list   — clickable masks + sprite payloads, walked by the
- *                  hit-test (ClickHitTest) to resolve cursor → verb_id.
+ * render list — every drawable entity, walked once per tick to
+ * advance per-entity scripts (EntityWalkerTick) and
+ * again to paint into the back buffer (EntityRenderAll).
+ * click list — clickable masks + sprite payloads, walked by the
+ * hit-test (ClickHitTest) to resolve cursor → verb_id.
  *
  * The original engine stored next/prev pointers INSIDE Entity at bytes
  * +0/+4. On a 64-bit host that would overflow into flags1/flags2 and
@@ -111,10 +111,10 @@ int EntityListCount(int click_list)
 /* ---- scene-transition clear --------------------------------------- *
  *
  * Preserve across scene boundary:
- *   - render list: actor entries (g_actor[0]/[1])
- *   - click list:  click payloads owned by an actor
- *   - update table: actor entries (kind=2) + their click payloads (kind=4)
- *   - intern table: NOT reset (surviving entities' slots stay valid)
+ * - render list: actor entries (g_actor[0]/[1])
+ * - click list: click payloads owned by an actor
+ * - update table: actor entries (kind=2) + their click payloads (kind=4)
+ * - intern table: NOT reset (surviving entities' slots stay valid)
  *
  * The kind=4 id=1/2 click payload filter is owner-based, NOT id-based.
  * Per-scene masks (e.g. komnata 4 wejw_lpg.msk) register at id=1/2 too;
@@ -141,7 +141,7 @@ void EntityListClearAll(void)
     extern Entity *g_speech_balloon;
 
     /* Snapshot which click payloads we want to keep — kind=4 entries
-     * whose owner pointer resolves to one of the two actor entities. */
+ * whose owner pointer resolves to one of the two actor entities. */
     Entity *keep_click[MAX_PROTECTED_CLICK_PAYLOADS];
     int     keep_n = 0;
     for (int r = 0;
@@ -188,9 +188,9 @@ void EntityListClearAll(void)
     g_click_list_head      = w ? g_click_list_tbl.entities[0] : NULL;
 
     /* Update table: keep actor entries (kind=2) and their click
-     * payloads (kind=4). Same owner-check reasoning as keep_click[]:
-     * id=1/2 also gets used by per-scene masks, so we have to
-     * disambiguate by entity identity, not just the id field. */
+ * payloads (kind=4). Same owner-check reasoning as keep_click[]:
+ * id=1/2 also gets used by per-scene masks, so we have to
+ * disambiguate by entity identity, not just the id field. */
     w = 0;
     for (int r = 0; r < g_update_table_count; ++r) {
         int keep = 0;
@@ -212,9 +212,9 @@ void EntityListClearAll(void)
     g_update_table_count = w;
 
     /* Walker-state sync: clear mid-walk state on the surviving actors
-     * so the new scene's entry-chain starts from a known idle state.
-     * Anchor (+0x22/+0x24) and atlas (+0x28) are intentionally left
-     * untouched. */
+ * so the new scene's entry-chain starts from a known idle state.
+ * Anchor (+0x22/+0x24) and atlas (+0x28) are intentionally left
+ * untouched. */
     for (int i = 0; i < 2; ++i) {
         if (!g_actor[i]) continue;
         uint8_t *eb = (uint8_t *)g_actor[i];

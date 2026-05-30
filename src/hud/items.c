@@ -3,15 +3,15 @@
  * Hovering an inventory item in the bottom panel for ~2 seconds fires
  * a short female-voice WAV that names the item ("magnes", "drut", …).
  *
- *   1. LoadItemNamesTable parses Item.scr at boot, building a table
- *      indexed by `item_verb - ITEM_VERB_FIRST`. Each entry stores
- *      the WAV filename to play.
+ * 1. LoadItemNamesTable parses Item.scr at boot, building a table
+ * indexed by `item_verb - ITEM_VERB_FIRST`. Each entry stores
+ * the WAV filename to play.
  *
- *   2. ItemHoverDwellTick runs once per frame (after PanelHitTest) and
- *      implements the dwell state machine:
+ * 2. ItemHoverDwellTick runs once per frame (after PanelHitTest) and
+ * implements the dwell state machine:
  *
- *        - hover_panel_verb out of item range → reset, arm 2 s timer
- *        - in range, new index, dwell expired → play SFX, arm timer
+ * - hover_panel_verb out of item range → reset, arm 2 s timer
+ * - in range, new index, dwell expired → play SFX, arm timer
  *
  * The 2-second dwell prevents the voice from re-firing on every frame
  * while the cursor sits over the same item.
@@ -104,8 +104,8 @@ void ItemHoverDwellTick(void)
 
     int idx = (int)(verb - ITEM_VERB_FIRST);
     if (idx >= g_item_wav_count)        return;     /* no name registered */
-    if (idx == s_last_item)             return;     /* already announced  */
-    if (g_tick_counter < s_dwell_until) return;     /* still dwelling     */
+    if (idx == s_last_item)             return;     /* already announced */
+    if (g_tick_counter < s_dwell_until) return;     /* still dwelling */
 
     const char *wav = g_item_wav[idx];
     if (wav[0]) {

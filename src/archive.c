@@ -2,15 +2,15 @@
  * archive.c — Cygert "BASE_IO_CPP" archive (.dta) handling.
  *
  * Original addresses:
- *   OpenDtaArchiveFile  0x00411210
- *   LoadFileFromDta     0x00411080
+ * OpenDtaArchiveFile 0x00411210
+ * LoadFileFromDta 0x00411080
  *
  * File layout:
- *   +0       DWORD magic = "BASE"
- *   +4..N    payload (each file = DtaFileHeader + PKv2-compressed bytes)
- *   N..end-8 SPIS index (PKv2-compressed array of DtaIndexEntry)
- *   end-8    DWORD magic = "SPIS"
- *   end-4    DWORD spis_size  (offset from EOF to the start of "SPIS")
+ * +0 DWORD magic = "BASE"
+ * +4..N payload (each file = DtaFileHeader + PKv2-compressed bytes)
+ * N..end-8 SPIS index (PKv2-compressed array of DtaIndexEntry)
+ * end-8 DWORD magic = "SPIS"
+ * end-4 DWORD spis_size (offset from EOF to the start of "SPIS")
  */
 #include "wacki.h"
 #include <string.h>
@@ -31,15 +31,15 @@ extern void  xfree  (void *p);
 struct CygFile {
     FILE *fp;
 };
-extern CygFile *fopen_cyg (const char *name, const char *mode);     /* FUN_00415710 */
-extern void     fclose_cyg(CygFile *f);                             /* FUN_00415620 */
-extern uint32_t fread_cyg (void *dst, uint32_t sz, uint32_t n, CygFile *f); /* FUN_00416040 */
-extern void     fseek_cyg (CygFile *f, int32_t off, int whence);    /* FUN_004169C0 */
+extern CygFile *fopen_cyg (const char *name, const char *mode);     /* */
+extern void     fclose_cyg(CygFile *f);                             /* */
+extern uint32_t fread_cyg (void *dst, uint32_t sz, uint32_t n, CygFile *f); /* */
+extern void     fseek_cyg (CygFile *f, int32_t off, int whence);    /* */
 
 /* ---- module state (mirrors DAT_004795B0..B8) ----------------------------
  * The two index globals (s_dir, s_dir_count) are exposed publicly so that
  * the standalone extractor in tools/dta-extract.c can walk the directory
- * after OpenDtaArchiveFile() has populated it. */
+ * after OpenDtaArchiveFile has populated it. */
 static char        s_dta_path[260];        /* DAT_00479488 */
 static const char *s_dta_path_p = s_dta_path; /* DAT_00479588 */
 DtaIndexEntry *s_dir = NULL;               /* DAT_004795B0 */
@@ -70,7 +70,7 @@ int OpenDtaArchiveFile(const char *path)
         if (!f) return 0;                           /* silent — caller retries */
     }
 
-    /* +0  DWORD magic "BASE" */
+    /* +0 DWORD magic "BASE" */
     uint32_t magic = 0;
     fread_cyg(&magic, 1, 4, f);
     if (magic != DTA_MAGIC_BASE) {
@@ -84,15 +84,15 @@ int OpenDtaArchiveFile(const char *path)
     fread_cyg(&spis_size, 1, 4, f);
 
     /* At (EOF-8-spis_size): 16-byte SPIS header overlapping the start of
-     * the embedded PKv2 stream:
-     *   +0   DWORD magic = "SPIS"
-     *   +4   DWORD pkv2_magic                ("PKv2")
-     *   +8   DWORD pkv2_compressed_size
-     *   +12  DWORD pkv2_unpacked_size
-     * The 4 SPIS-magic bytes are *separate*; immediately after them, at
-     * (EOF-4-spis_size), the PKv2 stream begins (its own header repeats
-     * the magic and the sizes we just read).
-     */
+ * the embedded PKv2 stream:
+ * +0 DWORD magic = "SPIS"
+ * +4 DWORD pkv2_magic ("PKv2")
+ * +8 DWORD pkv2_compressed_size
+ * +12 DWORD pkv2_unpacked_size
+ * The 4 SPIS-magic bytes are *separate*; immediately after them, at
+ * (EOF-4-spis_size), the PKv2 stream begins (its own header repeats
+ * the magic and the sizes we just read).
+ */
     uint32_t spis_hdr[4] = {0};
     fseek_cyg(f, -(spis_size + 8), SEEK_END);
     fread_cyg(spis_hdr, 1, sizeof spis_hdr, f);

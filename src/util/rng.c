@@ -8,7 +8,7 @@
  *
  * NOTE: byte-identical output to the original requires the original's
  * Win32-specific seed (GetLocalTime + GetTimeZoneInformation hash).
- * The portable build uses time() instead, so the OUTPUT SEQUENCE
+ * The portable build uses time instead, so the OUTPUT SEQUENCE
  * differs run-to-run but distribution and per-call advance are the
  * same. Tests that need deterministic output call WackiRandSeed with
  * a fixed seed first.
@@ -26,7 +26,7 @@
 
 /* Used as the unseeded fallback when WackiRandSeed has never been
  * called (defensive — every call site is supposed to either call
- * Seed or rely on the time() bootstrap below). */
+ * Seed or rely on the time bootstrap below). */
 #define WACKI_RAND_DEFAULT_SEED 0xDEADBEEFu
 
 static uint32_t s_rand_state  = 0;
@@ -54,8 +54,8 @@ uint32_t WackiRand(uint16_t bound)
 
     if (b <= low) {
         /* Map to [0, bound) via next-power-of-2 mask + subtract.
-         * This is the same trick the original uses — cheaper than a
-         * modulus and preserves uniformity when bound is a power of 2. */
+ * This is the same trick the original uses — cheaper than a
+ * modulus and preserves uniformity when bound is a power of 2. */
         uint32_t pow2 = 1;
         if (b > 1) {
             while (pow2 < b) pow2 <<= 1;

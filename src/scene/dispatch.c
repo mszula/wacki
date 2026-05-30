@@ -39,7 +39,7 @@ void DispatchClickEvent(uint16_t obj_id, uint16_t verb_id)
     if (!g_stage_va) return;
 
     /* The per-stage struct's dispatch table pointers live at +4 / +8 of
-     * the stage descriptor in PE memory. Read them through PeLoaderRead. */
+ * the stage descriptor in PE memory. Read them through PeLoaderRead. */
     const uint8_t *sd = (const uint8_t *)PeLoaderRead(g_stage_va);
     if (!sd) return;
     uint32_t verb_tab_va = (uint32_t)(sd[4] | (sd[5] << 8) | (sd[6] << 16) | (sd[7] << 24));
@@ -56,22 +56,22 @@ void DispatchClickEvent(uint16_t obj_id, uint16_t verb_id)
                 obj_script  ? " O" : "",
                 g_dialog_active ? " [dlg-active]" : "");
     }
-    /* 1:1 with original FUN_004094A0 — the THIS/THAT args SWAP between
-     * verb-script and object-script calls:
-     *
-     *   verb_script: RunScriptInterpreter(local_14, param_2, ...);
-     *                = (param_1, param_2)
-     *                = (held_item, hover_verb)
-     *                → this=held_item, that=hover_verb
-     *
-     *   obj_script:  RunScriptInterpreter(local_18, param_1, ...);
-     *                = (param_2, param_1)
-     *                = (hover_verb, held_item)
-     *                → this=hover_verb, that=held_item     ← SWAP
-     *
-     * Earlier port called both with the same (obj_id, verb_id) order
-     * — object scripts saw wrong this_id, breaking ops 0x00 (skip-if-
-     * neq-this) and 0x21 (return-is-item-this). */
+    /* — the THIS/THAT args SWAP between
+ * verb-script and object-script calls:
+ *
+ * verb_script: RunScriptInterpreter(local_14, param_2, ...);
+ * = (param_1, param_2)
+ * = (held_item, hover_verb)
+ * → this=held_item, that=hover_verb
+ *
+ * obj_script: RunScriptInterpreter(local_18, param_1, ...);
+ * = (param_2, param_1)
+ * = (hover_verb, held_item)
+ * → this=hover_verb, that=held_item ← SWAP
+ *
+ * Earlier port called both with the same (obj_id, verb_id) order
+ * — object scripts saw wrong this_id, breaking ops 0x00 (skip-if-
+ * neq-this) and 0x21 (return-is-item-this). */
     if (verb_script)
         continue_after = RunScriptInterpreter(obj_id, verb_id, (uint8_t *)verb_script);
     if (continue_after && obj_script)

@@ -3,18 +3,18 @@
  * Opcode bridges that operate on an existing entity (asset, sprite, or
  * mask) by its (kind, id) registration:
  *
- *   ScriptCallLoadAsset (op 0x2D): load an atlas from a DTA file and
- *       register it under (kind=1, id) for subsequent SPAWN / mask
- *       lookups.
- *   ScriptCallDestroyEnt (op 0x31 / 0x32): remove an entity from the
- *       lists + free its storage. Op 0x31 also unregisters the asset.
- *   ScriptCallEnableEnt (op via reg_id): set bit 0x80 of flags1 to
- *       enable/disable the entity.
- *   ScriptCallHideEnt / ShowEnt (ops 0x3E / 0x3F): flip flag bit 0x80.
- *   ScriptCallWalkMode (op 0x35 / 0x37): set the entity's walker mode.
- *   ScriptCallWalkTo   (op 0x38 / 0x3A): bind a walker to a target.
- *   ScriptCallAttachProp (op 0x3B / 0x3C): attach a prop to an actor's
- *       hand for the next animation cycle.
+ * ScriptCallLoadAsset (op 0x2D): load an atlas from a DTA file and
+ * register it under (kind=1, id) for subsequent SPAWN / mask
+ * lookups.
+ * ScriptCallDestroyEnt (op 0x31 / 0x32): remove an entity from the
+ * lists + free its storage. Op 0x31 also unregisters the asset.
+ * ScriptCallEnableEnt (op via reg_id): set bit 0x80 of flags1 to
+ * enable/disable the entity.
+ * ScriptCallHideEnt / ShowEnt (ops 0x3E / 0x3F): flip flag bit 0x80.
+ * ScriptCallWalkMode (op 0x35 / 0x37): set the entity's walker mode.
+ * ScriptCallWalkTo (op 0x38 / 0x3A): bind a walker to a target.
+ * ScriptCallAttachProp (op 0x3B / 0x3C): attach a prop to an actor's
+ * hand for the next animation cycle.
  */
 
 #include "wacki.h"
@@ -42,21 +42,21 @@ extern int     BindActorWalker(int actor_idx, int target_x, int target_y);
 extern const void *xlat_binary_ptr(uint32_t addr);
 
 /* ---- 1:1 with opcode 0x2d in RunScriptInterpreter:
- *    LoadAssetFromDtaBase(name) + RegisterEntityForUpdate(asset, kind=1, id)
+ * LoadAssetFromDtaBase(name) + RegisterEntityForUpdate(asset, kind=1, id)
  * The asset itself is the "table-look-up payload"; the actual entity is
- * spawned later by opcode 0x30 (which finds the asset via FUN_00405D80(1,id)).
+ * spawned later by opcode 0x30 (which finds the asset via (1,id)).
  */
 void ScriptCallLoadAsset(const char *name, uint16_t id)
 {
     if (!name) return;
-    /* 1:1 with FUN_00405A60 → FUN_00401010 → FUN_0040A150: if an asset
-     * already occupies this slot, freeing it stops all wavs in its
-     * SampleTable list (FUN_0040D460 per entry). We don't yet free
-     * the AnimAsset itself (leak — TBD), but we MUST stop any looping
-     * SFX it owned so they don't keep playing after the script switched
-     * away. Without this, e.g. marsz.wav (rakieta.wyc (1,464) range)
-     * keeps looping when zuw1b.wyc takes over the id=7 slot before
-     * frame 464 is ticked. */
+    /* → → : if an asset
+ * already occupies this slot, freeing it stops all wavs in its
+ * SampleTable list ( per entry). We don't yet free
+ * the AnimAsset itself (leak — TBD), but we MUST stop any looping
+ * SFX it owned so they don't keep playing after the script switched
+ * away. Without this, e.g. marsz.wav (rakieta.wyc (1,464) range)
+ * keeps looping when zuw1b.wyc takes over the id=7 slot before
+ * frame 464 is ticked. */
     extern void *FindUpdateRegistration(uint16_t kind, uint16_t id);
     AnimAsset *prev = (AnimAsset *)FindUpdateRegistration(1, id);
     if (prev && prev->name[0]) {
@@ -73,14 +73,14 @@ void ScriptCallLoadAsset(const char *name, uint16_t id)
             name, id, a->kind, a->frame_count);
 }
 
-/* 1:1 with FUN_004093e0 — DESTROY entities matching (id) across kinds
+/* — DESTROY entities matching (id) across kinds
  * 2, 3, 4 (render/click/mask). Originally invoked by opcodes 0x31 + 0x32:
  *
- *   case 0x31:  FUN_004093e0(id, '\x01');     // also unregisters kind 1
- *   case 0x32:  FUN_004093e0(id, '\0');
+ * case 0x31: (id, '\x01'); // also unregisters kind 1
+ * case 0x32: (id, '\0');
  *
  * The original walks the update table, finds each matching entity,
- * calls FUN_00406020 (unlink + free), then loops until no more match
+ * calls (unlink + free), then loops until no more match
  * (handles duplicate IDs across kinds). For our port the side-band
  * list keeps the canonical entity pointers — we unlink them and free
  * the storage. */
@@ -94,32 +94,32 @@ void ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset)
     extern Entity *g_actor[2];
     if (also_unreg_asset) {
         /* Drop ONLY the OLDEST kind=1 asset registration matching id —
-         * 1:1 with FUN_004093E0 prologue calling FUN_00405E70(id, 1, -1)
-         * which scans from START and removes FIRST match. Critical when
-         * script does `load id=N (asset_A)` + `load id=N (asset_B)` then
-         * `destroy id=N (unreg=1)` — both entries exist, original drops
-         * only asset_A leaving asset_B for subsequent spawn. Earlier port
-         * removed ALL matches → followup spawn id=N silently fails ("no
-         * asset registered"); manifests as missing assets after puzzle
-         * state-change scripts (stage 4 LewyBrz liana state replacement,
-         * stage X Y mask replacement, …). */
+ * prologue calling (id, 1, -1)
+ * which scans from START and removes FIRST match. Critical when
+ * script does `load id=N (asset_A)` + `load id=N (asset_B)` then
+ * `destroy id=N (unreg=1)` — both entries exist, original drops
+ * only asset_A leaving asset_B for subsequent spawn. Earlier port
+ * removed ALL matches → followup spawn id=N silently fails ("no
+ * asset registered"); manifests as missing assets after puzzle
+ * state-change scripts (stage 4 LewyBrz liana state replacement,
+ * stage X Y mask replacement, …). */
         extern int UnregisterFirstKindIdMatch(uint16_t kind, uint16_t id);
         UnregisterFirstKindIdMatch(1, id);
     }
-    /* PORT SHORTCUT (Bug 3 fix #17 — refer FUN_004093E0): protect actor
-     * entities + their click payloads from script destroy. Scripts collide
-     * actor IDs (1=Ebek, 2=Fjej) with regular mask/asset IDs via `op
-     * 0x2C/0x2D load-asset id=N`; e.g. kiosk21 enter_script loads
-     * `kiosk21.msk` as id=2, then `op 0x31 DESTROY id=2` unloads the mask
-     * AND (in original 1:1) would also wipe Fjej's click payload. We skip
-     * the actor entries here so subsequent `op 0x0E SET_SCRIPT` /
-     * `op 0x28 SET_ENTITY_XY` calls can still find Fjej via
-     * FindEntityByVerbId. Original WACKI must store actor click payloads
-     * in a separate ID space (TBD via deeper RE).
-     *
-     * Use FindUpdateRegistrationExcept to skip already-inspected protected
-     * entries (otherwise the next find returns the same protected entry
-     * forever — infinite loop). */
+    /* NOTE (Bug 3 fix #17 — refer ): protect actor
+ * entities + their click payloads from script destroy. Scripts collide
+ * actor IDs (1=Ebek, 2=Fjej) with regular mask/asset IDs via `op
+ * 0x2C/0x2D load-asset id=N`; e.g. kiosk21 enter_script loads
+ * `kiosk21.msk` as id=2, then `op 0x31 DESTROY id=2` unloads the mask
+ * AND (in original 1:1) would also wipe Fjej's click payload. We skip
+ * the actor entries here so subsequent `op 0x0E SET_SCRIPT` /
+ * `op 0x28 SET_ENTITY_XY` calls can still find Fjej via
+ * FindEntityByVerbId. Original WACKI must store actor click payloads
+ * in a separate ID space (TBD via deeper RE).
+ *
+ * Use FindUpdateRegistrationExcept to skip already-inspected protected
+ * entries (otherwise the next find returns the same protected entry
+ * forever — infinite loop). */
     extern void *FindUpdateRegistrationExcept(uint16_t k, uint16_t id,
                                               Entity *const *skip, int n);
     extern void *ent_ptr_resolve(uint32_t slot);
@@ -145,12 +145,12 @@ void ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset)
                 continue;
             }
             /* CRITICAL: use UnregisterEntityByPtr (single entity by ptr) not
-             * UnregisterEntityForUpdate(k, id) — the latter wipes ALL entries
-             * matching kind+id, which would also remove the actor's click
-             * payload (registered at same kind=4 id=2 as the script-spawned
-             * mask click payload). Then per-actor protection becomes useless
-             * because the actor was already wiped from update_table before
-             * we got to check it. */
+ * UnregisterEntityForUpdate(k, id) — the latter wipes ALL entries
+ * matching kind+id, which would also remove the actor's click
+ * payload (registered at same kind=4 id=2 as the script-spawned
+ * mask click payload). Then per-actor protection becomes useless
+ * because the actor was already wiped from update_table before
+ * we got to check it. */
             UnregisterEntityByPtr(e);
             UnlinkEntity(e);
             xfree(e);
@@ -169,22 +169,22 @@ void ScriptCallEnableEnt(uint16_t id, int enable)
 }
 
 /* 1:1 with op 0x3E HIDE_ENTITY @ Ghidra case 0x3e:
- *   iVar20 = FUN_00404C30(verb_id);
- *   if (iVar20) *(byte *)(iVar20 + 8) |= 0x80;
+ * iVar20 = (verb_id);
+ * if (iVar20) *(byte *)(iVar20 + 8) |= 0x80;
  *
  * Earlier port iterated kinds 2/3/4 via FindUpdateRegistration — too
  * broad, would hide click-payload and walk-behind entries that the
  * original leaves alone. The proper lookup is FindEntityByVerbId
  * which returns the single owner render entity.
  *
- * PORT SHORTCUT (refer FUN_00404C30 + flag-set, original case 0x3E):
+ * NOTE:
  * Original verb scripts call op 0x3E on BOTH controllable actors during
  * many action sequences:
- *   - active actor (the one doing the action): hide so a spawned
- *     action-overlay sprite shows cleanly at the actor's anchor
- *     without the idle pose double-rendering underneath
- *   - partner actor: also hide, to keep the cinematic frame focused
- *     on the action (original "stage clearing" convention)
+ * - active actor (the one doing the action): hide so a spawned
+ * action-overlay sprite shows cleanly at the actor's anchor
+ * without the idle pose double-rendering underneath
+ * - partner actor: also hide, to keep the cinematic frame focused
+ * on the action (original "stage clearing" convention)
  *
  * The partner-hide is the user-reported "druga postać znika a nie
  * powinna" bug — modern adventure-game UX expects the partner to stay
@@ -222,8 +222,8 @@ void ScriptCallHideEnt(uint16_t id)
     ((uint8_t *)e)[8] |= 0x80;
 }
 /* 1:1 with op 0x3F SHOW_ENTITY @ Ghidra case 0x3f:
- *   iVar20 = FUN_00404C30(verb_id);
- *   if (iVar20) *(ushort *)(iVar20 + 8) &= 0xff7f;
+ * iVar20 = (verb_id);
+ * if (iVar20) *(ushort *)(iVar20 + 8) &= 0xff7f;
  *
  * We additionally clear the "wait-for-enable" 0x2000 bit, which is set
  * on alpha-plane spawns: those entities should become visible the
@@ -247,21 +247,21 @@ void ScriptCallShowEnt(uint16_t id)
     }
 }
 
-/* ScriptCallWalkMode (op 0x35/0x37) — 1:1 port of FUN_00409270 @ 0x00409270.
+/* ScriptCallWalkMode (op 0x35/0x37) —
  * Despite the legacy "WalkMode" name in our port, the original is a
  * SAVE-STATE call: snapshot one field of entity `id` into a 20-slot
- * table keyed by (id, mode). FUN_00409340 (WalkTo) restores from it.
+ * table keyed by (id, mode). (WalkTo) restores from it.
  *
- *   if (save_count < 20) {
- *     find slot where (slot.id == id && slot.mode == mode), or append;
- *     e = FUN_00404C30(id);                       // by verb_id
- *     if (e) {
- *       if (mode == 1) slot.data = (e[+0x22], e[+0x24]);  // anchor pos
- *       if (mode == 2) slot.data = e[+0x28];               // asset slot
- *       slot.id = id; slot.mode = mode;
- *       if (was_append) ++save_count;
- *     }
- *   }                                                                   */
+ * if (save_count < 20) {
+ * find slot where (slot.id == id && slot.mode == mode), or append;
+ * e = (id); // by verb_id
+ * if (e) {
+ * if (mode == 1) slot.data = (e[+0x22], e[+0x24]); // anchor pos
+ * if (mode == 2) slot.data = e[+0x28]; // asset slot
+ * slot.id = id; slot.mode = mode;
+ * if (was_append) ++save_count;
+ * }
+ * } */
 #define SAVE_SLOT_MAX 20
 static struct {
     uint16_t id;
@@ -298,18 +298,18 @@ void ScriptCallWalkMode(uint16_t id, int mode)
     if (appending) ++g_save_slot_count;
 }
 
-/* ScriptCallWalkTo (op 0x38/0x3A) — 1:1 port of FUN_00409340 @ 0x00409340.
+/* ScriptCallWalkTo (op 0x38/0x3A) —
  * RESTORE-STATE: searches the save table for (target_id, mode) slot,
  * then writes its data back into entity `verb_id`.
  *
- *   for slot in save_table[0..save_count]:
- *     if (slot.id == target_id && slot.mode == mode) {
- *       e = FUN_00404C30(verb_id);
- *       if (e) {
- *         if (mode == 1) { e[+0x22] = saved_X; e[+0x24] = saved_Y; }
- *         if (mode == 2) { FUN_00402500(e); e[+0x28] = saved_asset; }
- *       }
- *     }                                                                 */
+ * for slot in save_table[0..save_count]:
+ * if (slot.id == target_id && slot.mode == mode) {
+ * e = (verb_id);
+ * if (e) {
+ * if (mode == 1) { e[+0x22] = saved_X; e[+0x24] = saved_Y; }
+ * if (mode == 2) { (e); e[+0x28] = saved_asset; }
+ * }
+ * } */
 void ScriptCallWalkTo(uint16_t verb_id, uint16_t target_id, int mode)
 {
     extern Entity *FindEntityByVerbId(uint16_t verb);
@@ -324,7 +324,7 @@ void ScriptCallWalkTo(uint16_t verb_id, uint16_t target_id, int mode)
                 *(uint16_t *)(eb + 0x22) = (uint16_t)(g_save_slots[i].data & 0xFFFF);
                 *(uint16_t *)(eb + 0x24) = (uint16_t)(g_save_slots[i].data >> 16);
             } else if (mode == 2) {
-                /* FUN_00402500 reset on asset swap. */
+                /* reset on asset swap. */
                 *(uint16_t *)(eb + 0x3A) &= (uint16_t)~5u;
                 *(uint16_t *)(eb + 0x32) = 0;
                 *(uint16_t *)(eb + 0x34) = 0;
@@ -344,15 +344,15 @@ void ScriptCallWalkTo(uint16_t verb_id, uint16_t target_id, int mode)
 
 /* ScriptCallAttachProp — 1:1 port of op 0x3B / 0x3C @ 0x00408DFA / 0x00408E40.
  *
- *   case 0x3B: e = FindEntityByVerbId(reg_id);
- *              a = FindUpdateRegistration(1, prop);
- *              if (e && a) FUN_00407600(e, a);     // bind atlas
- *              if (e)      FUN_00402500(e);         // reset state
- *              break;
- *   case 0x3C: same as 0x3B but WITHOUT the reset (keep=1).
+ * case 0x3B: e = FindEntityByVerbId(reg_id);
+ * a = FindUpdateRegistration(1, prop);
+ * if (e && a) (e, a); // bind atlas
+ * if (e) (e); // reset state
+ * break;
+ * case 0x3C: same as 0x3B but WITHOUT the reset (keep=1).
  *
- * FUN_00407600 (binder): writes new atlas ptr into entity[+0x28] and
- * resets the per-entity script pc + delay counters. FUN_00402500 is the
+ * (binder): writes new atlas ptr into entity[+0x28] and
+ * resets the per-entity script pc + delay counters. is the
  * "reset state" inlined elsewhere — zero +0x32-0x3C, clear flags &~5. */
 extern Entity *FindEntityByVerbId(uint16_t verb_id);
 extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);
@@ -364,11 +364,11 @@ void ScriptCallAttachProp(uint16_t actor, uint16_t prop, int keep)
     if (!e) return;
     void   *a = FindUpdateRegistration(1, prop);   /* asset slot, kind=1 */
     if (a) {
-        /* FUN_00407600 — re-bind atlas + reset per-script state:
-         *   e[+0x28] = asset;
-         *   e[+0x32] = 0;     // pc
-         *   e[+0x36] = 0;     // delay
-         *   e[+0x3C] = 0;     // sub-delay accumulator */
+        /* — re-bind atlas + reset per-script state:
+ * e[+0x28] = asset;
+ * e[+0x32] = 0; // pc
+ * e[+0x36] = 0; // delay
+ * e[+0x3C] = 0; // sub-delay accumulator */
         uint8_t *eb = (uint8_t *)e;
         *(uint32_t *)(eb + 0x28) = ent_ptr_intern((void *)a);
         *(uint16_t *)(eb + 0x32) = 0;
@@ -376,8 +376,8 @@ void ScriptCallAttachProp(uint16_t actor, uint16_t prop, int keep)
         *(uint16_t *)(eb + 0x3C) = 0;
     }
     if (!keep) {
-        /* FUN_00402500 — full reset (op 0x3B path). Mirrors the inline
-         * reset used by op 0x1E / 0x23 / 0x33. */
+        /* — full reset (op 0x3B path). Mirrors the inline
+ * reset used by op 0x1E / 0x23 / 0x33. */
         uint8_t *eb = (uint8_t *)e;
         *(uint16_t *)(eb + 0x3A) &= ~5u;
         *(uint16_t *)(eb + 0x38) = 0;

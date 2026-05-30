@@ -2,14 +2,14 @@
  *
  * Two opcodes drive palette fades:
  *
- *   - op 0x48 ScriptCallPalLoad(step, selector, with_fade=1): snapshot
- *     the current palette, load the target palette (selector = 0
- *     identity, 1 = white, 2 = black, 3 = gray, else PE-resolved
- *     filename), and start a fade in progress.
- *   - op 0x4A ScriptCallPalLoad(0, selector, with_fade=0): like 0x48
- *     but applies the target palette immediately (no fade).
- *   - op 0x49 ScriptCallPalFadeStep(): advance the fade by one step.
- *     Returns 1 when the fade completes; scripts poll-loop on this.
+ * - op 0x48 ScriptCallPalLoad(step, selector, with_fade=1): snapshot
+ * the current palette, load the target palette (selector = 0
+ * identity, 1 = white, 2 = black, 3 = gray, else PE-resolved
+ * filename), and start a fade in progress.
+ * - op 0x4A ScriptCallPalLoad(0, selector, with_fade=0): like 0x48
+ * but applies the target palette immediately (no fade).
+ * - op 0x49 ScriptCallPalFadeStep: advance the fade by one step.
+ * Returns 1 when the fade completes; scripts poll-loop on this.
  */
 
 #include "wacki.h"
@@ -33,10 +33,10 @@ void ScriptCallPalLoad(uint16_t fade_step, uint32_t selector, int with_fade)
     fprintf(stderr, "[script] pal load sel=0x%x fade=%d step=%u\n",
             selector, with_fade, fade_step);
 
-    /* Snapshot CURRENT palette as fade source (DAT_00454A00). */
+    /* Snapshot CURRENT palette as fade source. */
     memcpy(s_pal_fade_source, g_palette_rgb, sizeof s_pal_fade_source);
 
-    /* Load fade target (DAT_00451DC8). */
+    /* Load fade target. */
     if (selector == 0) {
         /* Target = current → fade to itself (no visible change). */
         memcpy(s_pal_fade_target, g_palette_rgb, sizeof s_pal_fade_target);
@@ -66,8 +66,8 @@ void ScriptCallPalLoad(uint16_t fade_step, uint32_t selector, int with_fade)
     s_pal_fade_step     = fade_step ? (int)fade_step : 4;
     s_pal_fade_active   = 1;
     /* with_fade == 0 (case 0x4A) → script wants snap-to-target. Apply
-     * immediately so scripts that don't poll PalFadeStep still see the
-     * target take effect. */
+ * immediately so scripts that don't poll PalFadeStep still see the
+ * target take effect. */
     if (!with_fade) {
         memcpy(g_palette_rgb, s_pal_fade_target, sizeof g_palette_rgb);
         InstallPalette(g_palette_rgb, 0);
@@ -77,13 +77,13 @@ void ScriptCallPalLoad(uint16_t fade_step, uint32_t selector, int with_fade)
 }
 
 /* ScriptCallPalFadeStep — 1:1 with case 0x49:
- *   if (progress < 100) {
- *       progress += step;
- *       FUN_004140e0(source, target, work, progress);
- *       FUN_00412d10(work, 0);
- *       return 0;
- *   }
- *   return previous_value (= 1 when fade not active).
+ * if (progress < 100) {
+ * progress += step;
+ * (source, target, work, progress);
+ * (work, 0);
+ * return 0;
+ * }
+ * return previous_value (= 1 when fade not active).
  *
  * Returns 1 when fade complete (poll-loop exit condition). */
 int ScriptCallPalFadeStep(void)

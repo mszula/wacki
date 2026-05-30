@@ -19,12 +19,12 @@
  *
  * T22 phase B — full in-place sync transition. Delegates to
  * LoadKomnataScene (game.c) which:
- *   1. Walker-freezes both g_actor entities (+0x4C/+0x50 = 0, +0x3A
- *      bits 0,2 cleared) — 1:1 with FUN_00402500 partial reset.
- *   2. Frees the old BG raw + FLD asset.
- *   3. Calls LoadKomnata(id) (preserves actors via T4, runs new
- *      komnata's enter_script).
- *   4. Loads new BG + FLD + music into g_scene_* / g_walk_* globals.
+ * 1. Walker-freezes both g_actor entities (+0x4C/+0x50 = 0, +0x3A
+ * bits 0,2 cleared) partial reset.
+ * 2. Frees the old BG raw + FLD asset.
+ * 3. Calls LoadKomnata(id) (preserves actors via T4, runs new
+ * komnata's enter_script).
+ * 4. Loads new BG + FLD + music into g_scene_* / g_walk_* globals.
  *
  * play_demo_scene's main loop sees the new state via globals and
  * continues running without unwinding. Verb-script post-op-0x20

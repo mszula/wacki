@@ -17,20 +17,20 @@
 #include <stdio.h>
 #include <string.h>
 
-/* T31 v2 — UpdateCursorState: 1:1 with FUN_004067C0 state determination.
+/* T31 v2 — UpdateCursorState: state determination.
  *
  * Atlas mapping confirmed by user — names match cursor sprites:
- *   - olowek1.wyc (state 0/6) = default arrow cursor (ołówek = pencil)
- *   - kaseta.wyc  (state 1)   = loading anim cursor (cassette spinning)
- *   - magnes1a.wyc (state 2)  = held-item hover indicator
- *   - magnes1.wyc  (state 3/7)= held-item alternate
- *   - drzwi1l.wyc (state 4)   = exit-left cursor (door left)
- *   - drzwi1p.wyc (state 5)   = exit-right cursor (door right)
+ * - olowek1.wyc (state 0/6) = default arrow cursor (ołówek = pencil)
+ * - kaseta.wyc (state 1) = loading anim cursor (cassette spinning)
+ * - magnes1a.wyc (state 2) = held-item hover indicator
+ * - magnes1.wyc (state 3/7)= held-item alternate
+ * - drzwi1l.wyc (state 4) = exit-left cursor (door left)
+ * - drzwi1p.wyc (state 5) = exit-right cursor (door right)
  *
  * Reads:
- *   g_held_item        — DAT_0044E5E8, 0x26 = no item
- *   g_hover_scene_verb — DAT_0044988C, scene hover (ClickHitTest result)
- *   g_hover_panel_verb — DAT_0044E450, panel hover (PanelHitTest result) */
+ * g_held_item — DAT_0044E5E8, 0x26 = no item
+ * g_hover_scene_verb — DAT_0044988C, scene hover (ClickHitTest result)
+ * g_hover_panel_verb — DAT_0044E450, panel hover (PanelHitTest result) */
 void UpdateCursorState(void)
 {
     extern uint8_t  g_cursor_state;
@@ -61,19 +61,19 @@ void UpdateCursorState(void)
     }
 
     /* Per-state lookup — 1:1 with DAT_00443400 in the PE. Each state has
-     * its own (atlas-slot, step, period) tuple decoded from the 80-byte
-     * table (10 bytes/entry: ptr_to_slot, step:i16, period:u16, clamp:
-     * u16). Key insight: state 6 reuses atlas SLOT 0 (olowek) but with
-     * its own period/step — that's how the "interactive-pencil wiggle"
-     * works. State 7 reuses slot 3 (magnes1) for held-item-over-target.
-     * The earlier port aliased state 6→0 and 7→3, collapsing those
-     * distinct anim profiles and breaking the wiggle.
-     *
-     * Periods are in 10 ms TICKS — same unit as DAT_0044E578, accumulated
-     * via g_frame_delta_ticks. State 6 (interactive pencil) uses period=4
-     * → ~40 ms/frame ≈ 25 fps wiggle; states 1..5,7 use period=10 → ~100
-     * ms/frame ≈ 10 fps cycle. Earlier port read these as raw ms which
-     * was 10× too fast (strobe). */
+ * its own (atlas-slot, step, period) tuple decoded from the 80-byte
+ * table (10 bytes/entry: ptr_to_slot, step:i16, period:u16, clamp:
+ * u16). Key insight: state 6 reuses atlas SLOT 0 (olowek) but with
+ * its own period/step — that's how the "interactive-pencil wiggle"
+ * works. State 7 reuses slot 3 (magnes1) for held-item-over-target.
+ * The earlier port aliased state 6→0 and 7→3, collapsing those
+ * distinct anim profiles and breaking the wiggle.
+ *
+ * Periods are in 10 ms TICKS — same unit as DAT_0044E578, accumulated
+ * via g_frame_delta_ticks. State 6 (interactive pencil) uses period=4
+ * → ~40 ms/frame ≈ 25 fps wiggle; states 1..5,7 use period=10 → ~100
+ * ms/frame ≈ 10 fps cycle. Earlier port read these as raw ms which
+ * was 10× too fast (strobe). */
     static const uint8_t state_slot         [8] = { 0, 1, 2, 3, 4, 5, 0, 3 };
     static const uint8_t state_period_ticks [8] = { 0, 10, 10, 10, 10, 10, 4, 10 };
     static const int8_t  state_step         [8] = { 0,  1,  1,  1,  1,  1, 1,  1 };
@@ -100,7 +100,7 @@ void UpdateCursorState(void)
 }
 
 /* T31 v2 — PaintCursor: blit cursor sprite at mouse position. 1:1 tail
- * of FUN_004067C0 where cursor entity (DAT_0045147C) gets its draw
+ * of where cursor entity gets its draw
  * fields populated from atlas frame data. The atlas-slot is selected
  * via the same state→slot table UpdateCursorState uses (states 6/7
  * reuse slots 0/3). */

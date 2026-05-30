@@ -2,17 +2,17 @@
  * assets.c — ANIM (.wyc), MASK (.msk), FILD (.fld) loaders.
  *
  * Original address:
- *   LoadAssetFromDtaBase  0x00405AA0
+ * LoadAssetFromDtaBase 0x00405AA0
  *
  * All assets share the same in-file layout:
  *
- *   +0   DWORD magic   ("ANIM" / "MASK" / "FILD")
- *   +4   WORD  count
- *   +6   WORD  off_width_table   (relative)
- *   +8   WORD  off_height_table
- *   +10  WORD  off_drawX_table
- *   +12  WORD  off_drawY_table
- *   +14  WORD  off_pixel_table   (DWORD-of-offsets table; each → frame bitmap)
+ * +0 DWORD magic ("ANIM" / "MASK" / "FILD")
+ * +4 WORD count
+ * +6 WORD off_width_table (relative)
+ * +8 WORD off_height_table
+ * +10 WORD off_drawX_table
+ * +12 WORD off_drawY_table
+ * +14 WORD off_pixel_table (DWORD-of-offsets table; each → frame bitmap)
  *
  * For FILD the trailing data after the tables is a sequence of (Δx, Δy)
  * pairs that get appended to the global perspective profile DAT_0044E5F8.
@@ -25,7 +25,7 @@ extern void  xfree  (void *p);
 
 /* Scripts-class lookup (for [animacja]<filename> binding) */
 extern void *g_scripts_obj;                          /* DAT_0044E5B0 */
-extern void *FindAnimationScript(void *scripts_obj, const char *name); /* FUN_00409B60 */
+extern void *FindAnimationScript(void *scripts_obj, const char *name); /* */
 
 /* Global perspective profile (filled by .fld loads). */
 int16_t g_persp_profile[0x22*2];   /* DAT_0044E5F8 — pairs (dx, dy) */
@@ -72,11 +72,11 @@ AnimAsset *LoadAssetFromDtaBase(const char *name)
     a->off_drawY   = (uint16_t *)((uint8_t *)raw + *(uint16_t *)((uint8_t *)raw + 12));
 
     /* The pixel-offset table is 32-bit offsets relative to raw. On the
-     * 64-bit host we cannot relocate them in-place (a 32-bit slot can't
-     * hold a 64-bit pointer); allocate a separate array of real pointers.
-     * T43b: pix_off_table base isn't guaranteed 4-byte aligned (its
-     * offset is read from a u16 in the header), so use memcpy to avoid
-     * UB on strict-alignment archs. */
+ * 64-bit host we cannot relocate them in-place (a 32-bit slot can't
+ * hold a 64-bit pointer); allocate a separate array of real pointers.
+ * T43b: pix_off_table base isn't guaranteed 4-byte aligned (its
+ * offset is read from a u16 in the header), so use memcpy to avoid
+ * UB on strict-alignment archs. */
     uint8_t *pix_off_base = (uint8_t *)raw + *(uint16_t *)((uint8_t *)raw + 14);
     a->pixel_ptrs = (uint8_t **)xmalloc(a->frame_count * (uint32_t)sizeof(uint8_t *));
     if (!a->pixel_ptrs) { xfree(raw); xfree(a); return NULL; }
@@ -96,13 +96,13 @@ AnimAsset *LoadAssetFromDtaBase(const char *name)
     }
 
     /* kind 2 = passive (raw 8bpp frames), 3 = rich (RLE-compressed per
-     * FUN_00410cb0), 0 = mask/fild. The kind flag is a uint16 at byte
-     * offset 16 of the raw file (per Ghidra: `(short)piVar2[4] != 0`):
-     *   0 = raw frames, non-zero = RLE.
-     * The off_widths table starts at byte 18 by convention, so the test
-     * `off_widths_offset > 16` from Ghidra is effectively always true and
-     * was the reason an earlier port misread the flag — using
-     * `off_widths[0]` (first frame width) instead of the actual marker. */
+ * ), 0 = mask/fild. The kind flag is a uint16 at byte
+ * offset 16 of the raw filepiVar2[4] != 0`):
+ * 0 = raw frames, non-zero = RLE.
+ * The off_widths table starts at byte 18 by convention, so the test
+ * `off_widths_offset > 16` from Ghidra is effectively always true and
+ * was the reason an earlier port misread the flag — using
+ * `off_widths[0]` (first frame width) instead of the actual marker. */
     if (magic == ASSET_MAGIC_ANIM) {
         uint16_t rich_flag = *(uint16_t *)((uint8_t *)raw + 16);
         a->kind = rich_flag != 0 ? 3 : 2;
@@ -112,14 +112,14 @@ AnimAsset *LoadAssetFromDtaBase(const char *name)
     } else if (magic == ASSET_MAGIC_FILD) {
         a->kind = 0;
         a->flag_22 = 0;
-        /* FILD body: 1:1 z FUN_00405C63 (LoadAssetFromDtaBase FILD branch).
-         * Body offset = ushort at raw[16] (NOT raw[6] — wcześniejszy bug).
-         * Layout w body:
-         *   [count:short][X[0]..X[count-1]:short][Y[0]..Y[count-1]:short]
-         * Wartości X/Y są **signed shorts ujemne** (offset wstecz od asset
-         * origin); formuła `band_pos = off_drawX[0] - raw` w efekcie DODAJE
-         * magnitudę → sensowne pozycje (sprawdzone na wartow2.fld:
-         * off_drawX[0]=6, raw_X[0]=-173 → band_X=179). */
+        /* FILD body: 1:1 z (LoadAssetFromDtaBase FILD branch).
+ * Body offset = ushort at raw[16] (NOT raw[6] — wcześniejszy bug).
+ * Layout w body:
+ * [count:short][X[0]..X[count-1]:short][Y[0]..Y[count-1]:short]
+ * Wartości X/Y są **signed shorts ujemne** (offset wstecz od asset
+ * origin); formuła `band_pos = off_drawX[0] - raw` w efekcie DODAJE
+ * magnitudę → sensowne pozycje (sprawdzone na wartow2.fld:
+ * off_drawX[0]=6, raw_X[0]=-173 → band_X=179). */
         uint16_t body_off = *(uint16_t *)((const uint8_t *)raw + 16);
         const int16_t *body = (const int16_t *)((const uint8_t *)raw + body_off);
         int16_t band_cnt = body[0];

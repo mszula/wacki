@@ -22,17 +22,17 @@ extern const void *PeLoaderRead(uint32_t va);
 
 /* ---- directional walk-anim table per actor.
  *
- * 1:1 with original DAT_0044A19C+0xC (actor 0) and +0x10 (actor 1) —
+ * DAT_0044A19C+0xC (actor 0) and +0x10 (actor 1) —
  * each a pointer to an array of 6 dwords:
- *   [0] L walk (op 0x15-driven, patched X/Y)
- *   [1] R walk
- *   [2] U walk
- *   [3] D walk
- *   [4] aux script (purpose TBD — possibly stand-with-direction)
- *   [5] idle script (no op 0x15, just SET_DELAY → STOP)
+ * [0] L walk (op 0x15-driven, patched X/Y)
+ * [1] R walk
+ * [2] U walk
+ * [3] D walk
+ * [4] aux script (purpose TBD — possibly stand-with-direction)
+ * [5] idle script (no op 0x15, just SET_DELAY → STOP)
  *
- * FUN_00402DB0 binds entry [5] (idle) to entity[+0x2C] at room reset:
- *   DAT_0044E724[0xB] = *(int *)(DAT_0044A19C+0xC + 0x14);
+ * binds entry [5] (idle) to entity[+0x2C] at room reset:
+ * DAT_0044E724[0xB] = *(int *)(DAT_0044A19C+0xC + 0x14);
  * The 0x14 offset = 4*5 bytes = entry 5 = idle. So actors start with
  * idle bound and per-entity VM ticks the idle script (which yields each
  * frame). On click, PlayActorAnimByPath swaps to a directional walker. */
@@ -45,15 +45,15 @@ const char *g_actor_walk_anim[2][6] = {
  * Called by LoadStage after g_stage_va is set.
  *
  * Stage descriptor layout (verified for stage 1 @ PE VA 0x00428220):
- *   +0x00 = komnata table ptr
- *   +0x04 = verb dispatch table
- *   +0x08 = object dispatch table
- *   +0x0C = actor 0 directional anim table ptr (→ 6 dwords L/R/U/D/aux/idle)
- *   +0x10 = actor 1 directional anim table ptr
- *   +0x14 = ebek_wyc filename string
- *   +0x18 = fjej_wyc filename string
- *   +0x1C = panel_wyc filename string
- *   ... */
+ * +0x00 = komnata table ptr
+ * +0x04 = verb dispatch table
+ * +0x08 = object dispatch table
+ * +0x0C = actor 0 directional anim table ptr (→ 6 dwords L/R/U/D/aux/idle)
+ * +0x10 = actor 1 directional anim table ptr
+ * +0x14 = ebek_wyc filename string
+ * +0x18 = fjej_wyc filename string
+ * +0x1C = panel_wyc filename string
+ * ... */
 void LoadActorWalkAnims(uint32_t stage_va)
 {
     extern const void *PeLoaderRead(uint32_t va);
@@ -109,7 +109,7 @@ const uint8_t g_default_world_state[0x2664] = { 0 };
 
 /* ---- stage descriptor table — PTR_PTR_00442FA8.
  *
- * T26: BuildStageTable() reads PTR_PTR_00442FA8 from PE memory (5 dwords
+ * T26: BuildStageTable reads PTR_PTR_00442FA8 from PE memory (5 dwords
  * → 5 stage descriptor VAs), parses each into a host-native StageDef
  * (pointers resolved through PeLoaderRead), and populates g_stage_table[].
  * g_stage_va_table[] stores the raw PE VAs alongside for LoadStage and
@@ -128,7 +128,7 @@ void BuildStageTable(void)
 {
     extern const void *PeLoaderRead(uint32_t va);
     /* PTR_PTR_00442FA8 — 5 dwords of stage descriptor VAs. The 6th
-     * slot in PE is a NULL sentinel (see read_memory dump). */
+ * slot in PE is a NULL sentinel (see read_memory dump). */
     const uint8_t *tab = (const uint8_t *)PeLoaderRead(0x00442FA8);
     if (!tab) {
         fprintf(stderr, "[stage] PTR_PTR_00442FA8 unreadable — stage table empty\n");
@@ -147,8 +147,8 @@ void BuildStageTable(void)
         StageDef *out = &s_stage_storage[i];
         memset(out, 0, sizeof *out);
         /* Skip unknown[5] @ +0..+0x13 — komnata table, dispatch tables,
-         * actor anim tables; consumed via PE directly elsewhere
-         * (LoadKomnata, DispatchClickEvent, LoadActorWalkAnims). */
+ * actor anim tables; consumed via PE directly elsewhere
+ * (LoadKomnata, DispatchClickEvent, LoadActorWalkAnims). */
         uint32_t ebek_va   = (uint32_t)(sd[0x14] | (sd[0x15] << 8) | (sd[0x16] << 16) | (sd[0x17] << 24));
         uint32_t fjej_va   = (uint32_t)(sd[0x18] | (sd[0x19] << 8) | (sd[0x1A] << 16) | (sd[0x1B] << 24));
         uint32_t panel_va  = (uint32_t)(sd[0x1C] | (sd[0x1D] << 8) | (sd[0x1E] << 16) | (sd[0x1F] << 24));

@@ -3,27 +3,27 @@
  * Once per frame, after the per-entity VM has updated every entity's
  * position/frame, EntityRenderAll:
  *
- *   1. Collects all entities into a working pointer array
- *   2. Sorts them by foot_y (lower foot = drawn first = behind)
- *   3. Walks back-to-front blitting each into the back buffer
+ * 1. Collects all entities into a working pointer array
+ * 2. Sorts them by foot_y (lower foot = drawn first = behind)
+ * 3. Walks back-to-front blitting each into the back buffer
  *
  * Special cases the walk handles inline:
  *
- *   - One-shot BG blit (flags 0x40 | 0x20): paints opaquely and clears
- *     bit 0x20 so subsequent frames skip. Used for room-background
- *     sprites in komnaty whose .pic is a 1×1 palette stub.
+ * - One-shot BG blit (flags 0x40 | 0x20): paints opaquely and clears
+ * bit 0x20 so subsequent frames skip. Used for room-background
+ * sprites in komnaty whose .pic is a 1×1 palette stub.
  *
- *   - Walk-behind mask (.msk asset, kind=0, flag_22 bit 1 clear):
- *     restores scene background pixels through the mask shape, but
- *     only over pixels we know an actor wrote. Achieves the "actor
- *     walks behind kiosk" effect without needing per-pixel depth.
+ * - Walk-behind mask (.msk asset, kind=0, flag_22 bit 1 clear):
+ * restores scene background pixels through the mask shape, but
+ * only over pixels we know an actor wrote. Achieves the "actor
+ * walks behind kiosk" effect without needing per-pixel depth.
  *
- *   - Perspective-scaled sprites (+0x58 ≠ 0/100): blit at scaled size,
- *     and recompute drawn position from anchor + scaled atlas hot-spot
- *     so the foot stays put across scale changes.
+ * - Perspective-scaled sprites (+0x58 ≠ 0/100): blit at scaled size,
+ * and recompute drawn position from anchor + scaled atlas hot-spot
+ * so the foot stays put across scale changes.
  *
- *   - Alpha-plane sprites (flags 0x100): use the dedicated alpha-plane
- *     blit path with tint blending.
+ * - Alpha-plane sprites (flags 0x100): use the dedicated alpha-plane
+ * blit path with tint blending.
  *
  * The actor-paint mask (s_actor_paint_mask) is a 1-byte-per-pixel
  * scratch buffer that records every pixel an actor (g_actor[0]/[1])
@@ -43,11 +43,11 @@
 extern Entity *g_actor[2];
 
 /* ---- entity primary-flag bits at +0x08 ----------------------------- */
-#define EFLAG_HIDDEN          0x0080   /* HIDE_ENTITY sets, SHOW clears   */
-#define EFLAG_FADE_OR_BG      0x0040   /* fade-out OR one-shot BG paint   */
-#define EFLAG_ONESHOT_BG_PEND 0x0020   /* paired with EFLAG_FADE_OR_BG    */
-#define EFLAG_DOUBLED         0x0004   /* sprite drawn at 2× (flip alt)   */
-#define EFLAG_ALPHA_PLANE     0x0100   /* alpha-plane blit                */
+#define EFLAG_HIDDEN          0x0080   /* HIDE_ENTITY sets, SHOW clears */
+#define EFLAG_FADE_OR_BG      0x0040   /* fade-out OR one-shot BG paint */
+#define EFLAG_ONESHOT_BG_PEND 0x0020   /* paired with EFLAG_FADE_OR_BG */
+#define EFLAG_DOUBLED         0x0004   /* sprite drawn at 2× (flip alt) */
+#define EFLAG_ALPHA_PLANE     0x0100   /* alpha-plane blit */
 #define EFLAG_SKY             0x2000   /* genuine sky entity (walk-behind) */
 #define EFLAG_PENDING_FREE    0x8000
 
@@ -82,7 +82,7 @@ extern Entity *g_actor[2];
 #define BG_PERSIST_BOT_LIMIT  380
 
 /* ---- viewport off-screen guard (generous on the right edge so
- *      mid-flight off-screen sprites still render their tail) ------- */
+ * mid-flight off-screen sprites still render their tail) ------- */
 #define VIEWPORT_RIGHT_PAD     200
 #define VIEWPORT_BOTTOM_PAD    200
 
@@ -242,7 +242,7 @@ void EntityRenderAll(Entity *head)
     (void)head;
 
     /* Collect → sort. The cap is comfortable: a fully-populated
-     * komnata typically holds 30-50 entities. */
+ * komnata typically holds 30-50 entities. */
     Entity *list[MAX_RENDER_ENTITIES];
     int n = 0;
     int total = EntityListCount(/*click_list=*/0);
@@ -262,9 +262,9 @@ void EntityRenderAll(Entity *head)
 
         if (flags & EFLAG_FADE_OR_BG) {
             /* Sub-branch: with EFLAG_ONESHOT_BG_PEND we still owe a
-             * one-time backbuffer paint; otherwise this entity is in a
-             * "stay invisible" state (genuine fade-out or post-paint
-             * idle) and we skip render entirely. */
+ * one-time backbuffer paint; otherwise this entity is in a
+ * "stay invisible" state (genuine fade-out or post-paint
+ * idle) and we skip render entirely. */
             if (flags & EFLAG_ONESHOT_BG_PEND) {
                 AnimAsset *atlas = (AnimAsset *)ent_ptr_resolve(
                     EOFF(e, ENT_OFF_ATLAS_SLOT, uint32_t));
@@ -278,10 +278,10 @@ void EntityRenderAll(Entity *head)
             EOFF(e, ENT_OFF_ATLAS_SLOT, uint32_t));
 
         /* kind=1 entities (speech balloons from main-VM SHOW_TEXT)
-         * have no atlas — pixels live directly on the Entity. Speech
-         * balloons are dead code in the shipped game (audio-only
-         * dialogue), but the branch is here in case future scripts
-         * activate it. */
+ * have no atlas — pixels live directly on the Entity. Speech
+ * balloons are dead code in the shipped game (audio-only
+ * dialogue), but the branch is here in case future scripts
+ * activate it. */
         if (!atlas) {
             if (!e->pixels || !e->width || !e->height) continue;
             int16_t bx = (int16_t)EOFF(e, ENT_OFF_DRAWN_X, int16_t);
@@ -304,9 +304,9 @@ void EntityRenderAll(Entity *head)
         uint16_t fh = atlas->off_heights[f];
 
         /* Drawn position: per-entity VM has written this for sprites
-         * with a script. Static scene props (drut, barstoi, pies) often
-         * don't have a script and leave +0x0A/+0x0C at zero — fall back
-         * to the atlas hot-spot which IS their scene position. */
+ * with a script. Static scene props (drut, barstoi, pies) often
+ * don't have a script and leave +0x0A/+0x0C at zero — fall back
+ * to the atlas hot-spot which IS their scene position. */
         int16_t dx = (int16_t)EOFF(e, ENT_OFF_DRAWN_X, int16_t);
         int16_t dy = (int16_t)EOFF(e, ENT_OFF_DRAWN_Y, int16_t);
         if (dx == 0 && dy == 0 && atlas->off_drawX && atlas->off_drawY) {
@@ -315,7 +315,7 @@ void EntityRenderAll(Entity *head)
         }
 
         /* Off-screen cull. Generous on right/bottom so mid-flight
-         * tail-off-screen sprites still render their visible portion. */
+ * tail-off-screen sprites still render their visible portion. */
         if ((int)dx + (int)fw <= 0) continue;
         if ((int)dy + (int)fh <= 0) continue;
         if (dx >= (int)g_screen_w + VIEWPORT_RIGHT_PAD)  continue;
@@ -339,8 +339,8 @@ void EntityRenderAll(Entity *head)
         }
 
         /* Walk-behind mask: 1bpp .msk assets blit the BG through the
-         * mask shape instead of their own pixels. Only at trivial
-         * scale (none of the shipped masks carry a scale flag). */
+ * mask shape instead of their own pixels. Only at trivial
+ * scale (none of the shipped masks carry a scale flag). */
         if (atlas->kind == 0 && (atlas->flag_22 & 2) == 0 &&
             (scale == 0 || scale == 100)) {
             paint_walkbehind_mask(dx, dy, fw, fh, px);
@@ -352,9 +352,9 @@ void EntityRenderAll(Entity *head)
 
         if (scale && scale != 100) {
             /* Perspective-scaled. Recompute drawn from anchor +
-             * scaled atlas hot-spot for foot-anchored entities, so the
-             * foot stays put even when the scale changes between the
-             * VM-tick anchor-set and this render. */
+ * scaled atlas hot-spot for foot-anchored entities, so the
+ * foot stays put even when the scale changes between the
+ * VM-tick anchor-set and this render. */
             uint16_t dw = (uint16_t)((fw * scale) / 100);
             uint16_t dh = (uint16_t)((fh * scale) / 100);
             if (dw == 0) dw = 1;
@@ -389,17 +389,17 @@ void EntityRenderAll(Entity *head)
         }
 
         /* Walk-behind paint mask: stamp pixels we just drew that
-         * walk-behind masks should be able to occlude later in the
-         * walk.
-         *
-         *   Actors: always marked (Ebek/Fjej walk behind buildings).
-         *   Sky entities: marked iff they sit fully above the walk
-         *                 area AND carry EFLAG_SKY (set on SPAWN for
-         *                 birds / airplane / ufo). The combined gate
-         *                 prevents foreground props that happen to
-         *                 lift above the walk area mid-action (e.g.
-         *                 camera prop during use-camera anim) from
-         *                 being marked. */
+ * walk-behind masks should be able to occlude later in the
+ * walk.
+ *
+ * Actors: always marked (Ebek/Fjej walk behind buildings).
+ * Sky entities: marked iff they sit fully above the walk
+ * area AND carry EFLAG_SKY (set on SPAWN for
+ * birds / airplane / ufo). The combined gate
+ * prevents foreground props that happen to
+ * lift above the walk area mid-action (e.g.
+ * camera prop during use-camera anim) from
+ * being marked. */
         int is_actor = (e == g_actor[0] || e == g_actor[1]);
         int entity_bottom_y = dy + blit_h;
         int is_sky = (g_walk_fld_oy > 0 &&

@@ -4,13 +4,13 @@
  * scene render but before the cursor and back-buffer flush.
  * Composites three things in order:
  *
- *   1. The verb panel itself (panel.wyc): blit the panel atlas at
- *      its scene-baked position.
- *   2. Inventory item icons: for each non-empty slot on the current
- *      page, blit the corresponding icon from g_items_atlas.
- *   3. The held-item drag-ghost: if the player is currently dragging
- *      a verb (g_held_item != 0x26), interpolate its position toward
- *      the cursor and draw a dimmed copy of the icon there.
+ * 1. The verb panel itself (panel.wyc): blit the panel atlas at
+ * its scene-baked position.
+ * 2. Inventory item icons: for each non-empty slot on the current
+ * page, blit the corresponding icon from g_items_atlas.
+ * 3. The held-item drag-ghost: if the player is currently dragging
+ * a verb (g_held_item != 0x26), interpolate its position toward
+ * the cursor and draw a dimmed copy of the icon there.
  */
 
 #include "wacki.h"
@@ -42,9 +42,9 @@ void PaintHudOverlay(void)
     AnimAsset *panel = g_panel_asset;
     if (panel) paint_anim_button_at(panel, 0, 0, 400, 1);
 
-    /* Inventory / dialog-choice icon overlay — 1:1 with FUN_00406EB0 @
-     * 0x00407045: pixels = przedm.pixel_ptrs[verb - 0x29]; blit at
-     * (panel_x + btn_x[i], panel_y + btn_y[i]), 0x28×0x28 cell. */
+    /* Inventory / dialog-choice icon overlay @
+ * 0x00407045: pixels = przedm.pixel_ptrs[verb - 0x29]; blit at
+ * (panel_x + btn_x[i], panel_y + btn_y[i]), 0x28×0x28 cell. */
     if (g_items_atlas && (g_settings_anim_active & 1) && panel
         && panel->off_drawX && panel->off_drawY)
     {
@@ -72,26 +72,26 @@ void PaintHudOverlay(void)
         }
     }
 
-    /* Actor portrait + active-frame indicator — 1:1 port of FUN_00407130 @
-     * 0x00407130. The ebfj.wyc atlas has 4 frames stored at fixed positions
-     * (each frame's own off_drawX/Y): 0/1 = Ebek/Fjej "active" portraits
-     * (with frame/border), 2/3 = "inactive" portraits (without frame).
-     *
-     * Original gates on a cached active-actor != current — it only repaints
-     * when SPACE toggles, because the panel background is sticky in the
-     * original's dirty-rect framework. Our PaintHudOverlay repaints the
-     * whole panel every frame, so we always paint both portraits.
-     *
-     * Order matches original: inactive first (uVar2 ^ 3), active on top
-     * (uVar2). With active=0 (Ebek) → paint frame 3 (Fjej inactive), then
-     * frame 0 (Ebek with frame). With active=1 → frame 2, then frame 1. */
+    /* Actor portrait + active-frame indicator — 1:1 port of @
+ * 0x00407130. The ebfj.wyc atlas has 4 frames stored at fixed positions
+ * (each frame's own off_drawX/Y): 0/1 = Ebek/Fjej "active" portraits
+ * (with frame/border), 2/3 = "inactive" portraits (without frame).
+ *
+ * Original gates on a cached active-actor != current — it only repaints
+ * when SPACE toggles, because the panel background is sticky in the
+ * original's dirty-rect framework. Our PaintHudOverlay repaints the
+ * whole panel every frame, so we always paint both portraits.
+ *
+ * Order matches original: inactive first (uVar2 ^ 3), active on top
+ * (uVar2). With active=0 (Ebek) → paint frame 3 (Fjej inactive), then
+ * frame 0 (Ebek with frame). With active=1 → frame 2, then frame 1. */
     if (g_ebfj_atlas && g_ebfj_atlas->pixel_ptrs && g_ebfj_atlas->frame_count >= 4
         && (g_settings_anim_active & 1))
     {
         extern uint16_t g_active_actor;
         unsigned a   = g_active_actor & 1u;
         unsigned f_i = (a ^ 1u) | 2u;       /* inactive: 2 or 3 */
-        unsigned f_a = a;                   /* active:   0 or 1 */
+        unsigned f_a = a;                   /* active: 0 or 1 */
         for (int pass = 0; pass < 2; ++pass) {
             unsigned f = (pass == 0) ? f_i : f_a;
             uint8_t *px = g_ebfj_atlas->pixel_ptrs[f];
@@ -106,22 +106,22 @@ void PaintHudOverlay(void)
     }
 
     /* Fjej portrait glasses-on/off overlay — state-driven paint.
-     *
-     * The original verb-script @ 0x00423EE0 / 0x00432C40 SPAWNS an entity
-     * (id=87, asset=fjbezoku.wyc or fjzoku.wyc) at (172,427) when the user
-     * takes/returns the glasses. Our entity-render path doesn't keep that
-     * entity alive long enough — something (likely a per-frame Item.scr
-     * trigger for verb 0x67 or stage 3's verb-script chain) destroys the
-     * spawned entity in the same tick. Render-list scan saw the entity
-     * for only 1 frame.
-     *
-     * Workaround: read the script variable the verb-script writes
-     * (var[0x67] = 1 when glasses taken, 0 when on portrait) and paint
-     * the matching atlas directly. Skips the SPAWN/DESTROY race entirely.
-     * Cached load on first use; both atlases stay resident (small —
-     * ~2KB each). PORT SHORTCUT (refer FUN_004094a0 + script 0x00423EE0):
-     * we drive the visual from the script var rather than the spawned
-     * entity, since the entity lifetime is currently broken. */
+ *
+ * The original verb-script @ 0x00423EE0 / 0x00432C40 SPAWNS an entity
+ * (id=87, asset=fjbezoku.wyc or fjzoku.wyc) at (172,427) when the user
+ * takes/returns the glasses. Our entity-render path doesn't keep that
+ * entity alive long enough — something (likely a per-frame Item.scr
+ * trigger for verb 0x67 or stage 3's verb-script chain) destroys the
+ * spawned entity in the same tick. Render-list scan saw the entity
+ * for only 1 frame.
+ *
+ * Workaround: read the script variable the verb-script writes
+ * (var[0x67] = 1 when glasses taken, 0 when on portrait) and paint
+ * the matching atlas directly. Skips the SPAWN/DESTROY race entirely.
+ * Cached load on first use; both atlases stay resident (small —
+ * ~2KB each). NOTE:
+ * we drive the visual from the script var rather than the spawned
+ * entity, since the entity lifetime is currently broken. */
     {
         extern uint32_t g_script_vars[0x129];
         static AnimAsset *s_fjbezoku = NULL;       /* without glasses */
@@ -146,23 +146,23 @@ void PaintHudOverlay(void)
     }
 
     /* Health bar overlay — pasek#N.wyc entity, drawn near the TOP of the
-     * HUD panel at atlas-native (drawX, drawY) = (7, 403). The stage
-     * enter-script spawns this entity (id=101, asset="pasek#1.wyc" for
-     * stage 1); EntityRenderAll draws it at the same position BEFORE
-     * the panel paint, so panel.wyc frame 0 covers it. We re-paint it
-     * here AFTER panel so it stays visible.
-     *
-     * Frame index = health level 0..23 (0=full green, ~12=yellow, ~18=red,
-     * 23=empty). The entity's per-tick script (0x00423528) advances frame
-     * from a script var we haven't identified yet; until wired, bar shows
-     * whatever frame the entity script last set (typically 0 = full).
-     *
-     * Gated on `g_settings_anim_active & 1` (= HUD panel visible). Stage 5
-     * (Monter finale) sets this bit to 0 in play_demo_scene, so the pasek
-     * leftover from the previous stage (if any survived EntityListClearAll
-     * via the entry-chain script re-spawning) doesn't show during the
-     * ACME assembly cutscene. Same gate as the portrait + inventory paints
-     * above — pasek is a panel-scope overlay. */
+ * HUD panel at atlas-native (drawX, drawY) = (7, 403). The stage
+ * enter-script spawns this entity (id=101, asset="pasek#1.wyc" for
+ * stage 1); EntityRenderAll draws it at the same position BEFORE
+ * the panel paint, so panel.wyc frame 0 covers it. We re-paint it
+ * here AFTER panel so it stays visible.
+ *
+ * Frame index = health level 0..23 (0=full green, ~12=yellow, ~18=red,
+ * 23=empty). The entity's per-tick script (0x00423528) advances frame
+ * from a script var we haven't identified yet; until wired, bar shows
+ * whatever frame the entity script last set (typically 0 = full).
+ *
+ * Gated on `g_settings_anim_active & 1` (= HUD panel visible). Stage 5
+ * (Monter finale) sets this bit to 0 in play_demo_scene, so the pasek
+ * leftover from the previous stage (if any survived EntityListClearAll
+ * via the entry-chain script re-spawning) doesn't show during the
+ * ACME assembly cutscene. Same gate as the portrait + inventory paints
+ * above — pasek is a panel-scope overlay. */
     if (g_settings_anim_active & 1)
     {
         extern Entity *EntityListAt(int, int);
@@ -192,7 +192,7 @@ void PaintHudOverlay(void)
         }
     }
 
-    /* Held-item ghost — 1:1 port of FUN_004067C0 ghost branch. */
+    /* Held-item ghost — 1:1 port of ghost branch. */
     static int16_t  s_ghost_x = 0, s_ghost_y = 0;
     static uint16_t s_ghost_item = 0xFFFF;
     if (g_held_item != 0x26 && g_items_atlas &&

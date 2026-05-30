@@ -29,7 +29,7 @@ int InitializeDirectSound(void) { return 0; }
  * a 1-second placeholder splash so the user knows a cutscene would play.
  *
  * To get real playback, drop in a FLIC decoder (or use libavformat) and
- * blit frames into the back-buffer via PaintImageToBackbuffer().
+ * blit frames into the back-buffer via PaintImageToBackbuffer.
  */
 #include "wacki.h"
 #include <SDL.h>
@@ -97,10 +97,10 @@ struct MixChannel {
     int      active;       /* 1 = currently playing */
     uint32_t start_tick;   /* for SFX age-based stealing */
     /* T36 — per-channel stereo gain. 0..255 each, 128 = unity (1.0).
-     * Callback multiplies sample by gain/128, allowing per-source
-     * stereo pan derived from positional source/listener distance
-     * (SoundQueueMixForListener). Music + dialog default to 128/128
-     * (no spatial pan); SFX get gains computed at PlaySfx time. */
+ * Callback multiplies sample by gain/128, allowing per-source
+ * stereo pan derived from positional source/listener distance
+ * (SoundQueueMixForListener). Music + dialog default to 128/128
+ * (no spatial pan); SFX get gains computed at PlaySfx time. */
     uint8_t  gain_l;
     uint8_t  gain_r;
     char     name[64];     /* debug name */
@@ -121,7 +121,7 @@ static void mixer_callback(void *userdata, Uint8 *stream, int len)
     int n_samples = len / 2;        /* S16 = 2 bytes per sample slot */
 
     /* MIX_OUT_CHANS = 2 (stereo); each "frame" is 2 S16 samples.
-     * Number of frames = n_samples / 2. */
+ * Number of frames = n_samples / 2. */
     int n_frames = n_samples / MIX_OUT_CHANS;
 
     for (int c = 0; c < MIX_CHANNEL_COUNT; ++c) {
@@ -131,8 +131,8 @@ static void mixer_callback(void *userdata, Uint8 *stream, int len)
         Uint32 src_frame = ch->pos / (2 * MIX_OUT_CHANS);    /* in frames */
         Uint32 src_frame_end = ch->len / (2 * MIX_OUT_CHANS);
         /* T36: per-channel gain. 128 = identity. Anything else applies
-         * a multiplicative attenuation per sample. Cast to int so the
-         * intermediate (src * gain) doesn't overflow at gain=255. */
+ * a multiplicative attenuation per sample. Cast to int so the
+ * intermediate (src * gain) doesn't overflow at gain=255. */
         int gain_l = ch->gain_l;
         int gain_r = ch->gain_r;
         for (int f = 0; f < n_frames; ++f) {
@@ -203,7 +203,7 @@ static void mixer_assign(int idx, Uint8 *buf, Uint32 len, int loop,
     s_mix[idx].loop   = loop;
     s_mix[idx].active = (buf && len > 0) ? 1 : 0;
     /* Default to identity gain (no pan). Callers can override via
-     * mixer_set_pan after the channel is loaded. */
+ * mixer_set_pan after the channel is loaded. */
     s_mix[idx].gain_l = 128;
     s_mix[idx].gain_r = 128;
     extern uint32_t g_tick_counter;
@@ -237,8 +237,8 @@ static void mixer_stop_channel(int idx)
 /* ------------------------------------------------------------------------- *
  * Menu / background WAV music — now backed by mixer channel MIX_CHAN_MUSIC.
  *
- * 1:1 with HandleMainMenuClick case 0 → FUN_0040cab0(&DAT_0044a610,
- *   BuildAssetPath("Dane_01.dta", NULL), 1) → FUN_0040d380(handle).
+ * 1:1 with HandleMainMenuClick case 0 → (&DAT_0044a610,
+ * BuildAssetPath("Dane_01.dta", NULL), 1) → (handle).
  * ------------------------------------------------------------------------- */
 
 static int try_load_wav_at(const char *root, const char *name,
@@ -303,7 +303,7 @@ static int mixer_load_wav(const char *name, Uint8 **out_buf, Uint32 *out_len)
         native.format == MIX_OUT_FORMAT &&
         native.channels == MIX_OUT_CHANS) {
         /* Take a freshly malloc'd copy so caller can SDL_free it (WAV
-         * buffer must use SDL_FreeWAV; can't mix). */
+ * buffer must use SDL_FreeWAV; can't mix). */
         Uint8 *copy = (Uint8 *)SDL_malloc(native_len);
         if (!copy) {
             SDL_FreeWAV(native_buf);
@@ -327,7 +327,7 @@ static int mixer_load_wav(const char *name, Uint8 **out_buf, Uint32 *out_len)
         return 0;
     }
     /* CVT needs a buffer sized native_len * cvt.len_mult. Allocate fresh
-     * via SDL_malloc (so SDL_free can release it), copy native into it. */
+ * via SDL_malloc (so SDL_free can release it), copy native into it. */
     Uint32 buf_size = native_len * (cvt.len_mult ? cvt.len_mult : 1);
     Uint8 *buf = (Uint8 *)SDL_malloc(buf_size);
     if (!buf) {
@@ -354,11 +354,11 @@ static int mixer_load_wav(const char *name, Uint8 **out_buf, Uint32 *out_len)
  * remember the last track so the toggle-back-on path can resume it. */
 /* T103 fix — DAT_004551xx mapping per Ghidra plate comment on
  * LoadSaveStateOrInitialize @ 0x0040A5C0:
- *   DAT_0045511D — sfx (sound effects)        ← g_audio_sfx_enabled
- *   DAT_0045511E — music                      ← g_audio_music_enabled
- *   DAT_0045511F — (semantic under RE)         — kept as "sound_enabled"
- *                                                 = legacy master mute
- *   DAT_00455120 — voice                      ← g_audio_voice_enabled (NEW)
+ * DAT_0045511D — sfx (sound effects) ← g_audio_sfx_enabled
+ * DAT_0045511E — music ← g_audio_music_enabled
+ * DAT_0045511F — (semantic under RE) — kept as "sound_enabled"
+ * = legacy master mute
+ * DAT_00455120 — voice ← g_audio_voice_enabled (NEW)
  *
  * `g_audio_sound_enabled` is legacy from earlier port; functions as a
  * master mute (was mis-named "sfx" via DAT_00455122 — that's actually
@@ -384,7 +384,7 @@ void PlayMenuMusic(const char *dta_name, int loop)
         return;
     }
     /* Remember the last requested track so AudioSetMusicEnabled(1) can
-     * resume play after a mute-toggle. */
+ * resume play after a mute-toggle. */
     snprintf(s_last_music_name, sizeof s_last_music_name, "%s", dta_name);
     s_last_music_loop = loop ? 1 : 0;
 
@@ -405,7 +405,7 @@ void PlayMenuMusic(const char *dta_name, int loop)
             dta_name, len, loop ? 1 : 0, MIX_CHAN_MUSIC);
 }
 
-/* Toggle hook — called by Solund handler (FUN_0040ae90 port) when the
+/* Toggle hook — called by Solund handler ( port) when the
  * user clicks the music on/off button in the options menu. If muting
  * mid-play, stops the channel. If un-muting, re-issues PlayMenuMusic
  * with the last remembered track to resume. */
@@ -435,7 +435,7 @@ void AudioSetVoiceEnabled(int on)
     if (was && !on && s_mix_dev) mixer_stop_channel(MIX_CHAN_DIALOG);
 }
 
-/* Global sound mute (DAT_0045511F) — kills both music + SFX while clear,
+/* Global sound mute — kills both music + SFX while clear,
  * resumes music when set back on. */
 void AudioSetSoundEnabled(int on)
 {
@@ -451,8 +451,8 @@ void AudioSetSoundEnabled(int on)
 void TickMenuMusic(void)
 {
     /* Mixer callback handles loop natively — no per-frame top-up needed.
-     * Function kept as no-op for API compat (called from play_demo_scene
-     * frame loop). */
+ * Function kept as no-op for API compat (called from play_demo_scene
+ * frame loop). */
 }
 
 /* ------------------------------------------------------------------------- *
@@ -475,26 +475,26 @@ void PlaySfx(const char *wav_name);   /* fwd decl */
  * Per-asset frame-trigger sound table — 1:1 with Wacky.scr `[sampl]` tags.
  *
  * The original engine stores these per asset by parsing Wacky.scr at
- * LoadAssetFromDtaBase time (FUN_00409B60 → FindAnimationScript) and
- * then per ADVANCE_FRAME the walker calls FUN_00401100 → FUN_0040A1F0
+ * LoadAssetFromDtaBase time ( → FindAnimationScript) and
+ * then per ADVANCE_FRAME the walker calls → 
  * which looks up the current frame and plays the matching WAV via
- * DirectSound (FUN_0040D380).
+ * DirectSound.
  *
  * Our port doesn't yet parse `[sampl]` text — hard-code the stage-1
  * triggers extracted from `/tmp/dta-list/wacky.scr`. If the asset
- * lookup hits, we PlaySfx() that wav. Each entry: (asset_basename,
+ * lookup hits, we PlaySfx that wav. Each entry: (asset_basename,
  * frame_index, wav_filename). Multiple entries per asset allowed.
  *
  * Source: wacky.scr lines 27-49 (stage-1 maluch.pic [komnata]). */
 /* frame_end: 0xFFFF for `(N,)` (single-shot trigger, no looping); a real
  * frame index for `(N,M)` (loop wav from frame_start, stop at frame_end).
- * 1:1 with original FrameSfxEntry (start, end) ushort pair stored by
- * FUN_0040A1B0 — at parse, M-absent becomes sVar11=-1=0xFFFF. */
+ * FrameSfxEntry (start, end) ushort pair stored by
+ * — at parse, M-absent becomes sVar11=-1=0xFFFF. */
 struct FrameSfxEntry { const char *asset; int frame_start; int frame_end; const char *wav; };
 
 /* Dynamic runtime table populated by ParseSamplTagsForKomnata from the
  * current [komnata]N section of Wacky.scr. Replaces the hand-transcribed
- * table from earlier port — proper 1:1 port of FUN_00409970 [sampl]
+ * table from earlier port — proper 1:1 port of [sampl]
  * tag parser. Each entry: {asset (heap str), frame, wav (heap str)}. */
 #define DYNAMIC_SFX_MAX 256
 static struct FrameSfxEntry g_dynamic_sfx[DYNAMIC_SFX_MAX];
@@ -505,7 +505,7 @@ static int  g_dynamic_sfx_strpool_used = 0;
 static const char *strpool_intern(const char *s, size_t n)
 {
     /* Dedup — return existing entry if matched (= literal pointer
-     * equality for stable TriggerFrameSfx debounce keying). */
+ * equality for stable TriggerFrameSfx debounce keying). */
     int i = 0;
     while (i < g_dynamic_sfx_strpool_used) {
         const char *cur = g_dynamic_sfx_strpool + i;
@@ -528,7 +528,7 @@ void ResetDynamicSfxTable(void)
     g_dynamic_sfx_strpool_used = 0;
 }
 
-/* ParseSamplTagsForKomnata — port of FUN_00409970's [sampl] tag parser.
+/* ParseSamplTagsForKomnata — port of 's [sampl] tag parser.
  *
  * Walks a buffer between `start` and `end` (current Wacky.scr [komnata]
  * section per FindScriptByStageAndRoom). Tracks current [animacja] asset
@@ -536,11 +536,11 @@ void ResetDynamicSfxTable(void)
  * and registers (asset, frame, wav) triples in g_dynamic_sfx[].
  *
  * Token rules:
- *   - "[animacja] NAME.wyc" sets current asset (case-preserved, NUL-term).
- *   - "[sampl] WAV1 WAV2 ... (F,)" / "(F,M)" — register each WAV at each F.
- *   - end of section = stop. End of file = stop.
+ * - "[animacja] NAME.wyc" sets current asset (case-preserved, NUL-term).
+ * - "[sampl] WAV1 WAV2 ... (F,)" / "(F,M)" — register each WAV at each F.
+ * - end of section = stop. End of file = stop.
  *
- * 1:1 with original: per-frame random-pool semantics via multiple
+ *: per-frame random-pool semantics via multiple
  * entries with same (asset, frame). The M (end frame) in (N,M) is
  * IGNORED (our TriggerFrameSfx doesn't honor "stop at M" — the WAV
  * plays naturally). */
@@ -594,7 +594,7 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
             memcpy(cur_asset, name_start, n);
             cur_asset[n] = 0;
             /* Normalise to lowercase (Wacky.scr uses mixed case but
-             * AnimAsset.name from LoadAssetFromDtaBase is lowercased). */
+ * AnimAsset.name from LoadAssetFromDtaBase is lowercased). */
             for (size_t i = 0; i < n; ++i)
                 if (cur_asset[i] >= 'A' && cur_asset[i] <= 'Z')
                     cur_asset[i] = (char)(cur_asset[i] + 32);
@@ -603,11 +603,11 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
         }
 
         /* Look for [sampl] tag (tolerant of `[ sampl]` typos, must
-         * follow an [animacja]). */
+ * follow an [animacja]). */
         if (cur_asset_set && match_bracket_tag(&p, end, "sampl")) {
             /* Parse rest of line. Collect tokens until '(' (= start
-             * of frame trigger list), then per (N,M) tuple register
-             * each WAV at frame N. */
+ * of frame trigger list), then per (N,M) tuple register
+ * each WAV at frame N. */
             const char *wavs[8];
             char wav_buf[8][32];
             int wav_count = 0;
@@ -632,12 +632,12 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
                     ++wav_count;
                 }
             }
-            /* Parse (N,M) tuples — 1:1 with FUN_00409B60 number parser:
-             * digits → N (start). Comma then digits → M (end). Missing
-             * digits → -1 (= 0xFFFF for ushort). FUN_00409B60 actually
-             * REQUIRES the comma to add the entry at all (no comma →
-             * skip), but shipped Wacky.scr never uses `(N)` so we keep
-             * the original-equivalent path. */
+            /* Parse (N,M) tuples number parser:
+ * digits → N (start). Comma then digits → M (end). Missing
+ * digits → -1 (= 0xFFFF for ushort). actually
+ * REQUIRES the comma to add the entry at all (no comma →
+ * skip), but shipped Wacky.scr never uses `(N)` so we keep
+ * the original-equivalent path. */
             while (p < end && *p == '(') {
                 ++p;
                 while (p < end && (*p == ' ' || *p == '\t')) ++p;
@@ -695,41 +695,41 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
 
 /* Static fallback table REMOVED (B4 from REVIEW-2026-05) — the D7
  * `Wacky.scr [sampl]` parser (ParseSamplTagsForKomnata, called from
- * LoadKomnata @ FUN_00402A50) populates g_dynamic_sfx[] with every
+ * LoadKomnata @ ) populates g_dynamic_sfx[] with every
  * (asset, frame, wav) triple needed by the current room. The only
  * code path that triggers per-frame SFX is the per-entity VM tick
  * which can't fire before LoadKomnata has spawned any entities — so
  * the dynamic table is always populated before TriggerFrameSfx fires.
  * No safety net needed. */
 
-/* 1:1 port of FUN_0040A1F0 "sample table tick":
+/* 1:1 port of "sample table tick":
  *
- *   void FUN_0040A1F0(SampleTable *t, uint frame) {
- *     if (t->entry_count == 0 || t->wav_count == 0) return;
- *     int random_idx = FUN_00410F50(t->wav_count);   // 0..count-1
- *     for (entry in t->frame_entries) {
- *       if (entry.start == frame) { ... }
- *       else if (entry.end == frame) {
- *         if (t->cur_wav == -1) return;
- *         FUN_0040D400(t->wav_state[t->cur_wav].hash);  // stop
- *         t->wav_state[t->cur_wav].playing_flag = 0;
- *         t->cur_wav = -1; return;
- *       }
- *     }
- *     // start_frame matched
- *     if (random_idx != t->cur_wav) {
- *       if (t->cur_wav != -1) {                        // stop current
- *         FUN_0040D400(t->wav_state[t->cur_wav].hash);
- *         t->wav_state[t->cur_wav].playing_flag = 0;
- *       }
- *       t->cur_wav = random_idx;
- *     }
- *     SampleEntry *w = &t->wav_state[random_idx];
- *     if (w->channel == 0 || w->playing_flag == 0) {   // not blocked
- *       if (t->enabled) FUN_0040D380(w->hash);         // play
- *       w->playing_flag = 1;
- *     }
- *   }
+ * void (SampleTable *t, uint frame) {
+ * if (t->entry_count == 0 || t->wav_count == 0) return;
+ * int random_idx = (t->wav_count); // 0..count-1
+ * for (entry in t->frame_entries) {
+ * if (entry.start == frame) { ... }
+ * else if (entry.end == frame) {
+ * if (t->cur_wav == -1) return;
+ * (t->wav_state[t->cur_wav].hash); // stop
+ * t->wav_state[t->cur_wav].playing_flag = 0;
+ * t->cur_wav = -1; return;
+ * }
+ * }
+ * // start_frame matched
+ * if (random_idx != t->cur_wav) {
+ * if (t->cur_wav != -1) { // stop current
+ * (t->wav_state[t->cur_wav].hash);
+ * t->wav_state[t->cur_wav].playing_flag = 0;
+ * }
+ * t->cur_wav = random_idx;
+ * }
+ * SampleEntry *w = &t->wav_state[random_idx];
+ * if (w->channel == 0 || w->playing_flag == 0) { // not blocked
+ * if (t->enabled) (w->hash); // play
+ * w->playing_flag = 1;
+ * }
+ * }
  *
  * Key invariant: the play guard at 0x40A292 is `byte+3 == 0 ||
  * byte+2 == 0`. byte+2 (playing_flag) is sticky-on-play, cleared
@@ -755,10 +755,10 @@ struct SfxState {
     const char *wav;
     uint8_t     playing_flag; /* mirror of wav_state[].playing_flag */
     int8_t      channel;      /* mixer channel this WAV is currently on,
-                               * or -1 if free / never played. Used to
-                               * stop in flight when cur_wav swaps to a
-                               * different pool entry — 1:1 with the
-                               * original's FUN_0040D400 stop call. */
+ * or -1 if free / never played. Used to
+ * stop in flight when cur_wav swaps to a
+ * different pool entry — 1:1 with the
+ * original's stop call. */
 };
 static struct SfxState g_sfx_state[SFX_STATE_MAX];
 static int             g_sfx_state_count = 0;
@@ -766,20 +766,20 @@ static int             g_sfx_cur_wav     = -1;  /* mirror of t->cur_wav */
 static const char     *g_sfx_cur_asset   = NULL;
 
 /* Reset all SFX state. Mirrors what the original does on scene transition
- * (FUN_00405F80 + FUN_00402DB0): every asset on the komnata is freed →
- * FUN_0040A150 stops every wav in each asset's SampleTable.
+ * (+ ): every asset on the komnata is freed →
+ * stops every wav in each asset's SampleTable.
  *
  * Three responsibilities:
- *   1. Stop any still-playing mixer channels that g_sfx_state[] points to
- *      — looping (N,M) wavs whose end-frame the previous komnata never
- *      ticked (e.g. player leaves the room mid-rakieta) would otherwise
- *      keep mixing into the next komnata's audio.
- *   2. Zero the slot array. Without this the (asset, wav) pointers in
- *      g_sfx_state[] become dangling — ResetDynamicSfxTable() is called
- *      right after us in LoadKomnata and clears g_dynamic_sfx_strpool,
- *      so any retained pointer is unsafe to dereference.
- *   3. Reset the global cur_wav/cur_asset mirror of FUN_0040A1F0's
- *      per-table fields (port shortcut). */
+ * 1. Stop any still-playing mixer channels that g_sfx_state[] points to
+ * — looping (N,M) wavs whose end-frame the previous komnata never
+ * ticked (e.g. player leaves the room mid-rakieta) would otherwise
+ * keep mixing into the next komnata's audio.
+ * 2. Zero the slot array. Without this the (asset, wav) pointers in
+ * g_sfx_state[] become dangling — ResetDynamicSfxTable is called
+ * right after us in LoadKomnata and clears g_dynamic_sfx_strpool,
+ * so any retained pointer is unsafe to dereference.
+ * 3. Reset the global cur_wav/cur_asset mirror of 's
+ * per-table fields (port shortcut). */
 void ResetFrameSfxState(void)
 {
     for (int i = 0; i < g_sfx_state_count; ++i) {
@@ -828,16 +828,16 @@ static struct SfxState *sfx_state_for(const char *asset, int frame, const char *
 
 extern uint32_t g_tick_counter;
 
-/* Pass 1 — end-frame handling. 1:1 with FUN_0040A1F0 inner loop @ 0x40A23E:
- *   if (entry.end == frame) { STOP cur_wav; flag = 0; cur_wav = -1; return; }
+/* Pass 1 — end-frame handling. inner loop @ 0x40A23E:
+ * if (entry.end == frame) { STOP cur_wav; flag = 0; cur_wav = -1; return; }
  * `(N,M)` entries in Wacky.scr establish a (start=N, stop=M) range where
  * the wav loops between N and M. Hitting M stops the loop. Without this,
  * marsz.wav / rakiet1a.wav play once and fall silent halfway through
  * the rakieta.wyc animation (frames 1..464 needing ~30s of audio from
  * a 10s wav). */
-/* 1:1 with FUN_0040A150 (SampleTable destructor, called from
- * FUN_00401010 when an animation asset is freed): iterates the wav
- * pool and calls FUN_0040D460 to stop each currently-playing wav.
+/* (SampleTable destructor, called from
+ * when an animation asset is freed): iterates the wav
+ * pool and calls to stop each currently-playing wav.
  *
  * Our port mirror: stop every currently-playing SfxState whose asset
  * matches, and zero its flag. Called when an asset slot is overwritten
@@ -853,7 +853,7 @@ void StopAllSfxForAsset(const char *asset_name)
         if (st->channel >= MIX_CHAN_SFX_START &&
             st->channel < MIX_CHANNEL_COUNT) {
             /* Only stop if this channel is still playing OUR wav —
-             * the slot may have been stolen for another sound. */
+ * the slot may have been stolen for another sound. */
             SDL_LockAudioDevice(s_mix_dev);
             int ours = s_mix[st->channel].active &&
                        strcmp(s_mix[st->channel].name, st->wav) == 0;
@@ -896,10 +896,10 @@ void TriggerFrameSfx(const char *asset_name, int frame)
     sfx_handle_end_frames(asset_name, frame);
 
     /* Pass 2: collect random pool for (asset, start=frame). 1:1 with
-     * `[sampl] WAV1 WAV2 .. (F,)` semantics: at frame F, pick one of
-     * WAV1..WAVk at random. Also track frame_end of the picked entry
-     * → if non-0xFFFF we play with loop=1 so the wav loops until
-     * sfx_handle_end_frames stops it. */
+ * `[sampl] WAV1 WAV2 .. (F,)` semantics: at frame F, pick one of
+ * WAV1..WAVk at random. Also track frame_end of the picked entry
+ * → if non-0xFFFF we play with loop=1 so the wav loops until
+ * sfx_handle_end_frames stops it. */
     const char *pool[8];
     int pool_end[8];
     int n = 0;
@@ -913,14 +913,14 @@ void TriggerFrameSfx(const char *asset_name, int frame)
     }
     if (n == 0) return;
 
-    /* 1:1 with FUN_00410F50(count) — uniform random in [0, count). */
+    /*(count) — uniform random in [0, count). */
     int random_idx = (int)WackiRand((uint16_t)n);
     const char *wav = pool[random_idx];
 
-    /* 1:1 with the FUN_0040A1F0 cur_wav swap logic:
-     * if a different wav from the pool is currently "playing" for
-     * this asset, clear its flag AND stop the mixer channel it's on
-     * (1:1 with the original's FUN_0040D400 stop call). */
+    /* 1:1 with the cur_wav swap logic:
+ * if a different wav from the pool is currently "playing" for
+ * this asset, clear its flag AND stop the mixer channel it's on
+ * ('s stop call). */
     if (g_sfx_cur_asset == asset_name && g_sfx_cur_wav != random_idx) {
         if (g_sfx_cur_wav >= 0 && g_sfx_cur_wav < n) {
             struct SfxState *prev = sfx_state_for(asset_name, frame, pool[g_sfx_cur_wav]);
@@ -936,23 +936,23 @@ void TriggerFrameSfx(const char *asset_name, int frame)
     g_sfx_cur_asset = asset_name;
     g_sfx_cur_wav   = random_idx;
 
-    /* Play guard — 1:1 with FUN_0040A1F0 @ 0x0040A292:
-     *   MOV CL, [wav_state[i] + 0x3]   ; "currently-playing" indicator
-     *   TEST CL, CL                    ; JZ → play
-     *   MOV CL, [wav_state[i] + 0x2]   ; sticky play_flag
-     *   TEST CL, CL                    ; JNZ → skip; else play
-     *
-     * Decision: play iff `byte+3 == 0 || byte+2 == 0` — i.e. SKIP only
-     * when the wav is BOTH currently still playing AND has fired at
-     * least once. The sticky `byte+2` alone does NOT block replay;
-     * it just records that we've started this trigger before.
-     *
-     * In the original, `byte+3` is set by FUN_0040D380 (DSound start)
-     * and cleared by DSound notification when the buffer drains.
-     * Our port mirror: `byte+3 != 0` ≡ "the same wav is still actively
-     * playing on the mixer channel we last assigned it to". After the
-     * SFX naturally ends (mixer callback flips `ch->active = 0`), the
-     * condition flips and the next frame-trigger replays. */
+    /* Play guard —:
+ * MOV CL, [wav_state[i] + 0x3] ; "currently-playing" indicator
+ * TEST CL, CL ; JZ → play
+ * MOV CL, [wav_state[i] + 0x2] ; sticky play_flag
+ * TEST CL, CL ; JNZ → skip; else play
+ *
+ * Decision: play iff `byte+3 == 0 || byte+2 == 0` — i.e. SKIP only
+ * when the wav is BOTH currently still playing AND has fired at
+ * least once. The sticky `byte+2` alone does NOT block replay;
+ * it just records that we've started this trigger before.
+ *
+ * In the original, `byte+3` is set by (DSound start)
+ * and cleared by DSound notification when the buffer drains.
+ * Our port mirror: `byte+3 != 0` ≡ "the same wav is still actively
+ * playing on the mixer channel we last assigned it to". After the
+ * SFX naturally ends (mixer callback flips `ch->active = 0`), the
+ * condition flips and the next frame-trigger replays. */
     struct SfxState *st = sfx_state_for(asset_name, frame, wav);
     if (!st) return;
     int currently_playing = 0;
@@ -967,10 +967,10 @@ void TriggerFrameSfx(const char *asset_name, int frame)
     if (st->playing_flag && currently_playing) return;
     st->playing_flag = 1;
     /* PlaySfxLoopAndGetChannel returns the channel index so we can
-     * (a) stop-in-flight when cur_wav swaps and
-     * (b) detect drain via s_mix[channel].active above.
-     * loop=1 for (N,M) entries — the wav loops until the M-frame
-     * trigger calls sfx_handle_end_frames → mixer_stop_channel. */
+ * (a) stop-in-flight when cur_wav swaps and
+ * (b) detect drain via s_mix[channel].active above.
+ * loop=1 for (N,M) entries — the wav loops until the M-frame
+ * trigger calls sfx_handle_end_frames → mixer_stop_channel. */
     int want_loop = (pool_end[random_idx] != 0xFFFF);
     extern int PlaySfxLoopAndGetChannel(const char *wav_name, int loop);
     st->channel = (int8_t)PlaySfxLoopAndGetChannel(wav, want_loop);
@@ -1028,7 +1028,7 @@ int PlaySfxPannedAndGetChannel(const char *wav_name,
     }
     mixer_assign(slot, buf, len, 0, wav_name);
     /* mixer_assign sets gain to 128/128 (identity); override here for
-     * positional pan. Lock once for atomic L+R update. */
+ * positional pan. Lock once for atomic L+R update. */
     SDL_LockAudioDevice(s_mix_dev);
     s_mix[slot].gain_l = gain_l;
     s_mix[slot].gain_r = gain_r;
@@ -1067,7 +1067,7 @@ uint32_t PlayDialogLine(const char *wav_name)
 {
     if (!wav_name) return 0;
     /* T103 — voice gate: if user disabled voice in Solund, drop the
-     * sample silently. Caller still proceeds with text/animation. */
+ * sample silently. Caller still proceeds with text/animation. */
     if (!g_audio_voice_enabled || !g_audio_sound_enabled) return 0;
     if (!mixer_ensure_open()) return 0;
     Uint8 *buf = NULL; Uint32 len = 0;
