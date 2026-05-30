@@ -162,6 +162,11 @@ typedef struct Entity {
                                     *         read by InitEntityBitmap). */
 } Entity;
 
+/* Byte-offset accessors + Entity field offset constants. Defined in a
+ * separate header so any TU that needs to address Entity fields by
+ * offset can pull them in without dragging the whole umbrella. */
+#include "entity_offsets.h"
+
 /* Pointer-slot helpers (kept for future entity-walker port). */
 uint32_t ent_ptr_intern(void *p);
 void    *ent_ptr_resolve(uint32_t slot);

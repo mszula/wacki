@@ -13,17 +13,8 @@
 
 #include <stdint.h>
 
-/* ---- Entity byte-offset accessors --------------------------------- *
- *
- * The script VMs (both main and per-entity) address Entity fields by
- * raw byte offset rather than by named C struct field — the original
- * engine's bytecode hard-codes these offsets and we mirror that
- * faithfully. EOFF reads/writes a value of type T at offset `o` from
- * the entity base; EOFF8 is a shorthand for byte access.
- *
- * Used by every actor sub-module that touches Entity state. */
-#define EOFF(e, o, T) (*(T *)((uint8_t *)(e) + (o)))
-#define EOFF8(e, o)   (*((uint8_t *)(e) + (o)))
+/* EOFF / EOFF8 and the ENT_OFF_* constants now live in
+ * include/entity_offsets.h (auto-included via wacki.h). */
 
 /* ---- registration table -------------------------------------------- *
  *
