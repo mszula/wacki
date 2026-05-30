@@ -38,10 +38,10 @@ extern void    RegisterEntityForUpdate(Entity *e, uint16_t kind, uint16_t id);
 extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);
 extern const void *xlat_binary_ptr(uint32_t addr);
 
-/* 1:1 with RunScriptInterpreter cases 0x2e and 0x2f, both of which
+/*, both of which
  * call (id, click_ptr, target_table) where target_table is
- * &DAT_0044e6d8 (op 0x2E, "mask" verb-list)
- * &DAT_0044e700 (op 0x2F, "verb" mask-list)
+ * &mask_list_head (op 0x2E, "mask" verb-list)
+ * &verb_mask_list_head (op 0x2F, "verb" mask-list)
  *
  * : walks every frame of the asset
  * registered as kind=1 with the given id; for each frame, allocates a
@@ -156,7 +156,7 @@ void ScriptCallRegMaskList(uint16_t id, uint32_t click_ptr, int verb_table)
         /* Asset ref kept on the mask for renderers (deferred). */
         *(uint32_t *)(mb + 0x28) = ent_ptr_intern((void *)a);
         *(uint16_t *)(mb + 0x30) = f;                    /* frame */
-        /* Walk-behind sort key — foot_y at +0x26 (1:1 with cmp_entity_y
+        /* Walk-behind sort key — foot_y at +0x26 (
  * convention). Without this the mask would fall into the
  * "+0x26 == 0 → fallback to +0x24" branch (anchor Y is also 0
  * for un-positioned masks) and end up at the back of the z-stack. */

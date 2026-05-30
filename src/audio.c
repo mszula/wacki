@@ -237,7 +237,7 @@ static void mixer_stop_channel(int idx)
 /* ------------------------------------------------------------------------- *
  * Menu / background WAV music — now backed by mixer channel MIX_CHAN_MUSIC.
  *
- * 1:1 with HandleMainMenuClick case 0 → (&DAT_0044a610,
+ * → (&g_persp_band_count,
  * BuildAssetPath("Dane_01.dta", NULL), 1) → (handle).
  * ------------------------------------------------------------------------- */
 
@@ -354,19 +354,19 @@ static int mixer_load_wav(const char *name, Uint8 **out_buf, Uint32 *out_len)
  * remember the last track so the toggle-back-on path can resume it. */
 /* T103 fix — DAT_004551xx mapping per Ghidra plate comment on
  * LoadSaveStateOrInitialize @ 0x0040A5C0:
- * DAT_0045511D — sfx (sound effects) ← g_audio_sfx_enabled
- * DAT_0045511E — music ← g_audio_music_enabled
- * DAT_0045511F — (semantic under RE) — kept as "sound_enabled"
+ * speech_y_offset — sfx (sound effects) ← g_audio_sfx_enabled
+ * speech_text_attr — music ← g_audio_music_enabled
+ * speech_color_index — (semantic under RE) — kept as "sound_enabled"
  * = legacy master mute
- * DAT_00455120 — voice ← g_audio_voice_enabled (NEW)
+ * fade_target — voice ← g_audio_voice_enabled (NEW)
  *
  * `g_audio_sound_enabled` is legacy from earlier port; functions as a
- * master mute (was mis-named "sfx" via DAT_00455122 — that's actually
+ * master mute (was mis-named "sfx" via fade_progress — that's actually
  * dialogues_on). Kept for compatibility with existing call sites. */
-int      g_audio_music_enabled = 1;       /* DAT_0045511E mirror */
-int      g_audio_sfx_enabled   = 1;       /* DAT_0045511D mirror — sfx */
-int      g_audio_voice_enabled = 1;       /* DAT_00455120 mirror — dialog audio */
-int      g_audio_sound_enabled = 1;       /* DAT_0045511F mirror (legacy global) */
+int      g_audio_music_enabled = 1;       /* speech_text_attr mirror */
+int      g_audio_sfx_enabled   = 1;       /* speech_y_offset mirror — sfx */
+int      g_audio_voice_enabled = 1;       /* fade_target mirror — dialog audio */
+int      g_audio_sound_enabled = 1;       /* speech_color_index mirror (legacy global) */
 static char  s_last_music_name[64] = "";
 static int   s_last_music_loop    = 0;
 
@@ -472,7 +472,7 @@ void TickMenuMusic(void)
 void PlaySfx(const char *wav_name);   /* fwd decl */
 
 /* ------------------------------------------------------------------------- *
- * Per-asset frame-trigger sound table — 1:1 with Wacky.scr `[sampl]` tags.
+ * Per-asset frame-trigger sound table —scr `[sampl]` tags.
  *
  * The original engine stores these per asset by parsing Wacky.scr at
  * LoadAssetFromDtaBase time ( → FindAnimationScript) and
@@ -494,7 +494,7 @@ struct FrameSfxEntry { const char *asset; int frame_start; int frame_end; const 
 
 /* Dynamic runtime table populated by ParseSamplTagsForKomnata from the
  * current [komnata]N section of Wacky.scr. Replaces the hand-transcribed
- * table from earlier port — proper 1:1 port of [sampl]
+ * table from earlier port — proper
  * tag parser. Each entry: {asset (heap str), frame, wav (heap str)}. */
 #define DYNAMIC_SFX_MAX 256
 static struct FrameSfxEntry g_dynamic_sfx[DYNAMIC_SFX_MAX];
@@ -702,7 +702,7 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
  * the dynamic table is always populated before TriggerFrameSfx fires.
  * No safety net needed. */
 
-/* 1:1 port of "sample table tick":
+/*
  *
  * void (SampleTable *t, uint frame) {
  * if (t->entry_count == 0 || t->wav_count == 0) return;
@@ -757,7 +757,7 @@ struct SfxState {
     int8_t      channel;      /* mixer channel this WAV is currently on,
  * or -1 if free / never played. Used to
  * stop in flight when cur_wav swaps to a
- * different pool entry — 1:1 with the
+ * different pool entry —
  * original's stop call. */
 };
 static struct SfxState g_sfx_state[SFX_STATE_MAX];
@@ -895,7 +895,7 @@ void TriggerFrameSfx(const char *asset_name, int frame)
     /* Pass 1: stop any (N,M) loops whose M matches this frame. */
     sfx_handle_end_frames(asset_name, frame);
 
-    /* Pass 2: collect random pool for (asset, start=frame). 1:1 with
+    /* Pass 2: collect random pool for (asset, start=frame).
  * `[sampl] WAV1 WAV2 .. (F,)` semantics: at frame F, pick one of
  * WAV1..WAVk at random. Also track frame_end of the picked entry
  * → if non-0xFFFF we play with loop=1 so the wav loops until
@@ -917,7 +917,7 @@ void TriggerFrameSfx(const char *asset_name, int frame)
     int random_idx = (int)WackiRand((uint16_t)n);
     const char *wav = pool[random_idx];
 
-    /* 1:1 with the cur_wav swap logic:
+    /*:
  * if a different wav from the pool is currently "playing" for
  * this asset, clear its flag AND stop the mixer channel it's on
  * ('s stop call). */

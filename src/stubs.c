@@ -21,9 +21,9 @@
  * (g_tick_counter, g_lmb_handled, g_stage_table, …), script.c
  * (g_active_actor, g_perspective_*) and assets.c (g_persp_band_count).
  */
-uint32_t  g_entity_state[0x11C];        /* DAT_00449D28 */
-uint32_t  g_scene_snapshot[0x1E];       /* DAT_00443332 */
-int16_t   g_persp_profile[0x22*2];      /* DAT_0044E5F8 */
+uint32_t  g_entity_state[0x11C];        /* g_entity_state */
+uint32_t  g_scene_snapshot[0x1E];       /* g_inventory */
+int16_t   g_persp_profile[0x22*2];      /* g_persp_profile */
 
 /* g_next_cd_check removed — rule #7. */
 
@@ -42,21 +42,21 @@ int16_t   g_persp_profile[0x22*2];      /* DAT_0044E5F8 */
 
 /* LoadKomnata moved to src/scene/komnata.c. */
 
-/* ActorWalkToBlocking — 1:1 with op 0x10/0x11/0x12 wait-for-walk
+/* ActorWalkToBlocking —/0x11/0x12 wait-for-walk
  * loop from Ghidra @ RunScriptInterpreter 0x00407820 case 0x10:
  *
  * if (actor[+0x22] != tx || actor[+0x24] != ty) {
- * DAT_0044e6a4 = idx; // swap active to this actor
- * DAT_0044e5ac = 1; // synthesize click pending
- * DAT_0044e5a4 = 1; // synthesize walker-bind flag
- * DAT_0044e570 = -1; // walk-target id reset
+ * g_active_actor = idx; // swap active to this actor
+ * g_panel_cursor_redirect2 = 1; // synthesize click pending
+ * g_lmb_handled = 1; // synthesize walker-bind flag
+ * walk_target_id = -1; // walk-target id reset
  * actor[+0x4C] = 0; actor[+0x50] = 0;
  * UpdateActorMovement(tx, ty); // binds walker via standard path
- * DAT_0044e6a4 = saved_active;
+ * g_active_actor = saved_active;
  * do {
- * DAT_0044e5ac = 0; DAT_0044e5a4 = 0;
+ * g_panel_cursor_redirect2 = 0; g_lmb_handled = 0;
  * ProcessGameFrameTick;
- * } while (actor[+0x4C] != 0 || actor[+0x50] != 0 || DAT_0044e570 != -1);
+ * } while (actor[+0x4C] != 0 || actor[+0x50] != 0 || walk_target_id != -1);
  * }
  *
  * EACH per-entity VM tick inside ProcessGameFrameTick advances the
@@ -73,28 +73,28 @@ int16_t   g_persp_profile[0x22*2];      /* DAT_0044E5F8 */
 extern int  BindActorWalker(int actor_idx, int target_x, int target_y);
 extern int  PlatformShouldQuit(void);
 
-/* DAT_0044E448 — komnata flag bits (set from komnata table entry[+4]
+/* g_settings_anim_active — komnata flag bits (set from komnata table entry[+4]
  * inside / LoadKomnata):
  * bit 0 = panel visible (read by PanelHitTest)
  * bit 1 = actors active (read by actor.c — UpdateActorMovement gate)
  * bit 2 = link the kind=3/4 default entities (cursor + krazek)
  * Default is 2 (actors-only) so the menu/cutscene path doesn't render
  * the panel; LoadKomnata raises bit 0 for in-game rooms. */
-uint16_t  g_settings_anim_active = 2;   /* DAT_0044E448 — komnata flags
+uint16_t  g_settings_anim_active = 2;   /* g_settings_anim_active — komnata flags
  * (T121: u16 not u8 — high bits
  * 8-15 needed by
  * ScriptCallBgMaskSetup perspective
  * band count `(flags & 0xff02) << 1`). */
-uint16_t  g_active_target_y = 0;        /* DAT_0044E5A8 */
+uint16_t  g_active_target_y = 0;        /* g_active_target_y */
 uint16_t  g_selected_save_slot = 0;
-int       g_cd_drive_letter_present = 1;/* DAT_00475A54 */
+int       g_cd_drive_letter_present = 1;/* g_cd_drive_letter_present */
 
 void     *g_dialogues_obj = NULL;
 void     *g_scripts_obj   = NULL;
 void     *g_items_obj     = NULL;
-AnimAsset *g_panel_cursor = NULL;       /* DAT_0044E698 */
-AnimAsset *g_panel_asset  = NULL;       /* DAT_00453744 — stage panel (panel.wyc) */
-AnimAsset *g_items_atlas  = NULL;       /* DAT_0044E6AC — przedm.wyc icons */
+AnimAsset *g_panel_cursor = NULL;       /* g_panel_cursor */
+AnimAsset *g_panel_asset  = NULL;       /* g_panel_asset — stage panel (panel.wyc) */
+AnimAsset *g_items_atlas  = NULL;       /* g_items_atlas — przedm.wyc icons */
 Entity   *g_actor[2]      = { NULL, NULL };
 
 /* g_hover_scene_verb — written by ClickHitTest; read by cursor-state
@@ -197,11 +197,11 @@ extern uint8_t  g_palette_rgb[256*3];
  * default to ~16 ms (60 fps) which matches our SDL pacing. */
 uint32_t g_frame_delta_ms = 16;
 
-/* Frame delta in 10 ms TICKS — 1:1 with DAT_0044E578 in the PE. The
+/* Frame delta in 10 ms TICKS — The
  * original game arms timeSetEvent (call site at 0x00403D84) with a 10 ms
- * periodic timer whose ISR does `INC DAT_0044E454`. That
- * counter is sampled in into DAT_0044E578 = (now - prev)
- * 10 ms units. EVERY in-PE site that reads DAT_0044E578 (cursor anim
+ * periodic timer whose ISR does `INC g_tick_counter`. That
+ * counter is sampled in into g_frame_delta_ticks = (now - prev)
+ * 10 ms units. EVERY in-PE site that reads g_frame_delta_ticks (cursor anim
  * accumulator, entity VM frame countdown +0x3C, dialog/prop timer, op
  * 0x14 WAIT_MS countdown, op 0x26/0x3D anim-frame waits, dialog choice
  * dismiss) expects this unit, not real milliseconds. Driving them with
@@ -220,11 +220,11 @@ uint16_t g_frame_delta_ticks = 1;
  * (ScriptCallSoundPlay, ScriptCallSoundStop) moved to
  * src/audio/sound_queue.c. */
 
-/* Palette fade machinery — 1:1 port of cases 0x48/0x49/0x4A.
+/* Palette fade machinery
  *
- * case 0x48 (full fade): DAT_004549E0 = 0; DAT_00455000 = step;
- * load target into DAT_00451DC8;
- * zero DAT_00454A00 work buffer.
+ * case 0x48 (full fade): fade_progress_alt = 0; fade_step_alt = step;
+ * load target into fade_target_buf;
+ * zero fade_source_snapshot work buffer.
  * case 0x49 (step): if (progress < 100) {
  * progress += step;
  * (work, target, out, progress%);
@@ -235,15 +235,15 @@ uint16_t g_frame_delta_ticks = 1;
  * case 0x4A (instant?): similar to 0x48 but without progress reset.
  *
  * linearly interpolates each palette byte between source
- * (DAT_00454A00, snapshot of pal at fade start) and target
- * by progress/100, writing result to DAT_00454D00.
+ * (fade_source_snapshot, snapshot of pal at fade start) and target
+ * by progress/100, writing result to live_palette.
  *
  * Port state mirrors:
- * g_palette_rgb = DAT_00454D00 / live pal (256 entries × 3 RGB)
- * s_pal_fade_source = DAT_00454A00 (snapshot at fade start)
- * s_pal_fade_target = DAT_00451DC8 (loaded by case 0x48)
- * s_pal_fade_progress = DAT_004549E0 (0..100)
- * s_pal_fade_step = DAT_00455000 (per-step advance) */
+ * g_palette_rgb = live_palette / live pal (256 entries × 3 RGB)
+ * s_pal_fade_source = fade_source_snapshot (snapshot at fade start)
+ * s_pal_fade_target = fade_target_buf (loaded by case 0x48)
+ * s_pal_fade_progress = fade_progress_alt (0..100)
+ * s_pal_fade_step = fade_step_alt (per-step advance) */
 /* Palette fade (ScriptCallPalLoad + ScriptCallPalFadeStep) moved to
  * src/script_bridge/palette.c. */
 
@@ -268,7 +268,7 @@ extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);  /* */
 extern const void *xlat_binary_ptr(uint32_t);
 
 /* ------------------------------------------------------------------------- *
- * SpawnActorEntity — 1:1 with op 0x30 SPAWN code path used for Ebek/Fjej.
+ * SpawnActorEntity — used for Ebek/Fjej.
  *
  * Original engine pre-spawns both actors at game start with their atlas
  * (ebek.wyc / fjej.wyc) bound and verb_id = 1/2 in the click payload, so

@@ -15,7 +15,7 @@
  * +14 WORD off_pixel_table (DWORD-of-offsets table; each → frame bitmap)
  *
  * For FILD the trailing data after the tables is a sequence of (Δx, Δy)
- * pairs that get appended to the global perspective profile DAT_0044E5F8.
+ * pairs that get appended to the global perspective profile g_persp_profile.
  */
 #include "wacki.h"
 #include <string.h>
@@ -24,14 +24,14 @@ extern void *xmalloc(uint32_t sz);
 extern void  xfree  (void *p);
 
 /* Scripts-class lookup (for [animacja]<filename> binding) */
-extern void *g_scripts_obj;                          /* DAT_0044E5B0 */
+extern void *g_scripts_obj;                          /* */
 extern void *FindAnimationScript(void *scripts_obj, const char *name); /* */
 
 /* Global perspective profile (filled by .fld loads). */
-int16_t g_persp_profile[0x22*2];   /* DAT_0044E5F8 — pairs (dx, dy) */
-int     g_persp_band_count = 0;    /* DAT_0044A200 */
+int16_t g_persp_profile[0x22*2];   /* g_persp_profile — pairs (dx, dy) */
+int     g_persp_band_count = 0;    /* perspective_band_count_alt */
 
-extern uint32_t g_tick_counter;    /* DAT_0044E454 */
+extern uint32_t g_tick_counter;    /* g_tick_counter */
 
 /* CD anti-piracy watchdog REMOVED — rule #7 (no CD checks, no copy
  * protection). Original re-verified WACKI_1 volume label every ~150k
@@ -112,7 +112,7 @@ AnimAsset *LoadAssetFromDtaBase(const char *name)
     } else if (magic == ASSET_MAGIC_FILD) {
         a->kind = 0;
         a->flag_22 = 0;
-        /* FILD body: 1:1 z (LoadAssetFromDtaBase FILD branch).
+        /* FILD body: z (LoadAssetFromDtaBase FILD branch).
  * Body offset = ushort at raw[16] (NOT raw[6] — wcześniejszy bug).
  * Layout w body:
  * [count:short][X[0]..X[count-1]:short][Y[0]..Y[count-1]:short]

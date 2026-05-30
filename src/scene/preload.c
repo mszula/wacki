@@ -28,11 +28,11 @@ int PreloadCommonAssets(void)
     BuildStageTable();
 
     static const struct { const char *name; AnimAsset **slot; } resident[] = {
-        { "ebfj.wyc",     &g_ebfj_atlas },  /* DAT_00453748 — actor portraits */
+        { "ebfj.wyc",     &g_ebfj_atlas },  /* g_ebfj_atlas — actor portraits */
         { "ebek.wyc",     &g_ebek_atlas },  /* T4: singleton, persists scenes */
         { "fjej.wyc",     &g_fjej_atlas },  /* T4: singleton, persists scenes */
-        { "przedm.wyc",   &g_items_atlas },  /* DAT_0044E6AC — inventory items */
-        /* T31 — cursor state atlases (DAT_00451488..0x004514A4 in PE).
+        { "przedm.wyc",   &g_items_atlas },  /* g_items_atlas — inventory items */
+        /* T31 — cursor state atlases (g_cursor_atlas..0x004514A4 in PE).
  * Each state maps to a sprite atlas indexed by g_cursor_state. */
         { "olowek1.wyc",  &g_cursor_atlas[0] },  /* state 0 + 6: default arrow */
         { "kaseta.wyc",   &g_cursor_atlas[1] },  /* state 1: idle anim */
@@ -46,9 +46,9 @@ int PreloadCommonAssets(void)
         if (!a) return 0;
         if (resident[i].slot) *resident[i].slot = a;
     }
-    /* 1:1 with PreloadCommonAssets @ 0x00403850 trailing block:
- * LoadFileFromDta("Futura.30", &DAT_0044E440);
- * DAT_0044E598 = ParseFutFontFile;
+    /* @ 0x00403850 trailing block:
+ * LoadFileFromDta("Futura.30", &);
+ * = ParseFutFontFile;
  * The bitmap font is used by RenderTextLineToBuffer (op 0x09 / dialog). */
     void *fbuf = NULL; uint32_t fsz = 0;
     if (LoadFileFromDta("Futura.30", &fbuf, &fsz) && fbuf) {
@@ -64,7 +64,7 @@ int PreloadCommonAssets(void)
         fprintf(stderr, "[init] Futura.30 not found in archive\n");
     }
 
-    /* 1:1 with PreloadCommonAssets @ 0x004038F4..0x00403924 — initialise
+    /* @ 0x004038F4..0x00403924 — initialise
  * the per-item entity_state table. The original zeroes
  * the 0x470-byte block then walks 8-byte strides writing
  * entity_state[idx].panel_verb_id = idx + 0x29

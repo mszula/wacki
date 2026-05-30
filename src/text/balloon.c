@@ -63,11 +63,11 @@ Entity *g_speech_balloon = NULL;
 uint16_t g_speech_unbind_speaker = 0;
 uint32_t g_speech_unbind_data    = 0;
 
-/* T117 — Polish-diacritic → Futura-glyph translation table (1:1 with
+/* T117 — Polish-diacritic → Futura-glyph translation table (
  * init @ 0x0040C740). The original engine maps 18 CP-1250
  * Polish characters to custom Futura.30 glyph slots @ indices 0xC2..0xFB.
  * Identity for all other bytes. Source pairs lifted from
- * DAT_00445E40 (source CP-1250) + DAT_00445E58 (target Futura slot) in PE.
+ * polish_diac_src_table (source CP-1250) + polish_diac_dst_table (target Futura slot) in PE.
  *
  * Without this LUT, op 0x09 SHOW_TEXT would either:
  * (a) render Polish chars as wrong glyphs (whatever lives at CP-1250
@@ -82,7 +82,7 @@ static int     g_text_lut_built = 0;
 void TextTranslationLutInit(void)
 {
     if (g_text_lut_built) return;
-    /* Identity mapping for all 256 bytes (1:1 z head). */
+    /* Identity mapping for all 256 bytes ( z head). */
     for (int i = 0; i < 256; ++i) g_text_translation_lut[i] = (uint8_t)i;
     /* Override 18 entries — Polish diacritics → Futura slots. Table
  * lifted byte-for-byte from PE: source @ 0x00445E40, target @
@@ -99,7 +99,7 @@ void TextTranslationLutInit(void)
     g_text_lut_built = 1;
 }
 
-/* T117 — translate input text via LUT into output buffer. 1:1 with
+/* T117 — translate input text via LUT into output buffer.
  *. Stops on NUL byte in TRANSLATED stream
  * (an override mapping a char to 0x00 would terminate early — the
  * Polish-diacritic LUT never does this so we're safe in practice). */
@@ -127,7 +127,7 @@ static void translate_script_text(const char *in, char *out, size_t out_sz)
  * Gadki.scr — Polish voice acting, no subtitles).
  *
  * Likely a leftover from pre-dub development when text placeholders were
- * shown over speakers. Kept 1:1 for fidelity + in case any unreached
+ * shown over speakers. Kept for fidelity + in case any unreached
  * scripts in stages 4/5 actually fire it. If you ever see a "[say]" log
  * line, the kind=1 entity render path in EntityRenderAll will display it. */
 void ScriptCallShowText(uint16_t actor, const char *text)
@@ -145,13 +145,13 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     }
     /* T117 — translate raw CP-1250 input via Polish-diacritic LUT before
  * any layout/render. op 0x09 dispatch calling
- * (text) → DAT_00475950 (translated buffer). */
+ * (text) → translated_text_buf (translated buffer). */
     char translated[256];
     translate_script_text(text, translated, sizeof translated);
     text = translated;
     fprintf(stderr, "[say] actor=%u: %.120s\n", actor, text);
 
-    /* 1:1 with op 0x09 (RunScriptInterpreter case 9):
+    /* (RunScriptInterpreter case 9):
  *
  * 1. copies the text into work buffer.
  * 2. Split on '|' into up to 10 lines (local_d4[]).
@@ -159,16 +159,16 @@ void ScriptCallShowText(uint16_t actor, const char *text)
  * track max in uVar24, set total height = lines * font.advance.
  * 4. piVar22 = AllocEntity(maxW, totalH, kind=1, 1).
  * 5. Zero the pixel buffer.
- * 6. Set up render desc DAT_004549E8..:
- * stride=maxW height=totalH font=DAT_0045500C color=0xFD
+ * 6. Set up render desc ..:
+ * stride=maxW height=totalH font= color=0xFD
  * and render each line centred at (maxW - line_w)/2.
  * 7. (speaker_id) → speaker click entity.
  * If kind=1/2: X = drawX + (w - text_w)/2, Y = drawY - text_h.
  * Else: Y=0x50, X centred.
  * 8. Clamp X to [0, screen_w - text_w], Y to >= 0.
- * 9. (DAT_0045147C, balloon) — link to render list.
- * 10. Wait loop ticks down DAT_00455004 by g_frame_delta_ms per
- * ProcessGameFrameTick; exit when zero or DAT_0044E5AC click.
+ * 9. (cursor_state_struct, balloon) — link to render list.
+ * 10. Wait loop ticks down speech_dismiss_ticks by g_frame_delta_ms per
+ * ProcessGameFrameTick; exit when zero or g_panel_cursor_redirect2 click.
  * 11. Set balloon hidden bit (+0x09 & 0x80) on exit. */
 
     /* --- 1: copy text + split on '|' --- */
@@ -187,7 +187,7 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     }
 
     /* --- 2: measure widths via MeasureTextLine (= 
- * 1:1 port — per-glyph width_tab + kern_tab sums). --- */
+ * --- */
     int line_w[10] = {0};
     int max_w = 0;
     for (int i = 0; i < line_count; ++i) {
@@ -218,7 +218,7 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     /* --- 4: render each line into the buffer ---
  * RenderTextLineToBuffer writes at td.pixels + stride*baseline.
  * Per-line Y advance via offsetting base pointer. Color 0xFD
- * (DAT_004549F8 from Ghidra).
+ * ( from Ghidra).
  *
  * Native-pointer TextRenderTarget struct (replaces the original's
  * 32-bit uint32_t[5] descriptor) — see wacki.h. The legacy uint32_t
@@ -237,7 +237,7 @@ void ScriptCallShowText(uint16_t actor, const char *text)
         RenderTextLineToBuffer(&td, (const uint8_t *)lines[i]);
     }
 
-    /* --- 5: position above speaker — 1:1 with case 9 
+    /* --- 5: position above speaker — 
  * lookup. Use FindEntityByVerbId; if found, position above its
  * draw rect. Else fallback: Y=0x50, X centred. */
     int bx, by;
@@ -270,12 +270,12 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     LinkEntityToList(&g_render_list_head, e, 0);
     g_speech_balloon = e;
 
-    /* --- 7: dismissal timer (Ghidra: DAT_00455004 = chars*10 - 0x7D20
+    /* --- 7: dismissal timer (Ghidra: speech_dismiss_ticks = chars*10 - 0x7D20
  * + (lines+4)*0x19; ticks down by g_frame_delta_ms each frame). --- */
     size_t n_chars = strlen(text);
-    /* Dismiss-timer formula — 1:1 with Ghidra case 9:
+    /* Dismiss-timer formula —:
  *
- * DAT_00455004 = (short)pcVar5 * 10 + -0x7d20 + (lines+4) * 0x19;
+ * speech_dismiss_ticks = (short)pcVar5 * 10 + -0x7d20 + (lines+4) * 0x19;
  *
  * `pcVar5` is the NUL-terminator pointer (= buffer_start +
  * text_chars). The `(short)pcVar5 * 10 - 0x7D20` term resolves to
@@ -304,7 +304,7 @@ void ScriptCallShowText(uint16_t actor, const char *text)
     g_speech_dismiss_ticks  = (uint16_t)dur;
 }
 
-/* TickSpeechBalloon — drains the dismissal timer (Ghidra DAT_00455004
+/* TickSpeechBalloon — drains the dismissal timer (Ghidra speech_dismiss_ticks
  * wait loop in case 9). Called once per ProcessGameFrameTick. */
 void TickSpeechBalloon(void)
 {
@@ -537,8 +537,8 @@ static void dialog_play_line(uint16_t actor, const char *text)
 
 /* dialog_play_line_indexed — T6 / T20b: dialog with per-line audio.
  *
- * `wav_name` is the .wav filename extracted from a [sampl] tag (1:1 with
- * — it copies the name into DAT_004550b8 then calls
+ * `wav_name` is the .wav filename extracted from a [sampl] tag (
+ * — it copies the name into then calls
  * to load + play). NULL or empty = silent line (text-only,
  * matches the [nic] tag case). The earlier port built names from
  * `<section_name><idx>.wav` which was an unverified guess — actual
@@ -775,7 +775,7 @@ static void DialogRestoreTopSpeaker(void)
     uint8_t *eb = (uint8_t *)e;
     /* Restore atlas + bytecode from backups taken at push time. */
     *(uint32_t *)(eb + 0x28) = slot->atlas_backup;
-    /* Walker reset (1:1 — same as ACTIVATE path). */
+    /* Walker reset ( — same as ACTIVATE path). */
     *(uint16_t *)(eb + 0x3A) &= (uint16_t)~5u;
     *(uint16_t *)(eb + 0x38) = 0;
     *(uint16_t *)(eb + 0x36) = 0;
@@ -864,7 +864,7 @@ static void DialogStackPop(void)
  * the restored atlas now references a smaller frame range —
  * still works, just over-allocated buffer (benign). */
             *(uint32_t *)(eb + 0x28) = slot->atlas_backup;
-            /* walker-state reset (1:1). */
+            /* walker-state reset (). */
             *(uint16_t *)(eb + 0x3A) &= (uint16_t)0xFFFAu;
             *(uint16_t *)(eb + 0x38) = 0;
             *(uint16_t *)(eb + 0x36) = 0;
@@ -888,7 +888,7 @@ static void DialogStackPop(void)
     s_dialog_stack_n = 0;
 }
 
-/* T20 — 1:1 with Ghidra dialog flow:
+/* T20 —:
  * op 0x52 = PUSH only (entity backups + asset load)
  * op 0x53 (+ ) = play [sampl] WAVs + pop
  *
@@ -946,14 +946,14 @@ uint8_t g_dialog_active = 0;
 
 /* T103 — Solund-menu non-audio gates. Set by SolundClick + restored
  * by ApplySavedSettings on boot. */
-uint8_t g_subtitles_on = 1;       /* DAT_00455121 mirror */
-uint8_t g_dialogues_on = 1;       /* DAT_00455122 mirror — gates op 0x52/0x53 */
+uint8_t g_subtitles_on = 1;       /* fade_step mirror */
+uint8_t g_dialogues_on = 1;       /* fade_progress mirror — gates op 0x52/0x53 */
 
 int ScriptCallDialogBegin(uint16_t actor, const char *dialog_name,
                           const uint8_t *opts, uint32_t talk_anim_va)
 {
     /* T103 — gate on g_dialogues_on. Original op 0x52
- * @ 0x00408BC8 wraps the call in `if (DAT_00455122 != 0)`.
+ * @ 0x00408BC8 wraps the call in `if (fade_progress != 0)`.
  * If dialogues are disabled in Solund, we no-op the entire op. */
     if (!g_dialogues_on) {
         fprintf(stderr, "[dlg] op 0x52 BEGIN suppressed (dialogues_on=0)\n");
@@ -966,7 +966,7 @@ int ScriptCallDialogBegin(uint16_t actor, const char *dialog_name,
 
     if (!dialog_name || !*dialog_name) return 0;
 
-    /* op 0x52 = PUSH only (1:1 ). T108 — pass talk_anim_va
+    /* op 0x52 = PUSH only ( ). T108 — pass talk_anim_va
  * (= op 0x52's 4th arg / PE VA of mouth-cycle bytecode) so
  * DialogActivateTopSpeaker can bind it to entity[+0x2C] later. */
     extern Entity *FindEntityByVerbId(uint16_t verb);
@@ -977,12 +977,12 @@ int ScriptCallDialogBegin(uint16_t actor, const char *dialog_name,
 
 void ScriptCallDialogEnd(const char *result)
 {
-    /* T103 — gate on g_dialogues_on, 1:1 z op 0x53 wrap @ 0x00408C28. */
+    /* T103 — gate on g_dialogues_on, z op 0x53 wrap @ 0x00408C28. */
     if (!g_dialogues_on) {
         fprintf(stderr, "[dlg] op 0x53 END suppressed (dialogues_on=0)\n");
         return;
     }
-    /* op 0x53 = play lines from [rozmowa]<result> + pop (1:1
+    /* op 0x53 = play lines from [rozmowa]<result> + pop (
  * + ). */
     fprintf(stderr, "[dlg] op 0x53 END result=%s (stack=%d) var[4]=0x%04X\n",
             result ? result : "(null)", s_dialog_stack_n,

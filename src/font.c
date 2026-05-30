@@ -28,7 +28,7 @@
 
 extern void *xmalloc(uint32_t sz);
 
-/* 0x38-byte parsed font descriptor — 1:1 with ParseFutFontFile output.
+/* 0x38-byte parsed font descriptor —
  * Original struct layout (Ghidra `psVar7[N]` byte offsets):
  * +0x00 advance (BE16) — default cursor step when advance_tab is NULL
  * +0x02 baseline (BE16)

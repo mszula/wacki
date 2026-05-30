@@ -29,19 +29,19 @@
 struct ScriptObj { const uint8_t *start; const uint8_t *end; uint32_t size; uint8_t *buf; };
 
 /* ---- shared state ------------------------------------------------------- */
-StageDef *g_stage = NULL;                       /* DAT_0044A19C */
-uint16_t  g_cur_etap    = 0;                    /* DAT_0044E43C */
-uint16_t  g_cur_komnata = 0;                    /* DAT_0044E588 */
+StageDef *g_stage = NULL;                       /* g_actor_walk_anim_table */
+uint16_t  g_cur_etap    = 0;                    /* */
+uint16_t  g_cur_komnata = 0;                    /* g_cur_komnata */
 /* g_game_over_code is a macro alias for g_script_vars[14] — see wacki.h.
  * g_completed_stages is similarly aliased to g_script_vars[17] (Fix #21).
  * No separate storage; the values live inside the script_vars array so
  * the SET_VAR / VAR_OR opcodes (op 0x0D / 0x0A, used by scripts) and the
  * post-loop switch / SelTloRefreshButtons see the SAME memory. */
-int       g_save_request = 0;                   /* DAT_004498AC */
-uint32_t  g_tick_counter = 0;                   /* DAT_0044E454 */
-uint8_t   g_lmb_handled = 0;                    /* DAT_0044E5A4 */
+int       g_save_request = 0;                   /* g_script_vars */
+uint32_t  g_tick_counter = 0;                   /* g_tick_counter */
+uint8_t   g_lmb_handled = 0;                    /* g_lmb_handled */
 
-extern Entity *g_actor[2];                      /* DAT_0044E724/728 */
+extern Entity *g_actor[2];                      /* g_actor/728 */
 
 /* ---- T2 phase B: scene/walkability state promoted to globals -------------- *
  * Previously locals inside play_demo_scene; promoted so ProcessGameFrameTick
@@ -81,8 +81,8 @@ extern void PaletteFadeInOut(uint16_t pct, const uint8_t *pal,
                              void *cb);
 extern void *g_dialogues_obj;
 extern void *g_scripts_obj;
-extern void *g_items_obj;                       /* DAT_0044E5E4 */
-extern AnimAsset *g_panel_cursor;               /* DAT_0044E698 (Krazek.pic) */
+extern void *g_items_obj;                       /* */
+extern AnimAsset *g_panel_cursor;               /* g_panel_cursor (Krazek.pic) */
 
 /* g_stage_table is defined in stubs.c — see PTR_PTR_00442FA8 in the binary. */
 
@@ -92,9 +92,9 @@ extern AnimAsset *g_panel_cursor;               /* DAT_0044E698 (Krazek.pic) */
  * Loaded once at startup. Holds the universally-shared sprites resident
  * in memory between stage swaps.
  * ------------------------------------------------------------------------- */
-FontHandle *g_default_font = NULL;     /* DAT_0044E598 — "Futura.30" bitmap font */
+FontHandle *g_default_font = NULL;     /* — "Futura.30" bitmap font */
 
-extern AnimAsset *g_items_atlas;       /* DAT_0044E6AC — przedm.wyc */
+extern AnimAsset *g_items_atlas;       /* g_items_atlas — przedm.wyc */
 
 /* T4 step 1: actor atlas singletons. Loaded once at startup, persist
  * across all scene transitions. Original engine spawns Ebek/Fjej once
@@ -102,13 +102,13 @@ extern AnimAsset *g_items_atlas;       /* DAT_0044E6AC — przedm.wyc */
  * can reposition the SAME actor entity without atlas reload. */
 AnimAsset *g_ebek_atlas = NULL;        /* ebek.wyc — Ebek sprite frames */
 AnimAsset *g_fjej_atlas = NULL;        /* fjej.wyc — Fjej sprite frames */
-AnimAsset *g_ebfj_atlas = NULL;        /* DAT_00453748 — ebfj.wyc actor-portrait
+AnimAsset *g_ebfj_atlas = NULL;        /* g_ebfj_atlas — ebfj.wyc actor-portrait
  atlas (4 frames: 0/1 = Ebek/Fjej
  active w/ frame, 2/3 = inactive). */
 
 /* T31 — cursor state atlases. PreloadCommonAssets which
- * loaded these into DAT_00451488..0x004514A4 then 's state
- * table @ DAT_00443400 indexed them per cursor state (0..7).
+ * loaded these into g_cursor_atlas..0x004514A4 then 's state
+ * table @ indexed them per cursor state (0..7).
  *
  * Naming note: in the original PE these slots are loaded with
  * olowek1.wyc / kaseta.wyc / magnes1*.wyc / drzwi1*.wyc — but they're
@@ -117,10 +117,10 @@ AnimAsset *g_ebfj_atlas = NULL;        /* DAT_00453748 — ebfj.wyc actor-portra
  * in PreloadCommonAssets; in RE we see them used as cursor only by
  * ). The 8-state cursor anim table maps states 0..7 to
  * indices into the slot array. */
-AnimAsset *g_cursor_atlas[8] = {0};    /* DAT_00451488..0x004514A4 */
-uint8_t    g_cursor_state    = 0;      /* DAT_00451470 */
-uint16_t   g_cursor_frame    = 0;      /* DAT_0045147c + 0x30 */
-uint16_t   g_cursor_frame_acc = 0;     /* DAT_0045147c + 0x3C accumulator */
+AnimAsset *g_cursor_atlas[8] = {0};    /* g_cursor_atlas..0x004514A4 */
+uint8_t    g_cursor_state    = 0;      /* g_script_running */
+uint16_t   g_cursor_frame    = 0;      /* cursor_state_struct + 0x30 */
+uint16_t   g_cursor_frame_acc = 0;     /* cursor_state_struct + 0x3C accumulator */
 
 extern void BuildStageTable(void);                /* stubs.c — T26 */
 
@@ -143,13 +143,13 @@ extern void FlushQueuedClicks(void);
  * screenshot keys ('P' PCX, 'B' BMP)
  * — composite/blit frame
  * — cursor sprite update (inventory pickup)
- * — bottom-panel hit-test (sets DAT_0044E450 verb)
- * — mouse hit-test (sets DAT_0044988C hover_verb)
+ * — bottom-panel hit-test (sets g_hover_panel_verb verb)
+ * — mouse hit-test (sets g_hover_scene_verb hover_verb)
  * UpdateActorMovement — drives g_actor[] walkers per cursor
  * — per-entity VM tick (ExecEntityScript)
  * / 00406EB0— prop/dialogue tick (deferred)
  * — EntityRenderAll with z-sort
- * drain DAT_0044A1A0 — FlushQueuedClicks → DispatchClickEvent
+ * drain click_queue — FlushQueuedClicks → DispatchClickEvent
  *
  * Blocking script ops (op 0x12 ANIM_BOTH_WAIT, op 0x14 WAIT_MS, op 0x15
  * WAIT_ENTITY) loop on this; without driving the walker + render here,
@@ -179,7 +179,7 @@ extern int  is_walkable_at(int sx, int sy);
  * DispatchClickEvent
  *
  * SCUMM-style verb/noun dispatcher. The per-stage descriptor at
- * DAT_0044A19C (= the entry from PTR_PTR_00442FA8[etap-1]) carries two
+ * g_actor_walk_anim_table (= the entry from PTR_PTR_00442FA8[etap-1]) carries two
  * tables of 6-byte entries:
  *
  * +0x04 verb_table = { u16 verb_id; u32 script_ptr; } *
@@ -191,13 +191,13 @@ extern int  is_walkable_at(int sx, int sy);
  * Flow: search verb_table for verb_id, run that script — if it returns
  * non-zero, *also* search object_table for obj_id and run that script.
  *
- * Original reads both tables out of static PE memory (DAT_0044A19C =
+ * Original reads both tables out of static PE memory (g_actor_walk_anim_table =
  * absolute pointer). The port resolves them through PeLoaderRead, then
  * xlats the script pointer either to a manually-embedded blob in
  * binary_data.c or back to PE memory.
  * ------------------------------------------------------------------------- */
-uint32_t g_stage_va = 0;            /* DAT_0044A19C — original VA of current stage def */
-uint16_t g_held_item = 0x26;        /* DAT_0044E5E8 — currently held inventory item
+uint32_t g_stage_va = 0;            /* g_actor_walk_anim_table — original VA of current stage def */
+uint16_t g_held_item = 0x26;        /* g_held_item — currently held inventory item
  * (0x26 = neutral / nothing held; see
  * RunGameStageLoop @ 0x0040C0C6 where the
  * post-dispatch reset writes 0x26). */
@@ -238,7 +238,7 @@ int LoadStage(uint16_t stage)
     LoadActorWalkAnims(g_stage_va);
 
     /*:
- *; // ResetInventory — clear DAT_00443332 + page=0
+ *; // ResetInventory — clear g_inventory + page=0
  * Original calls this before loading the new stage's panel + palette
  * so any held-from-previous-stage items get dropped. */
     ResetInventory();
@@ -248,7 +248,7 @@ int LoadStage(uint16_t stage)
     FindScriptByStageAndRoom(g_scripts_obj, buf, "[komnata]");
 
     /* load stage panel —:
- * DAT_00453744 = LoadAssetFromDtaBase(g_stage->+0x1c);
+ * g_panel_asset = LoadAssetFromDtaBase(g_stage->+0x1c);
  * The asset has 6 frames (one per button slot) sharing a single
  * (panel_x, panel_y) origin on its 0th frame, used by PanelHitTest
  * to convert cursor coords into panel-local space.
@@ -265,9 +265,9 @@ int LoadStage(uint16_t stage)
  * "stage" with no HUD and no playable actors. Without the
  * NULL-side branch below, g_panel_asset / g_actor[0] / g_actor[1]
  * kept their stage 4 values, so PaintHudOverlay + EntityRenderAll
- * still drew the panel and Ebek/Fjej during the finale. 1:1 with
+ * still drew the panel and Ebek/Fjej during the finale.
  * actor-list management gated on komnata flag
- * DAT_0044e448 & 2 — when the new stage's atlas slot is NULL, the
+ * g_settings_anim_active & 2 — when the new stage's atlas slot is NULL, the
  * actor must be unlinked from the render list. */
     if (g_stage->panel_wyc) {
         if (g_panel_asset) {
@@ -323,7 +323,7 @@ extern AnimAsset *LoadAssetFromDtaBase(const char *);
 
 /* ------------------------------------------------------------------------- *
  * HandleMainMenuClick — port of (the on_click callback for the
- * main menu's SceneDef at DAT_00445CD0).
+ * main menu's SceneDef at ).
  *
  * Param 1 is a trigger value:
  * 0 INIT — load palettes (Tlo.pal/menu.pal) and start CD-audio
@@ -338,10 +338,10 @@ extern AnimAsset *LoadAssetFromDtaBase(const char *);
  * frame and blit it. We don't yet have CD-audio or the full animation
  * pipeline, so this is reduced to the dispatch-only logic.
  */
-static uint8_t s_menu_flags    = 0;   /* DAT_00445CE0 */
-static int     s_anim_delay    = 0;   /* DAT_004550E0 (anim delay counter) */
-static int     s_anim_frame    = 10;  /* DAT_004550E4 (anim frame index) */
-static int     s_save_request  = 0;   /* DAT_00455104 */
+static uint8_t s_menu_flags    = 0;   /* */
+static int     s_anim_delay    = 0;   /* anim_delay_counter (anim delay counter) */
+static int     s_anim_frame    = 10;  /* anim_frame_index (anim frame index) */
+static int     s_save_request  = 0;   /* */
 
 /* Forward decls for the menu-BG snapshot used by RunMenuScene overlay
  * branch (see comments at the definitions below near paint_slot_list).
@@ -374,7 +374,7 @@ AnimAsset *g_menu_asset_10 = NULL;
 
 /* ------------------------------------------------------------------------- *
  * HandlePytanieClick (the on_click cb for the
- * "Pytanie?" quit-confirmation SceneDef at DAT_00445B58).
+ * "Pytanie?" quit-confirmation SceneDef at ).
  *
  * trigger 0 → 0 (init, nothing to do)
  * trigger 0x12 → 3 (TAK / Yes → caller treats 3 as "quit confirmed")
@@ -395,7 +395,7 @@ static int HandleMainMenuClick(int trigger)
 
     switch (trigger) {
     case 0: {                              /* INIT (per ) */
-        /* 1:1 with HandleMainMenuClick @ 0x0040B100 case 0:
+        /* @ 0x0040B100 case 0:
  * - clear back-buffer to colour 0
  * - load Tlo.pal as primary palette
  * - load menu.pal as secondary palette buffer
@@ -410,27 +410,27 @@ static int HandleMainMenuClick(int trigger)
             xfree(pal);
         }
         if (LoadFileFromDta("menu.pal", &pal, &psz) && pal) {
-            /* original engine stores this at DAT_00451dc8 for blending —
+            /* original engine stores this at fade_target_buf for blending —
  * we don't have the blend pipeline yet, but free to avoid leak */
             xfree(pal);
         }
         s_anim_frame   = 10;
         s_anim_delay   = 0;
         s_save_request = 0;
-        /* 1:1 with the trailing block of case 0 in HandleMainMenuClick:
+        /* 0 in HandleMainMenuClick:
  * path = BuildAssetPath("Dane_01.dta", NULL)
- * handle = (&DAT_0044a610, path, 1) // open looped
- * (&DAT_0044a610, handle) // start
+ * handle = (&g_persp_band_count, path, 1) // open looped
+ * (&g_persp_band_count, handle) // start
  * Dane_01.dta on this build is a plain RIFF/WAVE on disk. */
         PlayMenuMusic("Dane_01.dta", 1);
         break;
     }
     /* cb is only called with a non-(-1) trigger when a button was clicked
  * (RunMenuScene already filters). The original gated each case on
- * DAT_0044E5AC (LMB flag) which the host engine cleared *before*
+ * g_panel_cursor_redirect2 (LMB flag) which the host engine cleared *before*
  * calling the cb (per RunMenuScene @ 0x0040B5E0) — so the gate was
  * effectively always false there too. The visible action is reached
- * via the secondary DAT_0044E5A4 flag, which is the saved click
+ * via the secondary g_lmb_handled flag, which is the saved click
  * state. We simply act on the trigger unconditionally here. */
     case 0x12: {                            /* Load game submenu */
         /* Reuse the same g_load_menu_scene used by opszyns dispatcher.
@@ -457,10 +457,10 @@ static int HandleMainMenuClick(int trigger)
     }
 
     /*'s trailing block:
- * if (DAT_00455104 && (DAT_004550E4 < 0xF || 0x12 < DAT_004550E4)) {
+ * if ( && (anim_frame_index < 0xF || 0x12 < anim_frame_index)) {
  * cVar3 = '\a'; // rc = 7
- * DAT_00445CE0 &= ~1;
- * DAT_004550E0 = 1;
+ * &= ~1;
+ * anim_delay_counter = 1;
  * }
  * i.e. once the Maluch click latch (s_save_request) is set AND the
  * background flipbook is OUTSIDE the "doors closing" frames 15..18,
@@ -505,13 +505,13 @@ static int HandleMainMenuClick(int trigger)
         /* ~10 fps for the WACKI logo flipbook: at the 60 fps menu pacing
  * (SDL_Delay(16) below) a delay of 6 ticks → one new frame every
  * ~100 ms. The original used a hard-coded reset value of 6 here
- * (DAT_004550E0 ← 6 on every advance). */
+ * (anim_delay_counter ← 6 on every advance). */
         s_anim_delay = 6;
     } else {
         --s_anim_delay;
     }
     /* Original: any non-zero return from the cb stops the music handle
- * (`(&DAT_0044a610, DAT_00455108); DAT_00455108 = 0xffff;`).
+ * (`(&g_persp_band_count, ); = 0xffff;`).
  * Mirror that so navigating away from the title kills the music. */
     if (rc != 0) StopMenuMusic();
     return rc;
@@ -727,7 +727,7 @@ int RunMenuScene(int transition_mode, SceneDef *scene)
     if (scene->mask_file)
         buttons = LoadAssetFromDtaBase(scene->mask_file);
 
-    /* 1:1 with RunMenuScene @ 0x0040B5E0: the mask atlas is registered as
+    /* @ 0x0040B5E0: the mask atlas is registered as
  * entity (kind=1, id=10) so the on_click handler can fetch it via
  * (1, 10) for its background animation block. */
     g_menu_asset_10 = buttons;
@@ -754,7 +754,7 @@ int RunMenuScene(int transition_mode, SceneDef *scene)
  * walk the buttons, find the one whose def_anim rect contains
  * the mouse cursor, and use its .id as the "hover key" passed to
  * the on_click callback every frame. (Original engine stores this
- * in DAT_0044988c and resets to 0x26 when nothing is hovered;
+ * in g_hover_scene_verb and resets to 0x26 when nothing is hovered;
  * here we just pass it directly to cb.) */
         int hover_btn = (buttons && (s_mouse_x | s_mouse_y))
                       ? hit_test_buttons(scene, buttons, s_mouse_x, s_mouse_y)
@@ -803,8 +803,8 @@ int RunMenuScene(int transition_mode, SceneDef *scene)
             int trigger = -1;
             if (g_lmb_clicked && hover_btn >= 0) {
                 trigger = (int)hover_id;
-                /* DAT_0044e5ac is the "this-frame LMB" flag the cb cases
- * gate on. We can't model that 1:1 without the whole
+                /* g_panel_cursor_redirect2 is the "this-frame LMB" flag the cb cases
+ * gate on. We can't model that without the whole
  * entity system, but firing trigger on the click frame is
  * the same observable behaviour. */
             }
@@ -856,7 +856,7 @@ int RunMenuScene(int transition_mode, SceneDef *scene)
 
 /* ------------------------------------------------------------------------- *
  * play_bomb_explosion — visual port of the bomb cutscene. The original
- * Quit-TAK ( with &DAT_00427b68). The real script is a Wacky.scr
+ * Quit-TAK ( with &). The real script is a Wacky.scr
  * bytecode sequence that drives the menu's bomb icon — fuse burns, then
  * BOOM, then fade-out — before the process exits.
  *
@@ -912,7 +912,7 @@ static void play_bomb_explosion(void)
 /* ------------------------------------------------------------------------- *
  * RunMainGameLoop — 0x0040BBF0
  *
- * 1:1 with the binary's two-loop structure:
+ *'s two-loop structure:
  *
  * do { <-- OUTER
  * PlaySceneCutsceneAvi("Dane_10.dta");
@@ -970,7 +970,7 @@ void RunMainGameLoop(void)
         }
     }
 
-    /* 1:1 with DAT_00445CD0: button_count=5, flags=4 (FORCE_CB only).
+    /* flags=4 (FORCE_CB only).
  * Buttons {id, def_anim, hover_anim}: 0x12 Load, 0x13 New, 0x14 Options,
  * 0x15 Quit, 0x16 Credits. */
     SceneDef title = {
@@ -1114,12 +1114,12 @@ void RunMainGameLoop(void)
                 break;
             }
             case 5: {                   /* Start at selected save slot */
-                /* 1:1 with RunMainGameLoop @ 0x0040BC4A:
+                /* @ 0x0040BC4A:
  * LoadSaveSlot(g_selected_save_slot);
  * RunGameStageLoop(0x10);
  *
- * LoadSaveSlot restores DAT_0044E588 (g_cur_komnata) +
- * DAT_00449880 (script_vars) + DAT_00449D28 (entity_state)
+ * LoadSaveSlot restores g_cur_komnata (g_cur_komnata) +
+ * g_script_vars (script_vars) + g_entity_state (entity_state)
  * from Wacki.sav slot N. */
                 extern uint16_t g_selected_save_slot;
                 LoadSaveSlot(g_selected_save_slot);
@@ -1128,7 +1128,7 @@ void RunMainGameLoop(void)
             }
             case 6:                     /* "New game" (film-reel button) */
                 /* Original: FindScriptByStageAndRoom + RunScriptInterpreter
- * (0, 0, &DAT_00427b40); bVar1=false;
+ * (0, 0, &); bVar1=false;
  * The intro script plays the credits/film cutscene. We
  * don't have the VM wired to assets yet — fall back to
  * the simplest faithful behaviour: break the inner loop
@@ -1138,11 +1138,11 @@ void RunMainGameLoop(void)
                 inner = 0;
                 break;
             case 7: {                   /* Prologue — Maluch "start game" */
-                /* Original: RunScriptInterpreter(0, 0, &DAT_00427af8)
+                /* Original: RunScriptInterpreter(0, 0, &)
  * then RunGameStageLoop(2).
  *
  * Per Wacky.scr [etap]1 [komnata]init the prologue runs
- * 1:1 these three steps:
+ * these three steps:
  * 1. [animacja] fiacik.wyc / [sampl] fiacik.wav (0,20)
  * → in-place menu animation of the Maluch driving
  * left across the title (structurally identical
@@ -1171,7 +1171,7 @@ void RunMainGameLoop(void)
 /* ------------------------------------------------------------------------- *
  * play_fiacik_intro — Maluch driving away across the title screen.
  *
- * 1:1 with Wacky.scr [etap]1 [komnata]init line:
+ *scr [etap]1 [komnata]init line:
  * [animacja] fiacik.wyc
  * [sampl] fiacik.wav (0,20)
  *
@@ -1234,7 +1234,7 @@ static void play_fiacik_intro(void)
     }
 
     /* Snapshot the (now button-erased) menu shadow so we can restore it
- * cleanly under each fiacik frame. 1:1 equivalent of the engine's
+ * cleanly under each fiacik frame. equivalent of the engine's
  * RestorePrevFrameRects — no per-frame ghosting. */
     extern uint8_t *g_back_shadow;
     size_t shadow_bytes = (size_t)WACKI_SCREEN_W * WACKI_SCREEN_H;
@@ -1265,7 +1265,7 @@ static void play_fiacik_intro(void)
 /* ------------------------------------------------------------------------- *
  * play_loading_screen — the "LOLDING" screen between Maluch and the scene.
  *
- * Per LoadStage @ 0x00403320: `DAT_0044E698 = krazek.pic` (a 203×220 RAWB
+ * Per LoadStage @ 0x00403320: `g_panel_cursor = krazek.pic` (a 203×220 RAWB
  * of a vinyl-CD shape with the text "LOLDING" baked in, preloaded by
  * PreloadCommonAssets). The engine paints it as a centred overlay on top
  * of whatever is on screen during every stage transition:
@@ -1327,7 +1327,7 @@ typedef struct DemoScene {
  * after the skip_to_endif 0x55 false-terminator bug was fixed. */
 } DemoScene;
 
-/* Stage-1 scene table — 1:1 with the room table at 0x00428088 (4 rooms,
+/* Stage-1 scene table — (4 rooms,
  * 14 bytes each, terminated by all-zero entry). Each room's walkable bbox
  * is read from its .fld file header (FILD parser in assets.c). Hotspots
  * are taken from per-room .msk files (the original engine binds them to
@@ -1416,7 +1416,7 @@ void LoadKomnataScene(uint16_t id)
         *(uint16_t *)(eb + 0x54) = 0;
         *(uint16_t *)(eb + 0x56) = 0;
         /* Bind entry [5] idle bytecode ( line
- * DAT_0044e724[0xb] = *(int *)(stage+0xC) + 0x14;
+ * g_actor[0xb] = *(int *)(stage+0xC) + 0x14;
  * = anim_tab[+0x14] = entry [5]). */
         if (sd) {
             uint32_t anim_tab_va =
@@ -1546,8 +1546,8 @@ extern void DispatchClickEvent(uint16_t obj_id, uint16_t verb_id);
  *
  * The HUD panel.wyc has an "OPCJE" label baked into frame 0 at panel-local
  * (~160..400, 16..55). The original game's RunGameStageLoop @ 0x0040C0CC
- * launches RunMenuScene(opszyns.pic) when DAT_004498ac != 0, but no code
- * path in the disassembly ever sets DAT_004498ac — the wiring was lost.
+ * launches RunMenuScene(opszyns.pic) when g_script_vars != 0, but no code
+ * path in the disassembly ever sets g_script_vars — the wiring was lost.
  *
  * We add the missing piece: when the user clicks the OPCJE region of the
  * panel (and not an inventory slot), open the opszyns menu. The opszyns
@@ -1558,34 +1558,34 @@ extern void DispatchClickEvent(uint16_t obj_id, uint16_t verb_id);
  *
  * Audio toggles wired through AudioSet{Music,Sfx,Sound}Enabled in audio.c.
  *
- * Sub-menu globals — mirror DAT_0045511E..DAT_00455122 layout from
+ * Sub-menu globals — mirror speech_text_attr..fade_progress layout from
  * LoadSaveStateOrInitialize @ 0x0040a597. Init to "all on" so a fresh
  * game (no Wacki.sav) plays with full audio. */
 /* T103 fix — correct Solund mapping per Ghidra plate comment on
  * LoadSaveStateOrInitialize @ 0x0040A5C0:
- * DAT_0045511C — video_mode (Grafika menu, NOT Solund)
- * DAT_0045511D — sfx (sound effects on/off — NOT in Solund)
- * DAT_0045511E — music_on (Solund 0x12)
- * DAT_0045511F — ? (Solund 0x16; default 0 in original)
- * DAT_00455120 — voice_on (Solund 0x14) — gates dialog line audio
- * DAT_00455121 — subtitles (Solund 0x13) — gates op 0x09 SHOW_TEXT
- * DAT_00455122 — dialogues (Solund 0x15) — gates op 0x52/0x53
+ * speech_x_offset — video_mode (Grafika menu, NOT Solund)
+ * speech_y_offset — sfx (sound effects on/off — NOT in Solund)
+ * speech_text_attr — music_on (Solund 0x12)
+ * speech_color_index — ? (Solund 0x16; default 0 in original)
+ * fade_target — voice_on (Solund 0x14) — gates dialog line audio
+ * fade_step — subtitles (Solund 0x13) — gates op 0x09 SHOW_TEXT
+ * fade_progress — dialogues (Solund 0x15) — gates op 0x52/0x53
  *
  * Earlier port mis-labelled 0x13/0x14/0x15 as samplerate/stereo/sfx
  * (in-session only, no Wacki.sav persistence) — those names don't appear
  * in original. Player couldn't disable subtitles / voice / dialogues
  * independently. */
-static uint8_t s_opt_music      = 1;      /* DAT_0045511E */
-static uint8_t s_opt_subtitles  = 1;      /* DAT_00455121 — gates op 0x09 SHOW_TEXT */
-static uint8_t s_opt_voice      = 1;      /* DAT_00455120 — gates PlayDialogLine */
-static uint8_t s_opt_dialogues  = 1;      /* DAT_00455122 — gates op 0x52/0x53 */
-static uint8_t s_opt_extra      = 0;      /* DAT_0045511F — default 0 per original;
+static uint8_t s_opt_music      = 1;      /* speech_text_attr */
+static uint8_t s_opt_subtitles  = 1;      /* fade_step — gates op 0x09 SHOW_TEXT */
+static uint8_t s_opt_voice      = 1;      /* fade_target — gates PlayDialogLine */
+static uint8_t s_opt_dialogues  = 1;      /* fade_progress — gates op 0x52/0x53 */
+static uint8_t s_opt_extra      = 0;      /* speech_color_index — default 0 per original;
  * semantic under RE (possibly an
  * audio-quality / sfx-master flag) */
 
 /* T34 — persistence bridge between Solund/Grafika static opt-flags and
  * the on-disk WackiSettings struct in g_save.settings. The original 1997
- * engine kept these as separate globals (DAT_0045511C..22) AND wrote them
+ * engine kept these as separate globals (speech_x_offset..22) AND wrote them
  * into Wacki.sav settings header; on boot it sampled the .sav header back
  * into the globals so per-session options stuck.
  *
@@ -1624,7 +1624,7 @@ void ApplySavedSettings(void)
     s_opt_subtitles  = g_save.settings.subtitles_on ? 1 : 0;
     s_opt_dialogues  = g_save.settings.dialogues_on ? 1 : 0;
     s_opt_gfx1       = g_save.settings.video_mode   ? 1 : 0;
-    /* `sound_on` in WackiSettings = DAT_0045511D = sfx flag per Ghidra
+    /* `sound_on` in WackiSettings = speech_y_offset = sfx flag per Ghidra
  * (offset 1 of the 7-byte settings block). Wire it to the sfx
  * mixer toggle (audio.c AudioSetSfxEnabled). */
     uint8_t sfx_on   = g_save.settings.sound_on     ? 1 : 0;
@@ -1650,7 +1650,7 @@ static void persist_audio_opts(void)
     g_save.settings.subtitles_on = s_opt_subtitles ? 1 : 0;
     g_save.settings.dialogues_on = s_opt_dialogues ? 1 : 0;
     g_save.settings.video_mode   = s_opt_gfx1      ? 1 : 0;
-    /* sfx flag lives at WackiSettings.sound_on (= DAT_0045511D = offset 1). */
+    /* sfx flag lives at WackiSettings.sound_on (= speech_y_offset = offset 1). */
     /* Note: extra is not persisted in WackiSettings —
  * lives only in this session. */
     WriteSaveFile();
@@ -1692,8 +1692,8 @@ static int SolundClick(int trigger)
         break;
     case 0x16:
         s_opt_extra ^= 1;
-        /* DAT_0045511F semantic still under RE — log only for now. */
-        fprintf(stderr, "[opt] extra (DAT_0045511F) = %d\n", s_opt_extra);
+        /* speech_color_index semantic still under RE — log only for now. */
+        fprintf(stderr, "[opt] extra (fade_color_index) = %d\n", s_opt_extra);
         break;
     case 0x17:
         /* Exit — return code 3 → caller (opszyns dispatcher) propagates.
@@ -1743,7 +1743,7 @@ static int SolundClick(int trigger)
     return 0;
 }
 
-/* Solund.pic scene def — 1:1 with the binary SceneDef at 0x00445C60.
+/* Solund.pic scene def —
  * Button layout (per dispatch table & graphics):
  * id 0x12 (music) def=6 (on) / hover=0 (off label)
  * id 0x13 (samplerate) def=7 / hover=1
@@ -1768,9 +1768,9 @@ SceneDef g_solund_scene = {
 /* =================== Grafika.pic — graphics options ===================== *
  *
  * — 3 buttons:
- * 0x12 toggle DAT_0045511C (graphics flag 1 — read by entity VM
+ * 0x12 toggle speech_x_offset (graphics flag 1 — read by entity VM
  * + ; meaning TBD)
- * 0x13 toggle DAT_0045511D (fast-transitions flag — controls 100-tick
+ * 0x13 toggle speech_y_offset (fast-transitions flag — controls 100-tick
  * vs 4-tick fade speed in LoadKomnata + game-over fade)
  * 0x14 exit (return 3)
  *
@@ -1792,8 +1792,8 @@ SceneDef g_solund_scene = {
 /* (Definitions below — forward-declared near the audio toggles so the
  * persist_audio_opts helper can see them. Defaults = 1, set here in the
  * normal flow; ApplySavedSettings re-hydrates from Wacki.sav at boot.) */
-static uint8_t s_opt_gfx1 = 1;       /* DAT_0045511C */
-static uint8_t s_opt_gfx2 = 1;       /* DAT_0045511D — fast transitions */
+static uint8_t s_opt_gfx1 = 1;       /* speech_x_offset */
+static uint8_t s_opt_gfx2 = 1;       /* speech_y_offset — fast transitions */
 extern SceneDef g_grafika_scene;
 static int GrafikaClick(int trigger)
 {
@@ -1816,7 +1816,7 @@ static int GrafikaClick(int trigger)
     g_grafika_scene.buttons[0].hover_anim = (uint16_t)(s_opt_gfx1 ? 6 : 9);
     g_grafika_scene.buttons[1].def_anim   = (uint16_t)(s_opt_gfx2 ? 1 : 4);
     g_grafika_scene.buttons[1].hover_anim = (uint16_t)(s_opt_gfx2 ? 7 : 10);
-    /* Force redraw bit (1:1 with the trailing `DAT_00445c48 |= 1` in
+    /* Force redraw bit ( ` |= 1` in
  * — the original sets SCENE_FLAG_REDRAW on every call
  * so the def-sprite repaint sees the new frame indices. */
     g_grafika_scene.flags |= SCENE_FLAG_REDRAW;
@@ -1826,7 +1826,7 @@ static int GrafikaClick(int trigger)
     return 0;
 }
 
-/* 1:1 with binary SceneDef at 0x00445C38. Initial frames match flag=ON
+/* Initial frames match flag=ON
  * (s_opt_gfx1=1, s_opt_gfx2=1 defaults). Original handler @ 0x0040ADC0:
  * button[0]: ON → def=0 hover=6 / OFF → def=3 hover=9
  * button[1]: ON → def=1 hover=7 / OFF → def=4 hover=10
@@ -1861,7 +1861,7 @@ static int PytanieClick(int trigger)
     return 0;
 }
 
-/* 1:1 with binary SceneDef at 0x00445B58. */
+/* */
 static SceneDef g_pytanie_scene = {
     .background_pic = "Pytanie.pic",
     .mask_file      = "Pytanie.wyc",
@@ -1904,7 +1904,7 @@ static SceneDef g_pytanie_scene = {
 
 static int s_slot_selected = -1;        /* 0..9 = chosen slot; -1 = none */
 /* Inline-edit (Save menu only)'s keyboard-input
- * branch (DAT_004731d8 tracks the slot, the local string buffer
+ * branch ( tracks the slot, the local string buffer
  * accumulates typed chars + Backspace/Enter). When >= 0, paint_slot_list
  * shows that slot with a trailing '_' cursor and bypasses the s_slot_
  * selected highlight logic for it. */
@@ -2228,7 +2228,7 @@ static int LoadSlotClick(int trigger)
     return 0;
 }
 
-/* 1:1 with binary SceneDef at 0x00445BD8 (bg="Sejw.pic"). Handler
+/* (bg="Sejw.pic"). Handler
  * @ 0x0040a960 = SAVE slot picker. */
 static SceneDef g_save_menu_scene = {
     .background_pic = "Sejw.pic",
@@ -2247,7 +2247,7 @@ static SceneDef g_save_menu_scene = {
     .after_paint = paint_slot_list,
 };
 
-/* 1:1 with binary SceneDef at 0x00445B78 (bg="Load.pic"). Handler
+/* (bg="Load.pic"). Handler
  * @ 0x0040a6b0 = LOAD slot picker. */
 SceneDef g_load_menu_scene = {
     .background_pic = "Load.pic",
@@ -2306,7 +2306,7 @@ static int OpszynsClick(int trigger)
         return rc == 3 ? 3 : 0;
     case 0x16:
         rc = RunMenuScene(1, &g_pytanie_scene);
-        /* 1:1 with dispatcher @ 0x0040b0a4-b8: if Pytanie returned 3
+        /* @ 0x0040b0a4-b8: if Pytanie returned 3
  * (= "Tak"), set game_over_code = 2 + propagate exit. */
         if (rc == 3) {
             g_game_over_code = 2;
@@ -2321,7 +2321,7 @@ static int OpszynsClick(int trigger)
     }
 }
 
-/* opszyns.pic scene def — 1:1 with the binary SceneDef at 0x00445C98.
+/* opszyns.pic scene def —
  * 6 buttons with no def_anim (0xFFFF), each shows a hover sprite when
  * the mouse is over the button's hot rect. */
 static SceneDef g_opszyns_scene = {
@@ -2360,7 +2360,7 @@ static void CapturePendingThumbnail(void)
 
 /* OpenOptionsMenu — invoked on click in the OPCJE region of the HUD
  * panel. RunGameStageLoop @ 0x0040C0CC behaviour
- * (which read DAT_004498ac and called RunMenuScene(opszyns)). The
+ * (which read g_script_vars and called RunMenuScene(opszyns)). The
  * original's flag-setter is missing from the disassembly, so we wire
  * the panel click directly here. */
 static void OpenOptionsMenu(void)
@@ -2378,13 +2378,13 @@ static void OpenOptionsMenu(void)
 
 /* =================== sel_tlo.pic — chapter-select UI ==================== *
  *
- * 1:1 port of RunGameStageLoop @ 0x0040C298 case 3 branch.
+ *
  *
  * Shown when game_over_code == 3 (player finished a stage and needs to
  * pick the next chapter to play). The screen displays 4 stage buttons;
  * each is either "available" (id=0x12..0x15, def=0..3, hover=5..8) or
  * "already completed" (id=0x26 = neutral / non-clickable, def/hover=0xFFFF).
- * Completion bit comes from `g_completed_stages` (= DAT_004498C4 in PE).
+ * Completion bit comes from `g_completed_stages` (= in PE).
  *
  * Click handler stores the picked stage in `s_chapter_pick` (1..4). The
  * RunGameStageLoop game_over branch reads it and calls LoadStage(picked)
@@ -2405,7 +2405,7 @@ static int SelTloClick(int trigger)
     /* trigger==0 is the per-frame CB dispatch enabled by SCENE_FLAG_FORCE_CB.
  * Original (HandleAltMenuClick @ 0x0040B3D0): on this path it loads
  * Tlo.pal, sets up the ACME-assembly per-tick animation counters
- * (DAT_004550fc, DAT_00455100), and per-frame blits successive
+ * (, ), and per-frame blits successive
  * sel_guz frames (starting at frame 10) to compose ACME. PORT
  * SHORTCUT (refer ): animation itself not yet ported —
  * the assembled-ACME state is conveyed visually by buttons 0..3
@@ -2432,8 +2432,8 @@ static int SelTloClick(int trigger)
     }
     /* Button 0x16 — "ACME complete" green button at the bottom of the
  * map. Hit-test only fires when SelTloRefreshButtons has promoted
- * button_count back to 5 (i.e. all 4 stages bits set). 1:1 with
- * HandleAltMenuClick @ 0x0040B47C: DAT_004731e0 = 5, return 8. The
+ * button_count back to 5 (i.e. all 4 stages bits set).
+ * HandleAltMenuClick @ 0x0040B47C: = 5, return 8. The
  * caller (RunGameStageLoop / dev loop) then runs LoadStage(5) which
  * launches the "Monter" finale (intro=Dane_12.dta, alt=Dane_11.dta,
  * alt3=Dane_13.dta — end credits sting). */
@@ -2445,15 +2445,15 @@ static int SelTloClick(int trigger)
     return 0;
 }
 
-/* 1:1 with binary SceneDef at 0x00445D08. Button slots 0..3 get patched
+/* Button slots 0..3 get patched
  * per-call based on `g_completed_stages`; button 4 (id=0x16 "ACME-complete"
  * green finale button) has static frames straight from the binary
  * (+0x2C: 16 00 04 00 09 00). Static button_count = 5 per binary +0x0C;
- * SelTloRefreshButtons downgrades to 4 when not all stages done — 1:1
- * with RunGameStageLoop @ 0x0040C3FA write to DAT_00445d14. */
+ * SelTloRefreshButtons downgrades to 4 when not all stages done — 
+ * with RunGameStageLoop @ 0x0040C3FA write to g_default_world_state. */
 SceneDef g_sel_tlo_scene = {
     .background_pic = "sel_tlo.pic",
-    /* 1:1 with PE @ 0x00445D3C: mask = "sel_guz.wyc" (NOT sel_tlo.wyc —
+    /* @ 0x00445D3C: mask = "sel_guz.wyc" (NOT sel_tlo.wyc —
  * that filename doesn't exist in the .DTA archive; earlier port had
  * a typo). Without the correct mask, buttons have no hit-test
  * rectangles → clicks ignored → map appears non-functional. */
@@ -2461,7 +2461,7 @@ SceneDef g_sel_tlo_scene = {
     .on_click       = SelTloClick,
     .button_count   = 5,
     /* 0x34 = SCENE_FLAG_FORCE_CB | SCENE_FLAG_DISABLE_ESC | SCENE_FLAG_KEEP_IMAGE.
- * 1:1 with binary +0x10. Previous flags=0 suppressed the per-tick CB
+ * +0x10. Previous flags=0 suppressed the per-tick CB
  * dispatch needed for the original's ACME-assembly animation
  * (HandleAltMenuClick trigger==0 path — animation itself still
  * NOTE, see SelTloClick). */
@@ -2497,10 +2497,10 @@ int SelTloRefreshButtons(void)
         }
     }
     /* button[4] (ACME-complete green button, id=0x16) is exposed only
- * when all 4 stages finished. 1:1 with RunGameStageLoop @ 0x0040C3FA:
- * if (bVar22) DAT_00445d14 = 5; // all done → 5 buttons live
- * else DAT_00445d14 = 4; // some pending → 4 buttons
- * `button_count` IS DAT_00445d14 (SceneDef +0x0C). With count=4 the
+ * when all 4 stages finished. @ 0x0040C3FA:
+ * if (bVar22) g_default_world_state = 5; // all done → 5 buttons live
+ * else g_default_world_state = 4; // some pending → 4 buttons
+ * `button_count` IS g_default_world_state (SceneDef +0x0C). With count=4 the
  * 5th slot stays in memory but never gets hit-tested, painted, or
  * dispatched — so the green graphic disappears until ACME is full. */
     g_sel_tlo_scene.button_count = all_done ? 5 : 4;
@@ -2511,7 +2511,7 @@ int SelTloRefreshButtons(void)
 
 /* HandleSceneInput — RMB toggle + hotspot scan + LMB click dispatch.
  *
- * 1:1 with play_demo_scene's main-loop click block (lines ~1794-2023
+ *'s main-loop click block (lines ~1794-2023
  * pre-T2 phase B), extracted to file-scope so ProcessGameFrameTick
  * Inner can drive scene input without scene-locals threading.
  *
@@ -2548,7 +2548,7 @@ void HandleSceneInput(void)
  * Without the guard, the same click re-fires repeatedly: dialog
  * starts → wait pumps PGFT → HandleSceneInput sees same g_lmb_clicked
  * → re-dispatches → infinite recursion. Original RunGameStageLoop's
- * `DAT_0044e5a4 = 0` around DispatchClickEvent serves the same
+ * `g_lmb_handled = 0` around DispatchClickEvent serves the same
  * purpose, but here we use a depth counter to be safe with the
  * full set of script-blocking paths. */
     if (s_reentry_depth > 0) return;
@@ -2571,7 +2571,7 @@ void HandleSceneInput(void)
  * them defensively — idempotent. */
     PanelHitTest();
     extern int ClickHitTest(int16_t mx, int16_t my, uint16_t *out_verb);
-    extern uint16_t g_hover_scene_verb;            /* T31 v2 — DAT_0044988C */
+    extern uint16_t g_hover_scene_verb;            /* T31 v2 — g_hover_scene_verb */
     uint16_t hover_verb = 0x26;
     int have_hover = ClickHitTest((int16_t)s_mouse_x, (int16_t)s_mouse_y,
                                   &hover_verb);
@@ -2586,8 +2586,8 @@ void HandleSceneInput(void)
  * dialog) call ProcessGameFrameTick → PGFT Inner snapshots g_lmb_
  * handled = g_lmb_clicked (still 1!) → UpdateActorMovement auto-
  * binds walker to current mouse pos, clobbering the verb-script's
- * own walker. 1:1 with RunGameStageLoop @ 0x40C037 where
- * DAT_0044e5ac (= g_lmb_clicked) is cleared at the end of the
+ * own walker. @ 0x40C037 where
+ * g_panel_cursor_redirect2 (= g_lmb_clicked) is cleared at the end of the
  * click-handling block (line 0x40C0E1, written here as the same
  * pre-dispatch invariant). */
         g_lmb_clicked = 0;
@@ -2598,13 +2598,13 @@ void HandleSceneInput(void)
  * Item-combine path: if a held_item is already set AND user
  * clicks a different inventory slot (hover_panel_verb != 0x26),
  * route this as use-on-item (verb 0x0F) instead of overwriting
- * the held verb. 1:1 with RunGameStageLoop @ 0x0040C081-C0A0:
+ * the held verb. @ 0x0040C081-C0A0:
  *
- * bVar6 = DAT_0044e5e8 != 0x26; // held active
- * DAT_0044e5e8 = 0x26; // clear held
- * if (bVar6 && DAT_0044e450 != 0x26) { // also panel-hover
+ * bVar6 = g_held_item != 0x26; // held active
+ * g_held_item = 0x26; // clear held
+ * if (bVar6 && g_hover_panel_verb != 0x26) { // also panel-hover
  * uVar16 = 0xF; // use-on-item verb
- * _DAT_004498bc = DAT_0044e450; // var[0x0F] = target
+ * g_pickup_target_verb = g_hover_panel_verb; // var[0x0F] = target
  * }
  * DispatchClickEvent(this=held, that=verb_or_F);
  *
@@ -2648,7 +2648,7 @@ void HandleSceneInput(void)
  * the much-larger panel.wyc frame 1 OPCJE label overlay
  * as a hit region — that covered actor portraits + half
  * the inventory area. Original wiring missing from
- * RunGameStageLoop @ 0x0040C0CC (DAT_004498ac never set
+ * RunGameStageLoop @ 0x0040C0CC (g_script_vars never set
  * in code), so we trigger the menu directly here. */
                 fprintf(stderr, "[opt] OPCJE clicked at (%d,%d) → opszyns\n",
                         s_mouse_x, s_mouse_y);
@@ -2703,11 +2703,11 @@ void HandleSceneInput(void)
             g_held_item = 0x26;
             if (held_active && g_hover_panel_verb != 0x26) {
                 that_arg = 0x0F;
-                /* T8: write side-channel DAT_004498BC = hover_panel_verb
- * (= script var[0x0F] since DAT_00449880 + 0xF*4 = 0x498BC).
+                /* T8: write side-channel = hover_panel_verb
+ * (= script var[0x0F] since g_script_vars + 0xF*4 = 0x498BC).
  * The use-on-item verb-0x0F script reads var[0x0F] to know
- * the original target. 1:1 with RunGameStageLoop @ 0x40C08F:
- * _DAT_004498bc = (uint)DAT_0044e450; */
+ * the original target. @ 0x40C08F:
+ * g_pickup_target_verb = (uint)g_hover_panel_verb; */
                 extern uint32_t g_script_vars[0x129];
                 g_script_vars[0x0F] = g_hover_panel_verb;
                 fprintf(stderr, "[click] use-on-item: held=0x%04X target=0x%04X "
@@ -2733,9 +2733,9 @@ void HandleSceneInput(void)
                 DispatchClickEvent(this_arg, that_arg);
                 g_lmb_handled = 0;
             }
-            /* NO auto-walk-to-mouse here. 1:1 with RunGameStageLoop @
+            /* NO auto-walk-to-mouse here. @
  * 0x0040C037..C0CB: when a click resolves to a verb, the
- * original CLEARS DAT_0044E5A4 around DispatchClickEvent and
+ * original CLEARS g_lmb_handled around DispatchClickEvent and
  * never falls through to UpdateActorMovement's walker-bind
  * path. The verb script itself handles walking (op 0x10/0x11/
  * 0x12 actor walk-to + blocking wait) if the interaction
@@ -2865,7 +2865,7 @@ static const char *play_demo_scene(const DemoScene *scene)
             atlases[0]  ? atlases[0]  ->frame_count : 0,
             atlases[1]  ? atlases[1]  ->frame_count : 0);
 
-    /* Two actors (1:1 with UpdateActorMovement @ 0x004061D0): both visible
+    /* Two actors ( @ 0x004061D0): both visible
  * in every scene, but only the active one responds to
  * clicks. SPACE toggles between them. */
 
@@ -2873,7 +2873,7 @@ static const char *play_demo_scene(const DemoScene *scene)
  * original scripts can position them via op 0x28 SET_ENTITY_XY
  * (which uses to look up the render entity by
  * verb_id in the click list). game's
- * pre-spawn of DAT_0044E724 / DAT_0044E728 actor entities. */
+ * pre-spawn of g_actor / actor entities. */
     extern Entity *SpawnActorEntity(uint16_t id, AnimAsset *atlas,
                                     uint16_t init_frame,
                                     int16_t init_x, int16_t init_y);
@@ -2927,7 +2927,7 @@ static const char *play_demo_scene(const DemoScene *scene)
  * verb-script writes) — the walker freeze in LoadKomnataScene
  * stops any in-flight step from corrupting that position. */
     /* T130 — s_entry_dir global retired. */
-    extern uint16_t g_active_actor;            /* script.c — DAT_0044E6A4 */
+    extern uint16_t g_active_actor;            /* script.c — g_active_actor */
 
     extern int16_t s_mouse_x, s_mouse_y;
     const int walk_x0 = scene->walk_x0, walk_x1 = scene->walk_x1;
@@ -2959,8 +2959,8 @@ static const char *play_demo_scene(const DemoScene *scene)
         if (g_scene_quit) { g_scene_quit = 0; quit = 1; break; }   /* opszyns TAK */
         /* Bug 2 fix #19 — exit the main loop when a script sets
  * g_game_over_code (= var[14] alias, see Fix #16): 1=death,
- * 3=chapter-select after stage end, 4=stage-end death AVI. 1:1
- * with RunMainGameLoop @ 0x0040BDBD which reads DAT_004498B8 at
+ * 3=chapter-select after stage end, 4=stage-end death AVI. 
+ * with RunMainGameLoop @ 0x0040BDBD which reads g_game_over_code at
  * the top of each iter and bails to the post-loop handler. */
         if (g_game_over_code) { quit = 1; break; }
         /* T2 NOTE: PumpWin32Messages removed here — ProcessGameFrameTickInner
@@ -2983,7 +2983,7 @@ static const char *play_demo_scene(const DemoScene *scene)
  *
  * What we still do here:
  * 1. Compute perspective scale_pct from anchor Y and write to
- * entity[+0x58] each frame. 1:1 with the unconditional block
+ * entity[+0x58] each frame.
  * at the top of UpdateActorMovement ( lines 1-12
  * of decompile). Walker doesn't write +0x58 itself.
  * 2. Poll walker completion (entity[+0x4C/+0x50] == 0) for the
@@ -3078,7 +3078,7 @@ static const char *play_demo_scene(const DemoScene *scene)
             g_stats_dump_request = 0;
             StatsDump();
         }
-        /* T24 — F12 opens Pytanie quit-confirmation menu (1:1 with
+        /* T24 — F12 opens Pytanie quit-confirmation menu (
  * RunGameStageLoop @ 0x40BFxx F12 branch). RunMenuScene returns
  * the trigger from PytanieClick: 3 = TAK (exit), 4 = NIE
  * (continue). On TAK we set quit so the scene unwinds back to
@@ -3090,7 +3090,7 @@ static const char *play_demo_scene(const DemoScene *scene)
             int rc = RunMenuScene(1, &g_pytanie_scene);
             fprintf(stderr, "[scene] F12 Pytanie rc=%d\n", rc);
             if (rc == 3) {                          /* TAK — quit to menu */
-                /* 1:1 with opszyns→Quit Pytanie cascade @ game.c:2906
+                /*→Quit Pytanie cascade @ game.c:2906
  * (case 0x16: g_game_over_code = 2). Both paths are
  * semantically "user-confirmed quit to main menu", so
  * they raise the same code. Needed for the dev
@@ -3132,7 +3132,7 @@ static const char *play_demo_scene(const DemoScene *scene)
  *
  * Original control flow (decoded from ):
  *
- * DAT_004498B8 = 0; // clear game-over
+ * g_game_over_code = 0; // clear game-over
  * if (flags & 2) {
  * zero script_vars + entity_state;
  *; // ResetInventory
@@ -3247,14 +3247,14 @@ void RunGameStageLoop(uint8_t flags)
     }
 
     /* Post-loop game-over handling — switch on
- * DAT_004498B8 at the bottom of each iteration. */
+ * g_game_over_code at the bottom of each iteration. */
     if (g_game_over_code) {
         switch (g_game_over_code) {
         case 1:                                   /* death */
             PlaySceneCutsceneAvi("Dane_14.dta");
             break;
         case 3: {                                 /* chapter-select UI —
- * 1:1 port of RunGameStageLoop @ 0x0040C298 case 3 branch.
+ *
  * Order of operations matches original exactly:
  * 1. Refresh sel_tlo buttons (1st pass) — computes all_done
  * 2. If !all_done AND g_stage non-null: play current stage's
@@ -3273,7 +3273,7 @@ void RunGameStageLoop(uint8_t flags)
             int all_done = SelTloRefreshButtons();
 
             /* Step 2: outro of just-finished stage + stash alt3 for later.
- * 1:1 with `if ((!bVar22) && (DAT_0044a19c != 0))` block @
+ *
  * 0x0040C2EE: PlaySceneCutsceneAvi(stage+0x2A) = alt_avi,
  * local_1c = stage+0x2E = alt3_avi. */
             const char *stashed_alt3 = NULL;
@@ -3295,13 +3295,13 @@ void RunGameStageLoop(uint8_t flags)
             /* Step 4: all stages done → play Dane_13.dta credits sting,
  * then DROP into the menu so the user sees the assembled
  * ACME on the map and can click the green "finale" button
- * (id=0x16). 1:1 with RunGameStageLoop @ 0x0040C3F4:
+ * (id=0x16). @ 0x0040C3F4:
  * if (bVar22) {
  * PlaySceneCutsceneAvi("Dane_13.dta");
- * DAT_00445d14 = 5; // = button_count
- * } else { DAT_00445d14 = 4; }
+ * g_default_world_state = 5; // = button_count
+ * } else { g_default_world_state = 4; }
  * RunMenuScene(0, sel_tlo);
- * LoadStage((ushort)DAT_004731e0);
+ * LoadStage((ushort));
  * — note no early bail. The previous port version `break`ed
  * here, which meant the player never saw the green button
  * and the Monter stage 5 finale was unreachable from a
@@ -3319,7 +3319,7 @@ void RunGameStageLoop(uint8_t flags)
             RunMenuScene(0, &g_sel_tlo_scene);
 
             /* Step 6: load picked stage. NOTE — original
- * stores the pick in DAT_004731E0 via a separate click
+ * stores the pick in via a separate click
  * handler; our SelTloClick writes s_chapter_pick directly
  * (1-based). 5 = Monter finale (intro=Dane_12, alt=Dane_11,
  * alt3=Dane_13). */
@@ -3344,7 +3344,7 @@ void RunGameStageLoop(uint8_t flags)
             break;
         }
         case 4:                                   /* stage-end —
- * 1:1 with RunGameStageLoop case 4 @ 0x0040C328:
+ * @ 0x0040C328:
  *;;
  * PlaySceneCutsceneAvi(stage->alt_avi);
  * pcVar15 = stage->alt3_avi;

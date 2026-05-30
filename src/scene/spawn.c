@@ -100,7 +100,7 @@ Entity *SpawnActorEntity(uint16_t id, AnimAsset *atlas, uint16_t init_frame,
     return e;
 }
 
-/* ---- 1:1 with opcode 0x30 SPAWN_ENTITY @ RunScriptInterpreter:
+/* ---- @ RunScriptInterpreter:
  *
  * asset = (1, id) // find loaded atlas by id
  * if (asset) {

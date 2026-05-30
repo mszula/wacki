@@ -36,14 +36,14 @@ extern void     fclose_cyg(CygFile *f);                             /* */
 extern uint32_t fread_cyg (void *dst, uint32_t sz, uint32_t n, CygFile *f); /* */
 extern void     fseek_cyg (CygFile *f, int32_t off, int whence);    /* */
 
-/* ---- module state (mirrors DAT_004795B0..B8) ----------------------------
+/* ---- module state (mirrors ..B8) ----------------------------
  * The two index globals (s_dir, s_dir_count) are exposed publicly so that
  * the standalone extractor in tools/dta-extract.c can walk the directory
  * after OpenDtaArchiveFile has populated it. */
-static char        s_dta_path[260];        /* DAT_00479488 */
-static const char *s_dta_path_p = s_dta_path; /* DAT_00479588 */
-DtaIndexEntry *s_dir = NULL;               /* DAT_004795B0 */
-int32_t        s_dir_count = 0;            /* DAT_004795B4 */
+static char        s_dta_path[260];        /* */
+static const char *s_dta_path_p = s_dta_path; /* */
+DtaIndexEntry *s_dir = NULL;               /* */
+int32_t        s_dir_count = 0;            /* */
 
 /* ------------------------------------------------------------------------- *
  * OpenDtaArchiveFile — 0x00411210

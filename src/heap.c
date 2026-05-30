@@ -4,7 +4,7 @@
  * In the original these are C++ method exports of a small allocator class
  * ( = ::alloc, = ::free, = ::new
  * with vtable hook, = ::calloc-like with init flag). They map
- * 1:1 to malloc/free for the reconstruction.
+ * to malloc/free for the reconstruction.
  */
 #include <stdlib.h>
 #include <string.h>

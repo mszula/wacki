@@ -41,7 +41,7 @@ extern void    xfree(void *p);
 extern int     BindActorWalker(int actor_idx, int target_x, int target_y);
 extern const void *xlat_binary_ptr(uint32_t addr);
 
-/* ---- 1:1 with opcode 0x2d in RunScriptInterpreter:
+/* ----:
  * LoadAssetFromDtaBase(name) + RegisterEntityForUpdate(asset, kind=1, id)
  * The asset itself is the "table-look-up payload"; the actual entity is
  * spawned later by opcode 0x30 (which finds the asset via (1,id)).
@@ -111,7 +111,7 @@ void ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset)
  * actor IDs (1=Ebek, 2=Fjej) with regular mask/asset IDs via `op
  * 0x2C/0x2D load-asset id=N`; e.g. kiosk21 enter_script loads
  * `kiosk21.msk` as id=2, then `op 0x31 DESTROY id=2` unloads the mask
- * AND (in original 1:1) would also wipe Fjej's click payload. We skip
+ * AND (in original ) would also wipe Fjej's click payload. We skip
  * the actor entries here so subsequent `op 0x0E SET_SCRIPT` /
  * `op 0x28 SET_ENTITY_XY` calls can still find Fjej via
  * FindEntityByVerbId. Original WACKI must store actor click payloads
@@ -168,7 +168,7 @@ void ScriptCallEnableEnt(uint16_t id, int enable)
     ScriptCallDestroyEnt(id, enable ? 1 : 0);
 }
 
-/* 1:1 with op 0x3E HIDE_ENTITY @ Ghidra case 0x3e:
+/* @ Ghidra case 0x3e:
  * iVar20 = (verb_id);
  * if (iVar20) *(byte *)(iVar20 + 8) |= 0x80;
  *
@@ -221,7 +221,7 @@ void ScriptCallHideEnt(uint16_t id)
     if (suppressed) return;
     ((uint8_t *)e)[8] |= 0x80;
 }
-/* 1:1 with op 0x3F SHOW_ENTITY @ Ghidra case 0x3f:
+/* @ Ghidra case 0x3f:
  * iVar20 = (verb_id);
  * if (iVar20) *(ushort *)(iVar20 + 8) &= 0xff7f;
  *
@@ -342,7 +342,7 @@ void ScriptCallWalkTo(uint16_t verb_id, uint16_t target_id, int mode)
     }
 }
 
-/* ScriptCallAttachProp — 1:1 port of op 0x3B / 0x3C @ 0x00408DFA / 0x00408E40.
+/* ScriptCallAttachProp
  *
  * case 0x3B: e = FindEntityByVerbId(reg_id);
  * a = FindUpdateRegistration(1, prop);

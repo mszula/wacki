@@ -29,7 +29,7 @@ extern void    LinkEntityToList(Entity **head, Entity *e, int position);
 extern void    RegisterEntityForUpdate(Entity *e, uint16_t kind, uint16_t id);
 extern void    ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset);
 
-/* 1:1 with RunScriptInterpreter case 0x2c (BG mask setup, NOT a scene
+/* (BG mask setup, NOT a scene
  * transition):
  *
  * (0, '\x01'); // DESTROY id=0 (kinds 2/3/4)
@@ -40,7 +40,7 @@ extern void    ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset);
  * off_drawY[0], pixel_ptrs[0]);
  * if (e) {
  * RegisterEntityForUpdate(e, 3, 0); // kind=3 mask entity
- * (&DAT_0044e6b0, e, 1); // link into mask list (tail)
+ * (&walkability_head, e, 1); // link into mask list (tail)
  * }
  * }
  *
@@ -59,13 +59,13 @@ void ScriptCallBgMaskSetup(const char *name)
 {
     extern void *FindUpdateRegistration(uint16_t kind, uint16_t id);
     extern void  UnregisterEntityForUpdate(uint16_t kind, uint16_t id);
-    extern int   g_persp_band_count;                   /* DAT_0044A200 */
-    extern uint16_t g_settings_anim_active;            /* DAT_0044E448 (T121) */
+    extern int   g_persp_band_count;                   /* perspective_band_count_alt */
+    extern uint16_t g_settings_anim_active;            /* g_settings_anim_active (T121) */
     /* DESTROY id=0 across kinds 2,3,4 + unregister kind=1 asset reg
  * (param_2='\x01' to original ). */
     ScriptCallDestroyEnt(0, 1);
     /* Reset perspective band count — case 0x2c (line 893):
- * DAT_0044A200 = (DAT_0044E448 & 0xff02) << 1;
+ * perspective_band_count_alt = (g_settings_anim_active & 0xff02) << 1;
  * Without this reset, FILD-asset bands accumulate across scene
  * changes (LoadAssetFromDtaBase ADDS to band count, never clears).
  * The mask `& 0xff02` extracts bits 1 + 8-15 of komnata flags; the
@@ -109,7 +109,7 @@ void ScriptCallBgMaskSetup(const char *name)
         fprintf(stderr, "[fld] %s: %ux%u @ (%d,%d) stride=%u (via bg-mask-setup)\n",
                 name, g_walk_fld_w, g_walk_fld_h, g_walk_fld_ox, g_walk_fld_oy,
                 g_walk_fld_stride);
-        /* Rebuild per-actor waypoint graphs — 1:1 with RunScriptInterpreter
+        /* Rebuild per-actor waypoint graphs —
  * op 0x2C tail @ 0x00408AA0 which calls (g_actor_wp[0])
  * then REP MOVSD-copies actor 0 struct to actor 1. The graph holds
  * scene perspective bands (from FILD body) + pre-built edges
@@ -123,9 +123,9 @@ void ScriptCallBgMaskSetup(const char *name)
  * (op 0x2C body):
  * piVar22 = (w[0], h[0], drawX[0], drawY[0], pixels[0]);
  * RegisterEntityForUpdate(piVar22, 3, 0);
- * (&DAT_0044e6b0, piVar22, 1);
+ * (&walkability_head, piVar22, 1);
  *
- * The original links to DAT_0044E6B0 (walk-behind list) which is used
+ * The original links to walkability_head (walk-behind list) which is used
  * for foot-fall validation by (clamps walker into
  * non-obstacle areas). For visible occlusion of actors, we ADDITIONALLY
  * link the entity into the main render list (g_render_list_head) with

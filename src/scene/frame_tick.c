@@ -58,19 +58,19 @@ void ProcessGameFrameTickInner(void)
  * ghost interp and the speech-balloon dismiss timer all see fresh
  * deltas for THIS frame.
  *
- * uint32_t now = DAT_0044E454;
- * int dt = now - DAT_0044E5D8;
+ * uint32_t now = g_tick_counter;
+ * int dt = now - ;
  * if (dt > 0x32) dt = 0x32;
- * DAT_0044E578 = dt;
- * DAT_0044E5D8 = now;
+ * g_frame_delta_ticks = dt;
+ * = now;
  *
  * The original mmtimer (timeSetEvent @ 0x00403D84 with PUSH 0xa)
- * fires every 10 ms in real time and INC's DAT_0044E454. 
- * samples (now - prev) into DAT_0044E578, so DAT_0044E578 is in
+ * fires every 10 ms in real time and INC's g_tick_counter. 
+ * samples (now - prev) into g_frame_delta_ticks, so g_frame_delta_ticks is in
  * 10 ms TICKS — not raw milliseconds. We mirror that with two deltas:
  * - g_frame_delta_ms : real ms (held-item ghost interp,
  * speech-balloon dismiss timer)
- * - g_frame_delta_ticks : 10 ms ticks (1:1 DAT_0044E578 — cursor
+ * - g_frame_delta_ticks : 10 ms ticks ( g_frame_delta_ticks — cursor
  * anim acc, entity VM +0x3C countdown,
  * op 0x14/0x26/0x3D wait loops)
  *
@@ -105,9 +105,9 @@ void ProcessGameFrameTickInner(void)
         if (k == 'B' || k == 'b') ScreenshotToBmpAutoIncrement();
     }
 
-    /* T-trail: repaint scene background as the first thing per tick — 1:1
+    /* T-trail: repaint scene background as the first thing per tick — 
  * with head where `RestorePrevFrameRects(uVar12)` runs
- * (gated on DAT_0044E5DC == 0). Original restored bg pixels under
+ * (gated on scene_quit_flag == 0). Original restored bg pixels under
  * the previous frame's entity dirty rects; we do the simpler thing
  * and repaint the whole BG. This MUST run inside PGFT so blocking-
  * wait pumps (op 0x09 SHOW_TEXT, dialog runner, op 0x10/0x11/0x12
@@ -128,16 +128,16 @@ void ProcessGameFrameTickInner(void)
     /* Panel + cursor-hover hit-tests (read by HandleSceneInput below). */
     PanelHitTest();
     /* Item-name voice-over: hovering an inventory item for ~2 s plays
- * its name WAV via Item.scr's name table. 1:1 with the inventory
+ * its name WAV via Item.scr's name table.
  * branch inside ProcessGameFrameTick @ 0x004028B4. */
     ItemHoverDwellTick();
     extern int ClickHitTest(int16_t mx, int16_t my, uint16_t *out_verb);
     extern int16_t s_mouse_x, s_mouse_y;
     {
         /* T31 v2: persist the scene hover verb into g_hover_scene_verb
- * (DAT_0044988C in the PE). UpdateCursorState reads it to pick
+ * (g_hover_scene_verb in the PE). UpdateCursorState reads it to pick
  * cursor state 0/4/5/6/2/7. tail which
- * writes DAT_0044988C = matched_verb (or 0x26 on miss). */
+ * writes g_hover_scene_verb = matched_verb (or 0x26 on miss). */
         extern uint16_t g_hover_scene_verb;
         uint16_t hover_verb = 0x26;
         (void)ClickHitTest(s_mouse_x, s_mouse_y, &hover_verb);
@@ -174,8 +174,8 @@ void ProcessGameFrameTickInner(void)
     extern void PerActorWaypointAdvanceTick(void);
     PerActorWaypointAdvanceTick();
 
-    /* Snapshot click flag for UpdateActorMovement — 1:1 with
- * RunGameStageLoop @ 0x0040C037 `DAT_0044e5a4 = DAT_0044e5ac`.
+    /* Snapshot click flag for UpdateActorMovement
+ * RunGameStageLoop @ 0x0040C037 `g_lmb_handled = g_panel_cursor_redirect2`.
  * After T-input-order, g_lmb_clicked is normally 0 here (cleared
  * by HandleSceneInput above). Only set on the rare case where
  * HandleSceneInput was skipped (e.g., no g_current_scene). */

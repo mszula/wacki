@@ -36,18 +36,18 @@
 #include <SDL.h>
 
 /* ========================================================================= *
- * Engine globals — 1:1 with WACKI.EXE .data layout (only those the VM reads
+ * Engine globals —EXE .data layout (only those the VM reads
  * or writes; the rest live in their owner module).
  * ========================================================================= */
-uint32_t g_script_vars[0x129];              /* DAT_00449880 — register file */
-/* g_return_reg ALIAS — DAT_00449890 in the original is at offset 0x10
- * from DAT_00449880, which is var[4] in our register file (4*4 bytes).
+uint32_t g_script_vars[0x129];              /* g_script_vars — register file */
+/* g_return_reg ALIAS — in the original is at offset 0x10
+ * from g_script_vars, which is var[4] in our register file (4*4 bytes).
  * Scripts read the return value via op 0x04 IF_EQ a0=4 etc., so the
  * write target MUST be var[4], not a separate variable. The macro keeps
  * call sites readable. */
 #define g_return_reg (*(uint16_t *)&g_script_vars[4])
-/* DAT_0044A198 is `undefined2` (uint16_t, 2 bytes) per Ghidra type info.
- * Original perspective formula reads `(uint)DAT_0044a198` (zero-extend
+/* g_cursor_speed is `undefined2` (uint16_t, 2 bytes) per Ghidra type info.
+ * Original perspective formula reads `(uint)g_cursor_speed` (zero-extend
  * from 16 bits). Earlier port declared as uint8_t — op 0x40 invocations
  * with a0 > 255 (e.g. verb-action's 0x40 with reg_id=0x0109=265 at
  * 0x0042740C, for the "wsiądź do auta" climb sequence) silently truncated
@@ -56,21 +56,21 @@ uint32_t g_script_vars[0x129];              /* DAT_00449880 — register file */
  * to natural-size blit → Ebek rendered HUGE during the climb instead
  * of shrinking with perspective + disappearing behind horyzont.msk
  * walk-behind. Fix: store full uint16_t to match original. */
-uint16_t g_cursor_speed = 0x78;             /* DAT_0044A198 (was uint8_t — bug) */
-uint16_t g_perspective_min  = 4;            /* DAT_00449878 */
-uint16_t g_perspective_step = 7;            /* DAT_0044987C */
-uint16_t g_active_actor = 0;                /* DAT_0044E6A4 — 0=Ebek, 1=Fjej */
+uint16_t g_cursor_speed = 0x78;             /* g_cursor_speed (was uint8_t — bug) */
+uint16_t g_perspective_min  = 4;            /* g_perspective_min */
+uint16_t g_perspective_step = 7;            /* g_perspective_step */
+uint16_t g_active_actor = 0;                /* g_active_actor — 0=Ebek, 1=Fjej */
 /* g_dialogue_mode removed — was misnamed and unused. The misnamed
- * placeholder for DAT_0044988C (= scene hover verb) is not needed in
+ * placeholder for g_hover_scene_verb (= scene hover verb) is not needed in
  * our port because ClickHitTest returns the hover via out-parameter
  * instead of a global. */
-uint16_t g_anim1_done = 0;                  /* DAT_00449884 */
-uint16_t g_anim2_done = 0;                  /* DAT_00449888 */
-int      g_script_running = 0;              /* DAT_00451470 — !=0 inside VM */
-int      g_script_reentry = 0;              /* DAT_00455008 — reentrancy ctr */
-uint32_t g_timer_baselines[16];             /* DAT_004548A0[] */
+uint16_t g_anim1_done = 0;                  /* g_anim1_done */
+uint16_t g_anim2_done = 0;                  /* g_anim2_done */
+int      g_script_running = 0;              /* g_script_running — !=0 inside VM */
+int      g_script_reentry = 0;              /* g_script_reentry — reentrancy ctr */
+uint32_t g_timer_baselines[16];             /* [] */
 
-extern uint32_t g_tick_counter;             /* DAT_0044E454 — ms since boot */
+extern uint32_t g_tick_counter;             /* g_tick_counter — ms since boot */
 
 /* engine helpers used by various opcodes — kept as externs; many resolve to
  * stubs in stubs.c until the relevant subsystem is ported. */
@@ -78,7 +78,7 @@ extern void  ProcessGameFrameTick(void);
 extern void  PaletteFadeStep(int delta);
 extern void  PrintTextOnScreen(uint16_t hx, uint16_t hy, const char *text);
 extern uint32_t g_frame_delta_ms;           /* real wall-clock ms */
-extern uint16_t g_frame_delta_ticks;        /* DAT_0044E578 — 10 ms ticks */
+extern uint16_t g_frame_delta_ticks;        /* g_frame_delta_ticks — 10 ms ticks */
 
 /* Stub-side script bridges (defined in stubs.c if missing). They take the
  * raw operand words and the active register id, and may pc-advance the
@@ -136,7 +136,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
     int             result       = 1;
     const uint16_t *base         = pc;          /* current bytecode block */
 
-    /* Dialog choice accumulator — 1:1 with Ghidra's stack-local
+    /* Dialog choice accumulator —'s stack-local
  * local_124 / auStack_122 / uVar13. Up to 6 entries, each:
  * { u16 speaker_id, u32 dialog_ptr, u32 dialog_data }
  * Populated by op 0x19 QUEUE_DIALOG, consumed by op 0x1A-0x1D
@@ -175,7 +175,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
 
         /* reg_id = which register the opcode operates on.
  *
- * 1:1 with Ghidra 0x00407820 line 218-223 (the `uVar29 =
+ *-223 (the `uVar29 =
  * (ushort)puVar15` derivation that precedes the switch):
  *
  * uVar31 = local_158[1]; // = a0 (1st operand u16)
@@ -204,7 +204,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         switch (op) {
         /* ---- conditionals & control flow ----------------------------- */
         case 0x00: {                            /* SKIP_TO_END
- * 1:1 with Ghidra case 0 (line 213): `if (uVar29 != uVar23)
+ * (line 213): `if (uVar29 != uVar23)
  * skip-forward-past-endif`.
  *
  * `uVar29` is the RESOLVED reg_id (this/that-mapped via the
@@ -270,7 +270,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             advanced = 1;
             break;
 
-        case 0x17: {                            /* JUMP_LABEL — 1:1 with
+        case 0x17: {                            /* JUMP_LABEL
  * Ghidra case 0x17:
  * if (base == NULL) goto FALLTHROUGH;
  * walk base looking for op 0x16 with arg == a0;
@@ -285,7 +285,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * skipping this opcode. */
             break;
         }
-        case 0x18: {                            /* LOOP_COUNTED — 1:1 with
+        case 0x18: {                            /* LOOP_COUNTED
  * Ghidra case 0x18: counter slot = number of 0x18 opcodes
  * appearing BEFORE the current pc in this script. Up to 10
  * slots. Each increment compares against arg=a0 (limit); if
@@ -337,17 +337,17 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x21: g_return_reg = (uint16_t)(((this_id - 0x29) < 0x8E) ? 2 : 1); break;
         case 0x22: g_return_reg = that_id; break;
         case 0x23: {
-            /* 1:1 with Ghidra @ case 0x23:
+            /* @ case 0x23:
  * uVar26 = (uVar29);
- * _DAT_00449890 = (ushort)(uVar26 & 0xff);
+ * g_return_reg = (ushort)(uVar26 & 0xff);
  *
  * = InventoryHasItem(reg_id) → store result in var[4] = g_return_reg.
  * Used by scripts as a precondition: `if (has(item)) { ... }`. */
             g_return_reg = (uint16_t)InventoryHasItem(reg_id);
             break;
         }
-        case 0x29: g_return_reg = g_cur_komnata; /* 1:1 with Ghidra case 0x29: returns DAT_0044e588 (current komnata id). Was wrongly reading g_script_vars[0]. */ break;
-        case 0x2A: g_return_reg = (uint16_t)WackiRand((uint16_t)a0); /* 1:1 (bound=a0) */ break;
+        case 0x29: g_return_reg = g_cur_komnata; /*: returns g_cur_komnata (current komnata id). Was wrongly reading g_script_vars[0]. */ break;
+        case 0x2A: g_return_reg = (uint16_t)WackiRand((uint16_t)a0); /* (bound=a0) */ break;
         case 0x34: g_return_reg = (uint16_t)(g_active_actor + 1); break;
 
         /* ---- wait / pacing ------------------------------------------- */
@@ -358,12 +358,12 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * uint16_t left = a0;
  * do {
  *; // PGFT
- * uint16_t dt = DAT_0044E578; // ticks elapsed
+ * uint16_t dt = g_frame_delta_ticks; // ticks elapsed
  * if (left < dt) { left = 0; break; }
  * left -= dt;
  * } while (left);
  *
- * DAT_0044E578 is in 10 ms units (timeSetEvent 10ms period at
+ * g_frame_delta_ticks is in 10 ms units (timeSetEvent 10ms period at
  * 0x00403D84), so the operand a0 is ALSO ticks — a script that
  * says "WAIT 100" waits 100*10 = 1000 ms = 1 s. Earlier port
  * treated a0 as raw ms which ran waits 10× too fast. */
@@ -377,7 +377,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             }
             break;
         }
-        case 0x15: {                            /* WAIT_ENTITY — 1:1 with
+        case 0x15: {                            /* WAIT_ENTITY
  * Ghidra case 0x15:
  * iVar20 = (uVar29); // find by verb_id
  * if (iVar20 != 0) {
@@ -400,7 +400,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             }
             break;
         }
-        case 0x26: {                            /* WAIT_ANIM_FRAME — 1:1
+        case 0x26: {                            /* WAIT_ANIM_FRAME — 
  * with Ghidra case 0x26:
  * e = (verb_id);
  * if (e) while (e[+0x30] != target) ProcessGameFrameTick;
@@ -421,7 +421,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             }
             break;
         }
-        case 0x3D: {                            /* WAIT_KIND2_FRAME — 1:1 with
+        case 0x3D: {                            /* WAIT_KIND2_FRAME
  * Ghidra case 0x3D:
  * e = FindUpdateRegistration(2, reg_id); // kind=2 sprite slot
  * if (e) {
@@ -446,7 +446,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
 
-        /* ---- actor walk-to + blocking wait — 1:1 with Ghidra ops
+        /* ---- actor walk-to + blocking wait —
  * 0x10 (actor 0), 0x11 (actor 1), 0x12 (both, with 50-tick
  * head-start). Original case 0x10:
  *
@@ -490,12 +490,12 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x33: {                            /* RESET_BOTH_ACTORS —
- * 1:1 with Ghidra case 0x33:
+ *:
  * (g_actor[0]); // reset state
- * DAT_0044E570 = -1; // walk-target id reset
+ * walk_target_id = -1; // walk-target id reset
  * g_actor[0].+0x2C = *(int*)(stage+0xC) + 0x10; // idle bytecode
  * (g_actor[1]);
- * DAT_0044E5C0 = -1;
+ * = -1;
  * g_actor[1].+0x2C = *(int*)(stage+0x10) + 0x10;
  * The +0xC / +0x10 offsets into the stage struct point at
  * per-actor animation tables; offset +0x10 inside that table
@@ -539,7 +539,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
 
         /* ---- text / dialogue ----------------------------------------- */
-        case 0x09: {                            /* SHOW_TEXT — 1:1 with
+        case 0x09: {                            /* SHOW_TEXT
  * Ghidra case 0x09 (lines 352-496): allocates a text-balloon
  * entity, renders multi-line wrapped text into it, positions
  * relative to actor's foot, waits for click/timeout.
@@ -548,7 +548,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * a DWORD at byte +4 of the instruction → a binary pointer
  * into .data where the string lives.
  *
- * 1:1 prefix (lines 353-371 of ): search
+ * prefix (lines 353-371 of ): search
  * dlg_speaker[] for an entry matching reg_id. If found at
  * index N (N < dlg_count), bind dlg_ptr[N] as a per-entity
  * script on the speaker entity (= ). This makes
@@ -598,7 +598,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                             *(uint16_t *)(eb + 0x30) = 0;
                         }
                         /* Stash the dlg_data ptr for TickSpeechBalloon
- * to re-bind when this balloon dismisses (1:1
+ * to re-bind when this balloon dismisses (
  * with original case 9 epilogue, line ~480). */
                         g_speech_unbind_speaker = dlg_speaker[found_idx];
                         g_speech_unbind_data    = dlg_data[found_idx];
@@ -612,17 +612,17 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             /* Block until balloon dismisses — case 9
  * wait loop (Ghidra @ lines ~462-475):
  *
- * DAT_0044E5AC = 0;
+ * g_panel_cursor_redirect2 = 0;
  * do {
- * if (DAT_00455004 == 0) break;
- * DAT_0044E5A4 = DAT_0044E5AC;
+ * if (speech_dismiss_ticks == 0) break;
+ * g_lmb_handled = g_panel_cursor_redirect2;
  * ProcessGameFrameTick;
- * if (DAT_00455004 < DAT_0044E578) DAT_00455004 = 0;
- * else DAT_00455004 -= DAT_0044E578;
- * } while (DAT_0044E5AC == '\0');
+ * if (speech_dismiss_ticks < g_frame_delta_ticks) speech_dismiss_ticks = 0;
+ * else speech_dismiss_ticks -= g_frame_delta_ticks;
+ * } while (g_panel_cursor_redirect2 == '\0');
  *
  * = pump frames until: dismiss timer hits 0,
- * OR user click (DAT_0044E5AC != 0).
+ * OR user click (g_panel_cursor_redirect2 != 0).
  *
  * TickSpeechBalloon (called from ProcessGameFrameTick) drives
  * the dismiss timer and clears g_speech_balloon when expired.
@@ -639,7 +639,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                     ProcessGameFrameTick();
                     if (g_lmb_clicked) {
                         g_lmb_clicked = 0;                  /* consume */
-                        /* Force-dismiss: simulate DAT_0044E5AC click by
+                        /* Force-dismiss: simulate g_panel_cursor_redirect2 click by
  * fast-forwarding the timer past the dismiss
  * threshold. TickSpeechBalloon will GC the
  * balloon on the next tick. */
@@ -654,7 +654,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x0B: {                            /* SET_ACTOR_FLAG2 + frame override —
- * 1:1 with Ghidra case 0x0b (lines 501-507): lookup kind=2
+ * (lines 501-507): lookup kind=2
  * entity, set flags2 bit 1 (= "frame override active") AND
  * write local_158[2] into +0x26 (the override frame index).
  * Used by trigger frames (Edek blinking, etc.). */
@@ -705,7 +705,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x0F: {                            /* SET_ENTITY_ANIM —
- * 1:1 with Ghidra case 0x0f (lines 522-530):
+ * (lines 522-530):
  *
  * iVar20 = (2, uVar29); // kind=2 entity by id
  * if (iVar20) {
@@ -746,7 +746,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x19: {                            /* QUEUE_DIALOG
- * 1:1 with Ghidra case 0x19 (line 745):
+ * (line 745):
  *
  * if (uVar13 < 6) {
  * iVar20 = 0;
@@ -779,7 +779,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                 dlg_speaker[slot] = reg_id;
                 dlg_ptr    [slot] = ptr_v;
                 dlg_data   [slot] = data_v;
-                ++dlg_count;                /* 1:1 — always grow the high-water */
+                ++dlg_count;                /* — always grow the high-water */
                 /* T20b debug — trace dialog choice queue. The verb_id
  * here is what op 0x1A will later add to the panel
  * inventory slot; ptr/data reference Gadki.scr sections
@@ -790,7 +790,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             }
             break;
         }
-        /* ---- dialog page-swap ops — 1:1 with RunScriptInterpreter
+        /* ---- dialog page-swap ops —
  * @ 0x00408704..0x004087F7 in the original. All five ops drive
  * the same panel verb-table rotation via 
  * (= PanelPageSwap), gated on different pre-conditions:
@@ -827,7 +827,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * the panel verbs change but won't visually render dialog text
  * until the panel-label render path is ported (see D2 in REVIEW). */
         case 0x1A: {
-            /* 1:1 with Ghidra case 0x1a (line 765):
+            /* (line 765):
  * ((uint)puVar15); // InventoryAddItem(reg_id)
  * (uVar29); // InventorySetPageForItem(reg_id)
  *; // PanelPageSwap
@@ -857,7 +857,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x1B: {
-            /* 1:1 with :
+            /*
  * (reg_id);
  *; // InventoryPageCollapse
  *; // PanelPageSwap
@@ -869,21 +869,21 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x1C: {
-            /* 1:1 with :
+            /*
  * if ( != 0); // page-next
  */
             if (InventoryPageNext()) PanelPageSwap();
             break;
         }
         case 0x1D: {
-            /* 1:1 with :
+            /*
  * if ( != 0); // page-prev
  */
             if (InventoryPagePrev()) PanelPageSwap();
             break;
         }
         case 0x1F: {
-            /* 1:1 with :
+            /*
  * (reg_id); // InventoryDropItem
  */
             InventoryDropItem(reg_id);
@@ -891,9 +891,9 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
 
         /* ---- exits / scene transitions ------------------------------- */
-        case 0x20: {                            /* GO_EXIT — 1:1 with
+        case 0x20: {                            /* GO_EXIT
  * Ghidra case 0x20:
- * if (uVar31 == 0x26) target = DAT_0044E588; // 0x26 = self
+ * if (uVar31 == 0x26) target = g_cur_komnata; // 0x26 = self
  * else target = uVar31;
  * (target);
  *
@@ -904,9 +904,9 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x2B: {
-            /* 1:1 with Ghidra case 0x2b:
+            /*:
  * if (((ushort)(uVar29 - 0x29) < 0x8e) || (uVar29 == 0x26))
- * DAT_0044E5E8 = uVar29; // g_held_item
+ * g_held_item = uVar29; // g_held_item
  *
  * uVar29 = RESOLVED reg_id (this/that-mapped), NOT raw a0.
  * Earlier port read raw `a0` — when scripts use 0x28 (this)
@@ -918,7 +918,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                 g_held_item = reg_id;
             break;
         }
-        case 0x2C: {                            /* BG MASK SETUP — 1:1 with
+        case 0x2C: {                            /* BG MASK SETUP
  * Ghidra case 0x2c steps 1-7:
  * destroys old id=0 entity,
  * loads .fld/.msk by name,
@@ -951,7 +951,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x2E: {                            /* REGISTER_MASK_E6D8 — per
  * Ghidra (id, ptr,
- * &DAT_0044e6d8); registers
+ * &mask_list_head); registers
  * per-frame click hotspots
  * into the "mask" verb table.
  * Asset must already be
@@ -962,7 +962,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x2F: {                            /* REGISTER_MASK_E700 — same
  * as 0x2E but target table is
- * &DAT_0044e700 (the verb-list
+ * &verb_mask_list_head (the verb-list
  * mask table). */
             uint32_t click_addr = i32_at4;
             ScriptCallRegMaskList(reg_id, click_addr, 1);
@@ -982,7 +982,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             ScriptCallSpawnEntity(reg_id, flags2, click_addr, script_addr);
             break;
         }
-        /* 1:1 with Ghidra case 0x31/0x32:
+        /*/0x32:
  * case 0x31: (reg_id, '\x01'); // destroy + unreg asset
  * case 0x32: (reg_id, '\x00'); // destroy only
  * Op naming `EnableEnt` was legacy misleading — both DESTROY; the
@@ -1003,7 +1003,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x3E: ScriptCallHideEnt(reg_id); break;
         case 0x3F: ScriptCallShowEnt(reg_id); break;
         case 0x47: {                            /* MOVE_ENTITY_DELTA —
- * 1:1 with Ghidra case 0x47 (lines 1108-1119): adds (dx,dy)
+ * (lines 1108-1119): adds (dx,dy)
  * to the entity's draw AND raw positions.
  *
  * e = (reg_id); // FindEntityByVerbId
@@ -1032,7 +1032,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x4B: {                            /* QUERY_ENTITY_X
- * 1:1 with Ghidra case 0x4b:
+ *:
  *
  * g_return_reg = 0;
  * e = (reg_id);
@@ -1062,7 +1062,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         }
         case 0x4C: {                            /* QUERY_ENTITY_Y — mirror of 0x4B.
  * Same +0x28 atlas test, returns +0x24 (anchor Y) or +0x0C
- * (drawn Y). 1:1 with Ghidra case 0x4c. */
+ * (drawn Y). */
             extern Entity *FindEntityByVerbId(uint16_t verb);
             Entity *e = FindEntityByVerbId(reg_id);
             if (e) {
@@ -1080,7 +1080,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         /* 0x47 / 0x4B / 0x4C implemented above — share FindEntityByVerbId
  * which walks the click list. Earlier port used
  * FindUpdateRegistration(2, reg_id) — wrong lookup. */
-        case 0x27: {                            /* SET_TAGGED_FIELD — 1:1
+        case 0x27: {                            /* SET_TAGGED_FIELD — 
  * with Ghidra case 0x27:
  *
  * ptr = *(char**)(local_158+2); // dword @ +4
@@ -1112,7 +1112,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x28: {                            /* SET_ENTITY_XY —
- * 1:1 with Ghidra case 0x28 (lines 855-875): writes (x, y)
+ * (lines 855-875): writes (x, y)
  * into the entity matching `reg_id` (which after the pre-
  * dispatch alias is normally this_id for op 0x28's a0==0x28
  * special case, but can be other ids if the script uses the
@@ -1244,7 +1244,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x40:
             g_perspective_min  = a1;
             g_perspective_step = a2;
-            g_cursor_speed     = a0;   /* 1:1 — uVar31 = full halfword */
+            g_cursor_speed     = a0;   /* — uVar31 = full halfword */
             break;
 
         /* ---- sound --------------------------------------------------- *
@@ -1255,11 +1255,11 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * `s_sound_table` in stubs.c is empty, so most positional sound
  * calls only end up in the queue (consumed by stereo pan calc
  * via SoundQueueMixForListener) without playing a WAV. The
- * positional queue itself + the stereo pan computation are 1:1
+ * positional queue itself + the stereo pan computation are 
  * with the original ; only the id→asset mapping is
  * stubbed. See TASKS-2 T36 polish notes. */
         case 0x41: {
-            /* 1:1 with Ghidra case 0x41:
+            /*:
  * (reg_id, local_158[2], *(u32)(local_158 + 4),
  * local_158[3]);
  *
@@ -1274,15 +1274,15 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             break;
         }
         case 0x42: ScriptCallSoundStop(); break;
-        /* RE confirmed (T16 quick win, 2026-05-27): DAT_0044E6C4 has
+        /* RE confirmed (T16 quick win, 2026-05-27): has
  * TWO writers (op 0x43 sets 0 @ 0x408d69, op 0x44 sets 0x10 @
  * 0x408d77) and ZERO readers anywhere in the binary — verified
  * via Ghidra xrefs. The flag is dead state even in the original
- * game, so our no-op port is 1:1 correct. Both ops are kept as
+ * game, so our no-op port is correct. Both ops are kept as
  * dispatch-and-bail so scripts that contain them advance their
  * PC past the operand bytes correctly. */
-        case 0x43: /* CLEAR_DAT_E6C4 — dead state, no-op 1:1 */ break;
-        case 0x44: /* SET_DAT_E6C4_16 — dead state, no-op 1:1 */ break;
+        case 0x43: /* CLEAR_DAT_E6C4 — dead state, no-op */ break;
+        case 0x44: /* SET_DAT_E6C4_16 — dead state, no-op */ break;
 
         /* ---- timers -------------------------------------------------- */
         case 0x45: if (a0 < 16) g_timer_baselines[a0] = g_tick_counter; break;
@@ -1294,13 +1294,13 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case 0x4A: ScriptCallPalLoad(0,  i32_at4, 0); break;
 
         /* ---- subanim toggles ---------------------------------------- */
-        case 0x50: {                            /* SUBANIM_HIDE_TOGGLE — 1:1
+        case 0x50: {                            /* SUBANIM_HIDE_TOGGLE — 
  * with Ghidra case 0x50:
  *
  * asset = (1, id); // kind=1 by id
  * frame = local_158[2]; // arg2
  * if (asset && frame < asset->frame_count) {
- * mask_e = walk DAT_0044E6D8 looking for entry
+ * mask_e = walk mask_list_head looking for entry
  * whose +0x16 == asset->pixel_ptrs[frame];
  * if (mask_e) {
  * if (local_158[3] == 0) mask_e[+0x14] &= ~0x8000; // show
@@ -1343,7 +1343,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                     matched ? "" : " (NO MASK MATCHED)");
             break;
         }
-        case 0x51: {                            /* SUBANIM_SET_PARAM — 1:1
+        case 0x51: {                            /* SUBANIM_SET_PARAM — 
  * with Ghidra case 0x51: same asset+frame lookup as 0x50,
  * then writes local_158[3] into mask's +0x12 (foot_y mirror
  * used for z-sort + hit-test bbox bottom). */
@@ -1376,10 +1376,10 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
 
         /* ---- dialogue subsystem -------------------------------------
  *
- * 1:1 with RunScriptInterpreter @ 0x00407820 case 0x52 / 0x53:
+ * @ 0x00407820 case 0x52 / 0x53:
  * case 0x52: (state, entity, *(char**)(pc+4),
  * *(byte**)(pc+8), *(u32)(pc+12));
- * case 0x53: (DAT_0044E44C, state, *(char**)(pc+4));
+ * case 0x53: (, state, *(char**)(pc+4));
  *
  * Both opcodes read DWORD POINTERS at offsets +4, +8, +12 — they
  * are NOT inline strings (pc+2 was wrong). Resolve through xlat
@@ -1419,19 +1419,19 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
             ScriptCallDialogEnd(result_key);
             break;
         }
-        case 0x54: {                            /* SHOW_PICTURE — 1:1 with
+        case 0x54: {                            /* SHOW_PICTURE
  * Ghidra case 0x54: (*(char**)(local_158 + 2)).
  *
  * (name):
  * LoadFileFromDta(name, &raw);
  * pic = (w, h, raw+0x308, 0, 1); // PIC builder
  * local_8 = 0xFFFF;
- * while (DAT_0044E5AC == 0 && uVar2 != 0) {
+ * while (g_panel_cursor_redirect2 == 0 && uVar2 != 0) {
  *; // pump events
  *; // mm-tick
- * uVar2 -= DAT_0044E578; // decrement by frame_delta
+ * uVar2 -= g_frame_delta_ticks; // decrement by frame_delta
  * }
- * DAT_0044E5AC = 0;
+ * g_panel_cursor_redirect2 = 0;
  * FreeAsset(pic);
  *
  * Loads + displays a .pic file fullscreen, waits up to ~0xFFFF

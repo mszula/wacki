@@ -72,7 +72,7 @@ void PaintHudOverlay(void)
         }
     }
 
-    /* Actor portrait + active-frame indicator — 1:1 port of @
+    /* Actor portrait + active-frame indicator
  * 0x00407130. The ebfj.wyc atlas has 4 frames stored at fixed positions
  * (each frame's own off_drawX/Y): 0/1 = Ebek/Fjej "active" portraits
  * (with frame/border), 2/3 = "inactive" portraits (without frame).
@@ -192,7 +192,7 @@ void PaintHudOverlay(void)
         }
     }
 
-    /* Held-item ghost — 1:1 port of ghost branch. */
+    /* Held-item ghost */
     static int16_t  s_ghost_x = 0, s_ghost_y = 0;
     static uint16_t s_ghost_item = 0xFFFF;
     if (g_held_item != 0x26 && g_items_atlas &&

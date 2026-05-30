@@ -22,7 +22,7 @@ extern const void *PeLoaderRead(uint32_t va);
 
 /* ---- directional walk-anim table per actor.
  *
- * DAT_0044A19C+0xC (actor 0) and +0x10 (actor 1) —
+ * g_actor_walk_anim_table+0xC (actor 0) and +0x10 (actor 1) —
  * each a pointer to an array of 6 dwords:
  * [0] L walk (op 0x15-driven, patched X/Y)
  * [1] R walk
@@ -32,7 +32,7 @@ extern const void *PeLoaderRead(uint32_t va);
  * [5] idle script (no op 0x15, just SET_DELAY → STOP)
  *
  * binds entry [5] (idle) to entity[+0x2C] at room reset:
- * DAT_0044E724[0xB] = *(int *)(DAT_0044A19C+0xC + 0x14);
+ * g_actor[0xB] = *(int *)(g_actor_walk_anim_table+0xC + 0x14);
  * The 0x14 offset = 4*5 bytes = entry 5 = idle. So actors start with
  * idle bound and per-entity VM ticks the idle script (which yields each
  * frame). On click, PlayActorAnimByPath swaps to a directional walker. */
@@ -102,7 +102,7 @@ void LoadActorWalkAnims(uint32_t stage_va)
         (void*)g_actor_walk_anim[1][4], (void*)g_actor_walk_anim[1][5]);
 }
 
-/* ---- default world-state template — DAT_004434F0 (0x999 dwords).
+/* ---- default world-state template — (0x999 dwords).
  * The real one is a precomputed game-state baseline; for the portable
  * build it stays zeroed (an empty save). */
 const uint8_t g_default_world_state[0x2664] = { 0 };

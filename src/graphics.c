@@ -225,8 +225,8 @@ void RestorePrevFrameRects(void) { /* nop */ }
  * this inside the per-entity render path ( case scaled-actor
  * branch + stretched-blit) controlled by entity->scale_pct
  * (= entity+0x58, computed each tick by UpdateActorMovement from the
- * actor's foot-Y and the stage perspective parameters DAT_0044a198 /
- * DAT_00449878 / DAT_0044987c).
+ * actor's foot-Y and the stage perspective parameters g_cursor_speed /
+ * g_perspective_min / g_perspective_step).
  *
  * Parameters:
  * dx, dy — destination top-left (already adjusted for scaled size)
@@ -319,7 +319,7 @@ void BlitSpriteScaledColorKeyFlip(int16_t dx, int16_t dy,
 }
 
 /* ------------------------------------------------------------------------- *
- * DepackRleFrame — 1:1 port of .
+ * DepackRleFrame
  *
  * The "rich" ANIM encoding (asset kind=3 in LoadAssetFromDtaBase, i.e.
  * frame_count > 16 and first-frame's first param non-zero) stores each
@@ -383,7 +383,7 @@ void InstallPalette(const uint8_t *rgb, uint16_t first)
 }
 
 /* ========================================================================= *
- * Alpha-plane scaled blit — 1:1 port of + +
+ * Alpha-plane scaled blit
  * + + .
  *
  * Used by per-entity VM for entities with flag 0x100 + 0x400 (alpha-plane
@@ -396,18 +396,18 @@ void InstallPalette(const uint8_t *rgb, uint16_t first)
  * enough at < 100ms for a one-time cost).
  * ========================================================================= */
 
-/* DAT_00476A60: palette → RGB12 nibble triplets (256 × 4 bytes;
+/* : palette → RGB12 nibble triplets (256 × 4 bytes;
  * byte 0=R, byte 1=G, byte 2=B — matches g_palette_rgb byte order
  * (.PAL files are RGB-ordered)). */
 static uint8_t  s_pal_rgb12[256][4];
-/* DAT_00475A60: RGB12 → palette idx. RGB12 index layout (per original
+/* : RGB12 → palette idx. RGB12 index layout (per original
  * : `idx = sum_r + (sum_b * 0x10 + sum_g) * 0x10`):
  * bits 0-3 = R nibble (LOW)
  * bits 4-7 = G nibble (MIDDLE)
  * bits 8-11 = B nibble (HIGH)
  * (R-low, B-high nibble layout — NOT a typical RGB565-style ordering.) */
 static uint8_t  s_rgb12_to_pal[4096];
-/* Tint state. Original DAT_00475A58 = 0x808080 = identity. Encoding
+/* Tint state. Original = 0x808080 = identity. Encoding
  * matches : `tint_r = param & 0xff; tint_g = (param >> 8)
  * & 0xff; tint_b = (param >> 16) & 0xff` — so the param is "RGB-encoded"
  * uint32 with R in LOW byte. */
@@ -544,8 +544,8 @@ static uint8_t sample_box_2d(const uint8_t *p, int width, int src_stride,
     return s_rgb12_to_pal[sum_r | (sum_g << 4) | (sum_b << 8)];
 }
 
-/* BlitAlphaScaled — 1:1 port of . Caller passes a packed
- * "blit struct" similar to original DAT_0044A1D0..E0:
+/* BlitAlphaScaled Caller passes a packed
+ * "blit struct" similar to original ..E0:
  * { src_w, src_h, src_ptr (8B), dst_w, dst_h, dst_ptr (8B), mode }
  * but we take individual args for clarity.
  *

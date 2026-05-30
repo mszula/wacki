@@ -50,11 +50,11 @@ extern int   FindScriptByStageAndRoom(void *self, const char *etap, const char *
 
 /* LoadKomnata —
  *
- * piVar2 = *DAT_0044A19C; // komnata table base
+ * piVar2 = *g_actor_walk_anim_table; // komnata table base
  * walk entries (14 bytes each) until index == id
- * if not found: DAT_0044E5DC = 0; return;
- * DAT_0044E588 = id; // g_cur_komnata
- * DAT_0044E448 = entry[+4]; // flags
+ * if not found: scene_quit_flag = 0; return;
+ * g_cur_komnata = id; // g_cur_komnata
+ * g_settings_anim_active = entry[+4]; // flags
  * palette fade-out (deferred — see comment below)
  * + // clear lists
  * (name) // name-keyed init
@@ -150,7 +150,7 @@ const char *LoadKomnata(uint16_t id)
  * previous room:
  *
  * 1. Perspective band count — original unconditionally
- * `DAT_0044A200 = 0` then `= 4 if (flags & 2)`. Earlier port only
+ * `perspective_band_count_alt = 0` then `= 4 if (flags & 2)`. Earlier port only
  * reset it inside ScriptCallBgMaskSetup (which is called only when
  * the room has a mask asset). Rooms without one inherited band
  * count from the previous komnata.
@@ -165,15 +165,15 @@ const char *LoadKomnata(uint16_t id)
  * keeps that scale until UpdateActorMovement re-computes from
  * anchor Y. Brief visual glitch on room entry.
  *
- * Cursor entity link (DAT_0045147C / DAT_00451480) is skipped — see
+ * Cursor entity link (cursor_state_struct / ) is skipped — see
  * T106 (deferred). Click queue head, panel verb-tab init, label
  * strings — all done at engine boot, no need to repeat. */
     extern int g_persp_band_count;
     g_persp_band_count = (flags & 2) ? 4 : 0;
     /* Reset perspective globals ( top):
- * DAT_0044a198 = 0x78; // g_cursor_speed = 120
- * DAT_00449878 = 4; // g_perspective_min = 4
- * DAT_0044987c = 7; // g_perspective_step = 7
+ * g_cursor_speed = 0x78; // g_cursor_speed = 120
+ * g_perspective_min = 4; // g_perspective_min = 4
+ * g_perspective_step = 7; // g_perspective_step = 7
  * Without this an op 0x40 SET_PERSPECTIVE call from a prior komnata's
  * action cinematic (which biases perspective so ACTIVE actor scales
  * toward 0) persists into the next komnata. First UpdateActorMovement
@@ -229,13 +229,13 @@ const char *LoadKomnata(uint16_t id)
  * entry[+4] (was truncated to u8). */
     PanelPageSwap();
 
-    /* Run enter_script (1:1 with `RunScriptInterpreter(0x26, 0x26, ptr)`). */
+    /* Run enter_script ( 0x26, ptr)`). */
     if (enter_va) {
         const uint8_t *bc = (const uint8_t *)xlat_binary_ptr(enter_va);
         if (bc) RunScriptInterpreter(0x26, 0x26, (uint8_t *)bc);
     }
 
-    /* TWO frame ticks between enter_va and second_va — 1:1 with
+    /* TWO frame ticks between enter_va and second_va
  * :
  * RunScriptInterpreter(enter_va);
  * palette fade-in;

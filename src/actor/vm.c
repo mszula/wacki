@@ -731,7 +731,7 @@ post_exec:
  * drawn += hot * scale_pct / 100
  * 2× doubled (ENT_PFLAG_DOUBLED):
  * drawn += hot * 2
- * else (1:1):
+ * else ():
  * drawn += hot
  *
  * NOTE: the "perspective" path also fires whenever scale_pct is

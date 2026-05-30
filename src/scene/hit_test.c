@@ -64,17 +64,17 @@ extern Entity *EntityListAt   (int click_list, int idx);
  *
  * void (void) {
  * uVar7 = 0; sVar4 = 0;
- * if (DAT_004502A0 != NULL) {
- * short mx = DAT_0045147C+0x22; // mouse X
- * short my = DAT_0045147C+0x24; // mouse Y
- * DAT_0044988C = 0x26; // default verb
- * piVar9 = DAT_004502A0; // click list head
+ * if (g_click_list_head != NULL) {
+ * short mx = cursor_state_struct+0x22; // mouse X
+ * short my = cursor_state_struct+0x24; // mouse Y
+ * g_hover_scene_verb = 0x26; // default verb
+ * piVar9 = g_click_list_head; // click list head
  * do {
  * puVar8 = piVar9[+0x0A]; // owner entity
  * uVar6 = 0;
  * if (piVar9[+0x08] == 1) { // kind=1 (sprite click, op 0x30 SPAWN)
- * synth_desc(&DAT_004514A0, puVar8, current_frame);
- * puVar8 = &DAT_004514A0;
+ * synth_desc(&, puVar8, current_frame);
+ * puVar8 = &;
  * uVar6 = puVar8[+0x30]; // current frame
  * goto TEST;
  * } else if (piVar9[+0x08] == 2) { // kind=2 (mask, op 0x2F REG_VERB_MASK)
@@ -92,7 +92,7 @@ extern Entity *EntityListAt   (int click_list, int idx);
  * uVar7 = piVar9[+0x12]; // first hit
  * sVar4 = puVar8[+0x12]; // foot_y
  * if (piVar9[+0x08] == 2) { // kind=2 → final (don't keep searching)
- * if (uVar7 == 0) { DAT_0044988C = 0x26; return; }
+ * if (uVar7 == 0) { g_hover_scene_verb = 0x26; return; }
  * goto SET;
  * }
  * } else if (sVar4 < puVar8[+0x12]) { // deeper hit
@@ -104,7 +104,7 @@ extern Entity *EntityListAt   (int click_list, int idx);
  * piVar9 = piVar9->next;
  * } while (piVar9);
  * }
- * if (uVar7 != 0) SET: DAT_0044988C = uVar7;
+ * if (uVar7 != 0) SET: g_hover_scene_verb = uVar7;
  * }
  *
  * Output: returns the verb_id to dispatch on click. The caller passes
@@ -117,7 +117,7 @@ extern Entity *EntityListAt(int kind, int idx);
 /* FindEntityByVerbId —
  *
  * undefined4 *(ushort param_1) {
- * for (puVar4 = DAT_004502A0; puVar4; puVar4 = (undefined4*)*puVar4) {
+ * for (puVar4 = g_click_list_head; puVar4; puVar4 = (undefined4*)*puVar4) {
  * ushort *puVar1 = *(ushort**)((int)puVar4 + 0xe); // verb table ptr
  * ushort uVar2;
  * if (puVar1 == NULL) {
@@ -285,7 +285,7 @@ int ClickHitTest(int16_t mouse_x, int16_t mouse_y, uint16_t *out_verb)
             case 4: /* bbox-only — always hit if inside */
                 hit = 1;
                 break;
-            case 8: /* TERMINATE — original clears DAT_00479604 then returns
+            case 8: /* TERMINATE — original clears mask_continue_flag then returns
  * 0; equivalent here is "this mask never hits". */
                 hit = 0;
                 break;

@@ -25,7 +25,7 @@ extern const void *xlat_binary_ptr(uint32_t addr);
 /* =========== scripts ==================================================== */
 void *FindAnimationScript(void *scripts, const char *name)
 { (void)scripts; (void)name; return NULL; }
-/* PlayActorAnimByPath — 1:1 port of the anim-bind tail of 
+/* PlayActorAnimByPath
  * (UpdateActorMovement @ 0x004061D0, lines ~1054-1064 of decompile):
  *
  * uVar9 = FindKeyInTaggedTable(pcVar12, '\x15', -1);

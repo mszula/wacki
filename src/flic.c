@@ -401,7 +401,7 @@ int PlayFlicAviFile(const char *path)
                 (g_key_state & 0xFF) != 0)
             {
                 /* Skip: stop audio NOW (pause device + clear queue) and
- * stop decoding further frames. This is 1:1 with the
+ * stop decoding further frames. This is
  * original MCI behaviour where StopAviPlayback aborts
  * both video and audio immediately. */
                 g_lmb_clicked = 0;

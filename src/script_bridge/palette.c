@@ -76,7 +76,7 @@ void ScriptCallPalLoad(uint16_t fade_step, uint32_t selector, int with_fade)
     }
 }
 
-/* ScriptCallPalFadeStep — 1:1 with case 0x49:
+/* ScriptCallPalFadeStep —:
  * if (progress < 100) {
  * progress += step;
  * (source, target, work, progress);

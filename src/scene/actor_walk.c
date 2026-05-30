@@ -34,7 +34,7 @@ void ActorWalkToBlocking(int idx, int16_t tx, int16_t ty)
     }
 
     /* Bind walker bytecode + plant path (BindActorWalker does the full
- * 1:1 with UpdateActorMovement walker-bind tail). */
+ *-bind tail). */
     if (!BindActorWalker(idx, (int)tx, (int)ty)) {
         return;
     }
@@ -56,11 +56,11 @@ void ActorWalkToBlocking(int idx, int16_t tx, int16_t ty)
         if (wdx == 0 && wdy == 0) break;                       /* walker drained */
         ProcessGameFrameTick();
         if (PlatformShouldQuit() || g_game_over_code) break;
-        if (g_lmb_clicked) { interrupted = 1; break; }         /* 1:1 early exit */
+        if (g_lmb_clicked) { interrupted = 1; break; }         /* early exit */
         SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
     }
     /* : consume the click, set var[4] from interrupt flag,
- * clear g_lmb_handled (= DAT_0044e5a4). The verb-script's nested IF
+ * clear g_lmb_handled (= g_lmb_handled). The verb-script's nested IF
  * (var[4]==1) reads var[4] to decide whether to abort (e.g. verb-7
  * @ 0x00427B90 offset 40 → END_FORCE if interrupted; else fall
  * through to op 0x20 GO_EXIT). g_lmb_handled clear is important
@@ -72,11 +72,11 @@ void ActorWalkToBlocking(int idx, int16_t tx, int16_t ty)
     g_script_vars[4] = (uint32_t)interrupted;
 }
 
-/* ActorWalkBothBlocking — 1:1 port of original case 0x12 walk-both
+/* ActorWalkBothBlocking
  * dispatch (Ghidra @ RunScriptInterpreter case 0x12, line ~582):
  *
  * setup actor 0 walker → target = (tx, ty)
- * wait 0x32 ticks (≈ 50ms via DAT_0044E578 decrement loop)
+ * wait 0x32 ticks (≈ 50ms via g_frame_delta_ticks decrement loop)
  * setup actor 1 walker → target = (tx, ty)
  * if (mode == 0) wait for BOTH to arrive
  * else wait for actor 0 only
@@ -110,7 +110,7 @@ void ActorWalkBothBlocking(int16_t tx, int16_t ty, int mode)
 
     /* Phase 1: stagger — actor 0 walks for 0x32=50 TICKS (= ~500 ms) while
  * actor 1 idle. The original op 0x12 head-start loop
- * subtracts DAT_0044E578 (ticks) from a constant 0x32. Reading it as
+ * subtracts g_frame_delta_ticks (ticks) from a constant 0x32. Reading it as
  * 50 ms (g_frame_delta_ms) drained the stagger in ~3 frames at 30 fps
  * — actor 1 started moving almost immediately, killing the "walk
  * together" visual cue. */
@@ -143,7 +143,7 @@ void ActorWalkBothBlocking(int16_t tx, int16_t ty, int mode)
         if (!still) break;                                /* walker drained */
         ProcessGameFrameTick();
         if (PlatformShouldQuit() || g_game_over_code) break;
-        if (g_lmb_clicked) { interrupted = 1; break; }    /* 1:1 early exit */
+        if (g_lmb_clicked) { interrupted = 1; break; }    /* early exit */
         SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
     }
 done:

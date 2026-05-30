@@ -35,18 +35,18 @@ static const uint8_t k_mlen_bits[6] = { 0, 0, 0, 3, 5, 16 };
 static const uint8_t k_mask_lut[9]  = { 0, 1, 3, 7, 15, 31, 63, 127, 255 };
 
 /* trailer-derived bit-width tables (12 entries each) */
-static uint8_t  tab_off_bits[12];   /* DAT_00479630 — match-offset bit widths */
-static uint8_t  tab_lit_bits[12];   /* DAT_00479640 — literal-length bit widths */
+static uint8_t  tab_off_bits[12];   /* — match-offset bit widths */
+static uint8_t  tab_lit_bits[12];   /* — literal-length bit widths */
 
 /* precomputed bases */
-static uint32_t base_mlen[6];       /* DAT_00479610 */
-static uint32_t base_off [12];      /* DAT_00479658, organised as 4 groups of 3 */
-static uint32_t base_lit [12];      /* DAT_00479688, 4 groups of 3 */
+static uint32_t base_mlen[6];       /* */
+static uint32_t base_off [12];      /* , organised as 4 groups of 3 */
+static uint32_t base_lit [12];      /* , 4 groups of 3 */
 
 /* bit-stream cursor (walks the buffer backward) */
-static const uint8_t *bs_ptr;       /* DAT_0047964C */
-static uint32_t       bs_buf;       /* DAT_004796B8 */
-static uint8_t        bs_cnt;       /* DAT_00479650 */
+static const uint8_t *bs_ptr;       /* */
+static uint32_t       bs_buf;       /* */
+static uint8_t        bs_cnt;       /* */
 static const uint8_t *bs_floor;     /* lower bound for sanity */
 
 /* ---------------------------------------------------------------- helpers */

@@ -28,15 +28,15 @@
  * - drzwi1p.wyc (state 5) = exit-right cursor (door right)
  *
  * Reads:
- * g_held_item — DAT_0044E5E8, 0x26 = no item
- * g_hover_scene_verb — DAT_0044988C, scene hover (ClickHitTest result)
- * g_hover_panel_verb — DAT_0044E450, panel hover (PanelHitTest result) */
+ * g_held_item — g_held_item, 0x26 = no item
+ * g_hover_scene_verb — g_hover_scene_verb, scene hover (ClickHitTest result)
+ * g_hover_panel_verb — g_hover_panel_verb, panel hover (PanelHitTest result) */
 void UpdateCursorState(void)
 {
     extern uint8_t  g_cursor_state;
     extern uint16_t g_cursor_frame, g_cursor_frame_acc;
-    extern uint16_t g_hover_panel_verb;        /* DAT_0044E450 */
-    extern uint16_t g_hover_scene_verb;        /* DAT_0044988C */
+    extern uint16_t g_hover_panel_verb;        /* g_hover_panel_verb */
+    extern uint16_t g_hover_scene_verb;        /* g_hover_scene_verb */
     extern uint16_t g_held_item;
     extern AnimAsset *g_cursor_atlas[8];
 
@@ -60,7 +60,7 @@ void UpdateCursorState(void)
         g_cursor_state = 2;
     }
 
-    /* Per-state lookup — 1:1 with DAT_00443400 in the PE. Each state has
+    /* Per-state lookup — Each state has
  * its own (atlas-slot, step, period) tuple decoded from the 80-byte
  * table (10 bytes/entry: ptr_to_slot, step:i16, period:u16, clamp:
  * u16). Key insight: state 6 reuses atlas SLOT 0 (olowek) but with
@@ -69,7 +69,7 @@ void UpdateCursorState(void)
  * The earlier port aliased state 6→0 and 7→3, collapsing those
  * distinct anim profiles and breaking the wiggle.
  *
- * Periods are in 10 ms TICKS — same unit as DAT_0044E578, accumulated
+ * Periods are in 10 ms TICKS — same unit as g_frame_delta_ticks, accumulated
  * via g_frame_delta_ticks. State 6 (interactive pencil) uses period=4
  * → ~40 ms/frame ≈ 25 fps wiggle; states 1..5,7 use period=10 → ~100
  * ms/frame ≈ 10 fps cycle. Earlier port read these as raw ms which
@@ -99,7 +99,7 @@ void UpdateCursorState(void)
     }
 }
 
-/* T31 v2 — PaintCursor: blit cursor sprite at mouse position. 1:1 tail
+/* T31 v2 — PaintCursor: blit cursor sprite at mouse position. tail
  * of where cursor entity gets its draw
  * fields populated from atlas frame data. The atlas-slot is selected
  * via the same state→slot table UpdateCursorState uses (states 6/7
