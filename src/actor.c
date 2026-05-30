@@ -18,45 +18,12 @@
 extern void *xmalloc(uint32_t sz);
 extern void  xfree  (void *p);
 
-/* ent_ptr_intern / ent_ptr_resolve moved to src/actor/intern.c. */
+/* ent_ptr_intern / ent_ptr_resolve moved to src/actor/intern.c.
+ * Registration table + Find/Register/Unregister moved to
+ * src/actor/registration.c (storage there, declarations in
+ * src/actor/internal.h). */
 
-/* per-frame entity dispatch — 500 slots (DAT_00450480, DAT_00451424) */
-struct UpdateRegEntry { Entity *e; uint16_t kind; uint16_t id; };
-struct UpdateRegEntry g_update_table[500];
-int g_update_table_count = 0;
-
-/* FUN_00405D80 — find the (kind,id) registration; returns the stored ptr
- * (AnimAsset* if registered by 0x2D LOAD_ASSET, Entity* if by 0x30 SPAWN).
- * 1:1 with the original's reverse-linear scan. */
-void *FindUpdateRegistration(uint16_t kind, uint16_t id)
-{
-    for (int i = g_update_table_count - 1; i >= 0; --i) {
-        if (g_update_table[i].kind == kind && g_update_table[i].id == id)
-            return g_update_table[i].e;
-    }
-    return NULL;
-}
-
-/* Variant for Bug 3 fix #17 — finds next match excluding any entity in
- * `skip[0..nskip-1]`. Used by ScriptCallDestroyEnt to protect actor
- * click payloads from destruction while still iterating remaining
- * matches (otherwise FindUpdateRegistration would re-return the same
- * protected entry forever). */
-void *FindUpdateRegistrationExcept(uint16_t kind, uint16_t id,
-                                   Entity *const *skip, int nskip)
-{
-    for (int i = g_update_table_count - 1; i >= 0; --i) {
-        if (g_update_table[i].kind != kind || g_update_table[i].id != id)
-            continue;
-        int skipped = 0;
-        for (int j = 0; j < nskip; ++j) {
-            if (g_update_table[i].e == skip[j]) { skipped = 1; break; }
-        }
-        if (skipped) continue;
-        return g_update_table[i].e;
-    }
-    return NULL;
-}
+#include "actor/internal.h"
 
 /* ========================================================================= *
  * Entity linked list (1:1 with DAT_004502B8 render-list + DAT_004502A0
@@ -1492,70 +1459,8 @@ void FreeEntity(Entity *e)
     xfree(e);
 }
 
-/* ------------------------------------------------------------------------- *
- * RegisterEntityForUpdate — 0x00405E30
- * ------------------------------------------------------------------------- */
-void RegisterEntityForUpdate(Entity *e, uint16_t kind, uint16_t id)
-{
-    if (g_update_table_count >= 500) return;
-    g_update_table[g_update_table_count++] = (typeof(g_update_table[0])){e,kind,id};
-}
-
-/* 1:1 with FUN_00405e70 — removes a (kind, id) tuple from the update
- * table. `id == 0xFFFF` removes all entries with the given kind (the
- * original's `-1` shortcut). When called by ScriptCallDestroyEnt this
- * also un-binds the cached pointer so a follow-up SPAWN with the same
- * id starts clean. */
-void UnregisterEntityForUpdate(uint16_t kind, uint16_t id)
-{
-    int w = 0;
-    for (int r = 0; r < g_update_table_count; ++r) {
-        int drop = (g_update_table[r].kind == kind) &&
-                   (id == 0xFFFF || g_update_table[r].id == id);
-        if (!drop) g_update_table[w++] = g_update_table[r];
-    }
-    g_update_table_count = w;
-}
-
-/* Remove ONLY the OLDEST (first-found) (kind, id) match — 1:1 with
- * FUN_00405E70 single-entry removal semantics. Returns 1 if removed.
- * Used by ScriptCallDestroyEnt's kind=1 asset unregister to preserve a
- * freshly-loaded asset when the destroy targets an older load of the
- * same id (e.g. liana state replacement: load Liana_b → load Liana.wyc
- * → destroy id=5 must drop Liana_b, leave Liana.wyc for spawn). */
-int UnregisterFirstKindIdMatch(uint16_t kind, uint16_t id)
-{
-    for (int i = 0; i < g_update_table_count; ++i) {
-        if (g_update_table[i].kind == kind && g_update_table[i].id == id) {
-            for (int j = i; j < g_update_table_count - 1; ++j)
-                g_update_table[j] = g_update_table[j + 1];
-            g_update_table_count--;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-/* Remove the SPECIFIC entity pointer (only the first match) from the
- * update_table. Used by ScriptCallDestroyEnt's per-entity destruction
- * path so that duplicates (e.g. Fjej's actor click payload registered
- * as kind=4 id=2 AND a script-spawned mask click payload also kind=4
- * id=2) don't get co-destroyed when we only want to remove ONE.
- *
- * Returns 1 if removed, 0 if not found. */
-int UnregisterEntityByPtr(Entity *e)
-{
-    if (!e) return 0;
-    for (int r = 0; r < g_update_table_count; ++r) {
-        if (g_update_table[r].e == e) {
-            for (int j = r; j < g_update_table_count - 1; ++j)
-                g_update_table[j] = g_update_table[j + 1];
-            --g_update_table_count;
-            return 1;
-        }
-    }
-    return 0;
-}
+/* Register/Unregister/UnregisterFirstKindIdMatch/UnregisterEntityByPtr
+ * moved to src/actor/registration.c. */
 
 /* ------------------------------------------------------------------------- *
  * Per-actor walk-anim selector (directional sprite table is at
