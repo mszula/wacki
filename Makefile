@@ -49,6 +49,8 @@ ENGINE_SRCS = \
 	src/scene/click_queue.c src/scene/hit_test.c src/scene/mask_list.c \
 	src/scene/navigation.c src/scene/actor_walk.c src/scene/stage.c \
 	src/scene/bg_mask.c src/scene/spawn.c src/scene/komnata.c     \
+	src/scene/preload.c src/scene/hud_paint.c src/scene/frame_tick.c \
+	src/scene/dispatch.c src/hud/cursor.c                            \
 	src/audio/sound_queue.c                                       \
 	src/script_bridge/palette.c src/script_bridge/entity.c        \
 	src/text/balloon.c src/anim/resolver.c src/util/screenshot.c
@@ -103,7 +105,7 @@ TEST_ENGINE_SRCS = \
 	src/scene/bg_mask.c src/scene/spawn.c src/scene/komnata.c     \
 	src/audio/sound_queue.c                                       \
 	src/script_bridge/palette.c src/script_bridge/entity.c        \
-	src/text/balloon.c src/anim/resolver.c src/util/screenshot.c                       \
+	src/text/balloon.c src/anim/resolver.c                        \
 	src/stubs.c     src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
 	src/actor/render.c src/actor/alloc.c \
