@@ -46,7 +46,7 @@ ENGINE_SRCS = \
 	src/platform_sdl.c src/vm/script_obj.c src/vm/parser.c       \
 	src/util/rng.c                                               \
 	src/hud/panel.c src/hud/inventory.c src/hud/items.c          \
-	src/scene/click_queue.c                                      \
+	src/scene/click_queue.c src/scene/hit_test.c src/scene/mask_list.c \
 	src/audio/sound_queue.c
 
 TOOL_SRCS_EXTRACT = tools/dta-extract.c src/depack.c src/archive.c \
@@ -94,7 +94,7 @@ TEST_ENGINE_SRCS = \
 	src/vm/script_obj.c src/vm/parser.c          \
 	src/util/rng.c                                \
 	src/hud/panel.c src/hud/inventory.c src/hud/items.c \
-	src/scene/click_queue.c                       \
+	src/scene/click_queue.c src/scene/hit_test.c src/scene/mask_list.c \
 	src/audio/sound_queue.c                       \
 	src/stubs.c     src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
