@@ -44,7 +44,9 @@ ENGINE_SRCS = \
 	src/heap.c     src/cygio.c   src/timer.c     src/stubs.c     \
 	src/binary_data.c src/pe_loader.c                            \
 	src/platform_sdl.c src/vm/script_obj.c src/vm/parser.c       \
-	src/util/rng.c
+	src/util/rng.c                                               \
+	src/hud/panel.c src/hud/inventory.c src/hud/items.c          \
+	src/scene/click_queue.c
 
 TOOL_SRCS_EXTRACT = tools/dta-extract.c src/depack.c src/archive.c \
                     src/cygio.c src/heap.c
@@ -90,6 +92,8 @@ TEST_ENGINE_SRCS = \
 	src/binary_data.c src/timer.c  src/vm/main.c  \
 	src/vm/script_obj.c src/vm/parser.c          \
 	src/util/rng.c                                \
+	src/hud/panel.c src/hud/inventory.c src/hud/items.c \
+	src/scene/click_queue.c                       \
 	src/stubs.c     src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
 	src/actor/render.c src/actor/alloc.c \
