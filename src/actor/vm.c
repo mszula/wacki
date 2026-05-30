@@ -1,27 +1,27 @@
 /* src/actor/vm.c — per-entity script interpreter and walker tick.
  *
  * Every entity in the scene carries a small bytecode program that
- * drives its animation, position, and timing. The "per-entity VM"
- * dispatches one frame's worth of those instructions for every
- * registered entity each game tick:
+ * drives its animation, position, and timing. The per-entity VM
+ * dispatches one tick's worth of those instructions for every
+ * registered entity each game frame:
  *
  *   EntityWalkerTick()
  *     → walks the render list (kind=0)
  *     → for each entity with an atlas bound: ExecEntityScript()
  *
  * Bytecode format is `[op:u8 +0][dlt:u8 +1][operand:u16 +2]…` with a
- * stride of `dlt * 2` bytes (HALF of the main script VM's `len * 4`).
+ * stride of `dlt * 2` bytes (half of the main script VM's `len * 4`).
  * Opcodes 0x00..0x24 cover anchor moves, frame stepping, walker setup,
  * stops, oscillators, atlas swaps, and the click-event enqueue. END is
  * 0x21; LABEL targets are 0x0A.
  *
  * The frame-delta gate at the top of ExecEntityScript yields to the
- * next tick when +0x3C (delay) is still positive — this is what makes
+ * next tick when delay is still positive — this is what makes
  * animation timing scale with frame pacing.
  *
- * Post-execution always runs the "tidy-up" block: mirrors anchor →
- * drawn position, stashes atlas frame W/H, clamps scale, and applies
- * foot-anchor compensation.
+ * Post-execution always runs a tidy-up block: mirrors anchor → drawn
+ * position, applies oscillation offsets, stashes atlas frame W/H,
+ * clamps scale, and applies foot-anchor compensation.
  */
 
 #include "wacki.h"
@@ -32,233 +32,375 @@
 #include <string.h>
 
 extern uint32_t g_frame_delta_ms;
-extern uint32_t g_tick_counter;
 extern uint16_t g_frame_delta_ticks;
 
-/* Scan one bytecode block for a 0x16 LABEL with matching arg, OR for a
- * matching subroutine entry (op==0x0A label). 1:1 with the inner scan loop
- * that opcodes 0x13/0x19/0x1A use in the original (cases share the same
- * `cVar13/uVar11/uVar14` walking pattern).
+/* ---- opcode constants --------------------------------------------- */
+
+enum {
+    PVM_SET_ANCHOR_XY      = 0x00,
+    PVM_SET_ANCHOR_X       = 0x01,
+    PVM_SET_ANCHOR_Y       = 0x02,
+    PVM_X_OSCILLATE        = 0x03,
+    PVM_Y_OSCILLATE        = 0x04,
+    PVM_SET_POS_FROM_FRAME = 0x05,
+    PVM_SET_FRAME          = 0x06,
+    PVM_IF_FRAME           = 0x07,
+    PVM_FRAME_RANGE_CHECK  = 0x08,
+    PVM_SET_DELAY          = 0x09,
+    PVM_LABEL              = 0x0A,
+    PVM_CLEAR_LOOP_CTRS    = 0x0B,
+    PVM_LOOP_A             = 0x0C,
+    PVM_LOOP_B             = 0x0D,
+    PVM_LOOP_C             = 0x0E,
+    PVM_SET_RAND_FRAME     = 0x0F,
+    PVM_SET_DELAY_PAUSE    = 0x10,
+    PVM_SET_RAND_DELAY     = 0x11,
+    PVM_ADVANCE_FRAME      = 0x12,
+    PVM_WAIT_FRAME_LABEL   = 0x13,
+    PVM_RAND_GATE          = 0x14,
+    PVM_WALK_TO_X          = 0x15,
+    PVM_WALK_TO_XY         = 0x16,
+    PVM_ADD_X              = 0x17,
+    PVM_ADD_Y              = 0x18,
+    PVM_JUMP_IF_BIT0       = 0x19,
+    PVM_JUMP_IF_NOT_BIT0   = 0x1A,
+    PVM_SET_FLAG_2         = 0x1B,
+    PVM_CLEAR_FLAG_2       = 0x1C,
+    PVM_STOP_TICK          = 0x1D,
+    PVM_SUBSCRIPT_CALL     = 0x1E,
+    PVM_STOP_RESET         = 0x1F,
+    PVM_STOP_KEEP_PC       = 0x20,
+    PVM_END                = 0x21,
+    PVM_ENQUEUE_CLICK      = 0x22,
+    PVM_SWAP_ATLAS         = 0x23,
+    PVM_SET_FADE           = 0x24,
+};
+
+#define LABEL_WILDCARD          0xFFFFu
+#define MAX_SCAN_ITERS          2048
+#define MAX_INTERPRETER_ITERS   4096
+
+/* Entity state-flag bits at +0x3A. */
+#define ENT_FLAG_FRAME_READY    0x01
+#define ENT_FLAG_ANIM_ACTIVE    0x02
+#define ENT_FLAG_WALKER_FRESH   0x04
+
+/* Entity primary-flag bits at +0x08/+0x09 (16-bit). */
+#define ENT_PFLAG_DOUBLED       0x0004   /* sprite drawn at 2× */
+#define ENT_PFLAG_FADING_OUT    0x0040   /* clears +0x26 when frame changes */
+#define ENT_PFLAG_FOOT_BAKED    0x0020   /* set when +0x26 has been zeroed by fade-out */
+#define ENT_PFLAG_NO_FOOT_BAKE  0x0200   /* skip the standard +0x26 = +0x0C + +0x10 bake */
+#define ENT_PFLAG_PERSPECTIVE   0x0400   /* foot anchor uses scale_pct from +0x58 */
+
+/* Scaling clamp: drawn scale_pct at +0x58 may not exceed 0xA0 (160%). */
+#define ENT_SCALE_MAX           0xA0
+
+/* Field offsets used by the post-exec block (the opcode bodies still
+ * use raw constants — they read closer to the original bytecode that
+ * way). */
+#define ENT_OFF_DRAWN_X         0x0A
+#define ENT_OFF_DRAWN_Y         0x0C
+#define ENT_OFF_WIDTH           0x0E
+#define ENT_OFF_HEIGHT          0x10
+#define ENT_OFF_ANCHOR_X        0x22
+#define ENT_OFF_ANCHOR_Y        0x24
+#define ENT_OFF_FOOT_Y          0x26
+#define ENT_OFF_ATLAS_SLOT      0x28
+#define ENT_OFF_BYTECODE_SLOT   0x2C
+#define ENT_OFF_FRAME           0x30
+#define ENT_OFF_PC              0x32
+#define ENT_OFF_LOOP_A          0x34
+#define ENT_OFF_LOOP_B          0x36
+#define ENT_OFF_LOOP_C          0x38
+#define ENT_OFF_STATE_FLAGS     0x3A
+#define ENT_OFF_DELAY           0x3C
+#define ENT_OFF_DELAY_RESET     0x3E
+#define ENT_OFF_LOOP_D          0x40
+#define ENT_OFF_LOOP_E          0x42
+#define ENT_OFF_WALKER_X        0x44
+#define ENT_OFF_WALKER_X_HI     0x46
+#define ENT_OFF_WALKER_Y        0x48
+#define ENT_OFF_WALKER_Y_HI     0x4A
+#define ENT_OFF_WALKER_DX_REM   0x4C
+#define ENT_OFF_WALKER_DY_REM   0x50
+#define ENT_OFF_WALKER_TGT_X    0x54
+#define ENT_OFF_WALKER_TGT_Y    0x56
+#define ENT_OFF_SCALE_PCT       0x58
+
+extern const void *xlat_binary_ptr(uint32_t addr);
+extern int         PeLoaderContainsVA(uint32_t va);
+extern void       *FindUpdateRegistration(uint16_t kind, uint16_t id);
+extern void        TriggerFrameSfx(const char *asset_name, int frame);
+extern void        EnqueueClickEvent(uint16_t obj, uint16_t verb);
+
+/* Resolve a PE-binary virtual address to a usable pointer in the host
+ * address space. Some scripts reference oscillation / lookup tables by
+ * their original PE VA — the PE loader maps the original image and
+ * xlat_binary_ptr() translates the address. Fallback to a raw cast for
+ * addresses outside the loaded PE range (handful of edge cases). */
+static const int16_t *resolve_pe_table(uint32_t addr)
+{
+    if (PeLoaderContainsVA(addr)) {
+        return (const int16_t *)xlat_binary_ptr(addr);
+    }
+    return (const int16_t *)(uintptr_t)addr;
+}
+
+/* Scan one bytecode block for a LABEL (op 0x0A) whose argument matches
+ * `target_id`. Returns the new pc (in halfwords from the base), or 0
+ * if the label isn't found — callers treat 0 as "restart from top".
  *
- * Returns the new pc (in halfwords from base), or 0 if not found (the
- * caller then sets pc=0 = re-start). If `id == 0xFFFF` matches the first
- * 0x0A encountered (1:1 with the original's `uVar19 == 0xffff` shortcut). */
+ * `target_id == LABEL_WILDCARD` matches the first label encountered
+ * regardless of argument (used by subroutine-entry lookup).
+ *
+ * Used by opcodes that jump by label: WAIT_FRAME_LABEL, RAND_GATE, the
+ * LOOP_A/B/C family, and the conditional JUMP_IF_*_BIT0 pair. */
 static uint16_t scan_for_label(const uint8_t *bytecode, uint16_t target_id)
 {
     uint16_t pc = 0;
-    for (int safety = 0; safety < 2048; ++safety) {
-        const uint8_t *p = bytecode + (size_t)pc * 2;
-        uint8_t  op  = p[0];
-        if (op == '!')  /* 0x21 END */
-            return 0;
-        if (op == '\n') { /* 0x0A LABEL */
+    for (int safety = 0; safety < MAX_SCAN_ITERS; ++safety) {
+        const uint8_t *p  = bytecode + (size_t)pc * 2;
+        uint8_t        op = p[0];
+
+        if (op == PVM_END) return 0;
+        if (op == PVM_LABEL) {
             uint16_t arg = (uint16_t)(p[2] | (p[3] << 8));
-            if (target_id == 0xFFFF || arg == target_id)
+            if (target_id == LABEL_WILDCARD || arg == target_id) {
                 return pc;
+            }
         }
+
         uint8_t dlt = p[1];
-        if (dlt == 0) return 0;
+        if (dlt == 0) return 0;        /* defensive — malformed bytecode */
         pc = (uint16_t)(pc + dlt);
     }
     return 0;
 }
 
+/* Reset the walker state of an entity to "idle, fresh, no path planted".
+ * Shared by SUBSCRIPT_CALL and SWAP_ATLAS, which both nuke pending
+ * walks and animation timers when they switch bytecodes or atlases. */
+static void reset_entity_walker_state(Entity *e)
+{
+    EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) &=
+        (uint16_t)~(ENT_FLAG_FRAME_READY | ENT_FLAG_WALKER_FRESH);
+    EOFF(e, ENT_OFF_LOOP_A,        uint16_t) = 0;
+    EOFF(e, ENT_OFF_LOOP_B,        uint16_t) = 0;
+    EOFF(e, ENT_OFF_LOOP_C,        uint16_t) = 0;
+    EOFF(e, ENT_OFF_LOOP_D,        uint16_t) = 0;
+    EOFF(e, ENT_OFF_LOOP_E,        uint16_t) = 0;
+    EOFF(e, ENT_OFF_DELAY,         uint16_t) = 0;
+    EOFF(e, ENT_OFF_PC,            uint16_t) = 0;
+    EOFF(e, ENT_OFF_WALKER_DX_REM, uint32_t) = 0;
+    EOFF(e, ENT_OFF_WALKER_DY_REM, uint32_t) = 0;
+}
+
+/* ============================================================== *
+ * Main interpreter.
+ *
+ * `keep_running` is the inner-loop continuation flag — opcodes that
+ * stop execution for this tick (delay/pause family, STOP_*) clear it.
+ *
+ * `frame_changed` records whether the tick touched the displayed frame
+ * (set by opcodes that move the entity or swap frames). Used by the
+ * post-exec block to decide when foot-fade-on-touch fires.
+ * ============================================================== */
 static void ExecEntityScript(Entity *e)
 {
     if (!e) return;
-    AnimAsset *atlas = (AnimAsset *)ent_ptr_resolve(EOFF(e, 0x28, uint32_t));
+    AnimAsset *atlas =
+        (AnimAsset *)ent_ptr_resolve(EOFF(e, ENT_OFF_ATLAS_SLOT, uint32_t));
     if (!atlas) return;
-    const uint8_t *bytecode = (const uint8_t *)ent_ptr_resolve(EOFF(e, 0x2C, uint32_t));
+
+    const uint8_t *bytecode =
+        (const uint8_t *)ent_ptr_resolve(EOFF(e, ENT_OFF_BYTECODE_SLOT, uint32_t));
     if (!bytecode) return;
 
-    uint16_t pc = EOFF(e, 0x32, uint16_t);
-    int bVar3 = 1, bVar4 = 0;
-    const int16_t *local_18 = NULL;        /* opcode 3 target table */
-    const int16_t *local_14 = NULL;        /* opcode 4 target table */
+    uint16_t pc            = EOFF(e, ENT_OFF_PC, uint16_t);
+    int      keep_running  = 1;
+    int      frame_changed = 0;
+    const int16_t *osc_table_x = NULL;
+    const int16_t *osc_table_y = NULL;
 
-    /* Frame-delta gate — 1:1 with the lead-in code that decrements +0x3C
-     * by DAT_0044e578 and only executes when it reaches <= 0. Same field
-     * is then optionally re-loaded from +0x3E (period/delay_reset).
+    /* Frame-delta gate. Decrement the per-entity delay counter by this
+     * frame's tick budget; if it's still positive, skip the opcode loop
+     * and jump straight to post-exec (entity yields this frame).
      *
-     * Uses g_frame_delta_ticks (10 ms units = DAT_0044E578) not raw ms.
-     * The +0x3E period is set by op 0x09 from a script literal — script
-     * authors specified it in ticks (the only unit +0x3C is ever compared
-     * against in the PE). Subtracting raw ms burned through periods 10×
-     * too fast and that's why entity animations (props, NPCs, walking
-     * cycles) ran accelerated. */
-    int16_t delay = (int16_t)EOFF(e, 0x3C, uint16_t);
+     * Once the delay reaches zero, optionally reload it from the
+     * "period" field at +0x3E — SET_DELAY (op 0x09) writes both fields
+     * with the same value so an entity that needs a steady cadence
+     * (e.g. blinking light) re-arms automatically. */
+    int16_t delay = (int16_t)EOFF(e, ENT_OFF_DELAY, uint16_t);
     delay = (int16_t)(delay - (int16_t)g_frame_delta_ticks);
-    EOFF(e, 0x3C, uint16_t) = (uint16_t)delay;
+    EOFF(e, ENT_OFF_DELAY, uint16_t) = (uint16_t)delay;
     if (delay > 0) goto post_exec;
     {
-        int16_t reset = (int16_t)EOFF(e, 0x3E, uint16_t);
-        EOFF(e, 0x3C, uint16_t) = (uint16_t)(delay + reset);
-        if (reset == 0) EOFF(e, 0x3C, uint16_t) = 0;
+        int16_t reset = (int16_t)EOFF(e, ENT_OFF_DELAY_RESET, uint16_t);
+        EOFF(e, ENT_OFF_DELAY, uint16_t) = (uint16_t)(delay + reset);
+        if (reset == 0) EOFF(e, ENT_OFF_DELAY, uint16_t) = 0;
     }
 
-    /* ------ main interpreter loop --------------------------------------- */
-    /* Safety counter — bail after 4096 iterations to guarantee we never
-     * wedge the whole game on a malformed script (e.g. unresolved
-     * SUBSCRIPT_CALL or backward jump with no STOP). The original VM
-     * has no such bound, but it also can rely on every script having a
-     * reachable STOP_TICK; ours can't (some referenced targets aren't
-     * embedded yet → they'd loop). */
-    int safety = 4096;
-    while (bVar3 && safety-- > 0) {
-        /* T-bytecode-refresh: 1:1 with original FUN_004012E0 which re-reads
-         * pcVar7 = *(char **)(param_1 + 0x2c) at TOP of each loop iter.
-         * After op 0x1E SUBSCRIPT_CALL changes +0x2C to the new bytecode,
-         * the NEXT iter must read the NEW bytecode. Earlier port cached
-         * `bytecode` once at function entry — loop continued with OLD
-         * bytecode after SUBSCRIPT_CALL, advancing pc through OLD ops
-         * until STOP_TICK / safety bail. Resulting pc value (e.g. 12
-         * after entry [5]'s STOP_TICK) then landed mid-instruction in
-         * the NEW bytecode on the following tick — skipping the entire
-         * preamble (SET_DELAY 8 + SET_DELAY_AND_PAUSE 6000 + SET_FRAME 72
-         * in the idle bytecode) and jumping straight into the cycling
-         * frame-advance section. Hence "actors walk in place facing
-         * camera instead of standing still". */
-        bytecode = (const uint8_t *)ent_ptr_resolve(EOFF(e, 0x2C, uint32_t));
+    /* Safety counter — bail after a fixed number of iterations to
+     * guarantee we never wedge the whole game on a malformed script
+     * (e.g. unresolved SUBSCRIPT_CALL with a backward jump and no
+     * STOP). The original VM doesn't bound the loop; it relies on
+     * every script having a reachable STOP_TICK, which doesn't hold
+     * for the partially-ported subset. */
+    int safety = MAX_INTERPRETER_ITERS;
+    while (keep_running && safety-- > 0) {
+        /* Re-read bytecode pointer at the top of each iteration:
+         * SUBSCRIPT_CALL mutates +0x2C and the very next instruction
+         * must come from the new program. Caching the pointer at
+         * function entry would silently keep executing the OLD
+         * bytecode after a tail-call. */
+        bytecode = (const uint8_t *)ent_ptr_resolve(EOFF(e, ENT_OFF_BYTECODE_SLOT, uint32_t));
         if (!bytecode) break;
-        const uint8_t *p = bytecode + (size_t)pc * 2;
-        uint8_t  op   = p[0];
-        uint8_t  dlt  = p[1];
-        uint16_t arg  = (uint16_t)(p[2] | (p[3] << 8));
-        uint16_t next_pc = (uint16_t)(pc + dlt);
 
-        #define ACT_LOG(label, ny) ((void)0)
+        const uint8_t *p       = bytecode + (size_t)pc * 2;
+        uint8_t        op      = p[0];
+        uint8_t        dlt     = p[1];
+        uint16_t       arg     = (uint16_t)(p[2] | (p[3] << 8));
+        uint16_t       next_pc = (uint16_t)(pc + dlt);
+
         switch (op) {
-        case 0x00:                                  /* SET_ANCHOR_XY */
-            ACT_LOG("0x00 SET_ANCHOR_XY", (uint16_t)(p[4] | (p[5] << 8)));
-            EOFF(e, 0x22, uint16_t) = arg;
-            EOFF(e, 0x24, uint16_t) = (uint16_t)(p[4] | (p[5] << 8));
-            bVar4 = 1; break;
-        case 0x01:                                  /* SET_ANCHOR_X */
-            EOFF(e, 0x22, uint16_t) = arg; bVar4 = 1; break;
-        case 0x02:                                  /* SET_ANCHOR_Y */
-            ACT_LOG("0x02 SET_ANCHOR_Y", arg);
-            EOFF(e, 0x24, uint16_t) = arg; bVar4 = 1; break;
 
-        case 0x03: {                                /* X_OSCILLATE — 1:1 with
-            * Ghidra case 3:
-            *   local_18 = *(short **)(pc + 4);        // PE VA
-            *   if (entity[+0x40] < *local_18) entity[+0x40]++;
-            *   else                            entity[+0x40] = 1;
-            *
-            * Table is a PE binary pointer — must be resolved through
-            * the PE loader's xlat_binary_ptr() because the binary image
-            * isn't loaded at its original VA on macOS. Earlier port
-            * cast the VA as a raw pointer and would deref invalid
-            * memory (or crash) for any script using oscillation. */
-            extern const void *xlat_binary_ptr(uint32_t addr);
-            extern int  PeLoaderContainsVA(uint32_t va);
-            uint32_t tbl_addr; memcpy(&tbl_addr, p + 4, 4);
-            local_18 = PeLoaderContainsVA(tbl_addr)
-                       ? (const int16_t *)xlat_binary_ptr(tbl_addr)
-                       : (const int16_t *)(uintptr_t)tbl_addr;
-            uint16_t idx40 = EOFF(e, 0x40, uint16_t);
-            uint16_t first = local_18 ? (uint16_t)local_18[0] : 0;
-            if ((int)idx40 < (int)first) EOFF(e, 0x40, uint16_t) = idx40 + 1;
-            else                          EOFF(e, 0x40, uint16_t) = 1;
+        case PVM_SET_ANCHOR_XY:
+            EOFF(e, ENT_OFF_ANCHOR_X, uint16_t) = arg;
+            EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t) = (uint16_t)(p[4] | (p[5] << 8));
+            frame_changed = 1;
+            break;
+
+        case PVM_SET_ANCHOR_X:
+            EOFF(e, ENT_OFF_ANCHOR_X, uint16_t) = arg;
+            frame_changed = 1;
+            break;
+
+        case PVM_SET_ANCHOR_Y:
+            EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t) = arg;
+            frame_changed = 1;
+            break;
+
+        case PVM_X_OSCILLATE: {
+            /* Operand at p+4 is a PE virtual address pointing to a small
+             * table {count, offset[0], offset[1], ...}. Counter at +0x40
+             * advances through the table; the post-exec block adds
+             * `osc_table_x[counter]` to the drawn anchor X. */
+            uint32_t tbl_addr;
+            memcpy(&tbl_addr, p + 4, 4);
+            osc_table_x = resolve_pe_table(tbl_addr);
+
+            uint16_t counter = EOFF(e, ENT_OFF_LOOP_D, uint16_t);
+            uint16_t first   = osc_table_x ? (uint16_t)osc_table_x[0] : 0;
+            if ((int)counter < (int)first) {
+                EOFF(e, ENT_OFF_LOOP_D, uint16_t) = counter + 1;
+            } else {
+                EOFF(e, ENT_OFF_LOOP_D, uint16_t) = 1;
+            }
             break;
         }
-        case 0x04: {                                /* Y_OSCILLATE — see 0x03 */
-            extern const void *xlat_binary_ptr(uint32_t addr);
-            extern int  PeLoaderContainsVA(uint32_t va);
-            uint32_t tbl_addr; memcpy(&tbl_addr, p + 4, 4);
-            local_14 = PeLoaderContainsVA(tbl_addr)
-                       ? (const int16_t *)xlat_binary_ptr(tbl_addr)
-                       : (const int16_t *)(uintptr_t)tbl_addr;
-            uint16_t idx42 = EOFF(e, 0x42, uint16_t);
-            uint16_t first = local_14 ? (uint16_t)local_14[0] : 0;
-            if ((int)idx42 < (int)first) EOFF(e, 0x42, uint16_t) = idx42 + 1;
-            else                          EOFF(e, 0x42, uint16_t) = 1;
+
+        case PVM_Y_OSCILLATE: {
+            uint32_t tbl_addr;
+            memcpy(&tbl_addr, p + 4, 4);
+            osc_table_y = resolve_pe_table(tbl_addr);
+
+            uint16_t counter = EOFF(e, ENT_OFF_LOOP_E, uint16_t);
+            uint16_t first   = osc_table_y ? (uint16_t)osc_table_y[0] : 0;
+            if ((int)counter < (int)first) {
+                EOFF(e, ENT_OFF_LOOP_E, uint16_t) = counter + 1;
+            } else {
+                EOFF(e, ENT_OFF_LOOP_E, uint16_t) = 1;
+            }
             break;
         }
-        case 0x05: {                                /* SET_POS_FROM_FRAME
-             * 1:1 with FUN_004012E0 case 5:
-             *   entity[+0x22] = drawX[entity[+0x30]];
-             *   entity[+0x24] = drawY[entity[+0x30]];
-             *
-             * Bounds check `fid < frame_count` is defensive — op 0x23
-             * SWAP_ATLAS_BY_ID preserves entity[+0x30] across atlas swap
-             * (1:1 with FUN_00407600 save/restore), so a previous
-             * high-frame index on a smaller-frame new atlas could OOB
-             * read `off_drawX[fid]`. Original 32-bit engine had same
-             * potential issue; we clamp defensively on 64-bit. */
-            uint16_t fid = EOFF(e, 0x30, uint16_t);
-            if (atlas->frame_count && fid >= atlas->frame_count)
+
+        case PVM_SET_POS_FROM_FRAME: {
+            /* Use the current frame's per-frame anchor from the atlas
+             * tables. NOTE: clamp frame to in-range; SWAP_ATLAS (0x23)
+             * preserves +0x30 across atlas swap, so a stale high frame
+             * index on a smaller new atlas could OOB the lookup. */
+            uint16_t fid = EOFF(e, ENT_OFF_FRAME, uint16_t);
+            if (atlas->frame_count && fid >= atlas->frame_count) {
                 fid = (uint16_t)(atlas->frame_count - 1);
-            if (atlas->off_drawY) ACT_LOG("0x05 SET_POS_FROM_FRAME", atlas->off_drawY[fid]);
-            if (atlas->off_drawX) EOFF(e, 0x22, uint16_t) = atlas->off_drawX[fid];
-            if (atlas->off_drawY) EOFF(e, 0x24, uint16_t) = atlas->off_drawY[fid];
+            }
+            if (atlas->off_drawX) EOFF(e, ENT_OFF_ANCHOR_X, uint16_t) = atlas->off_drawX[fid];
+            if (atlas->off_drawY) EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t) = atlas->off_drawY[fid];
             break;
         }
-        case 0x07:                                  /* IF_FRAME — sets bit 0 */
-            if (arg == EOFF(e, 0x30, uint16_t)) EOFF8(e, 0x3A) |= 1;
-            else                                EOFF(e, 0x3A, uint16_t) &= ~1u;
+
+        case PVM_IF_FRAME:
+            /* Sets the "frame ready" bit when current frame == arg.
+             * Used in combination with JUMP_IF_*_BIT0 to take a branch
+             * when reaching a specific frame in an animation. */
+            if (arg == EOFF(e, ENT_OFF_FRAME, uint16_t)) {
+                EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_FRAME_READY;
+            } else {
+                EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) &= (uint16_t)~ENT_FLAG_FRAME_READY;
+            }
             break;
-        case 0x08: {                                /* FRAME_RANGE_CHECK */
-            uint16_t fid = EOFF(e, 0x30, uint16_t);
-            uint16_t lo = (uint16_t)(p[4] | (p[5] << 8));
-            uint16_t hi = (uint16_t)(p[6] | (p[7] << 8));
+
+        case PVM_FRAME_RANGE_CHECK: {
+            /* Coerce `arg` into the current frame index iff the current
+             * frame is inside [lo, hi]. Falls through to SET_FRAME, so
+             * the effect is "if frame ∈ [lo, hi], keep it; otherwise
+             * snap to `arg`". */
+            uint16_t fid = EOFF(e, ENT_OFF_FRAME, uint16_t);
+            uint16_t lo  = (uint16_t)(p[4] | (p[5] << 8));
+            uint16_t hi  = (uint16_t)(p[6] | (p[7] << 8));
             if (lo <= fid && fid <= hi) arg = fid;
-        } /* FALLTHRU */
+        }
         /* fallthrough */
-        case 0x06: {                                /* SET_FRAME
-             * 1:1 with original case 6 (reached also via case 8 fall-through):
-             *   if (asset->frame_count <= arg) arg = asset->frame_count - 1;
-             *   entity[+0x30] = arg;
-             *   bVar4 = true;
-             *   if (asset->anim_script != NULL)
-             *       FUN_00401100(asset->anim_script, arg);  // per-frame SFX
+
+        case PVM_SET_FRAME: {
+            /* Clamp into the atlas's valid frame range, then fire the
+             * per-frame SFX trigger.
              *
-             * The FUN_00401100 call dispatches to FUN_0040A1F0 (sample
-             * trigger) using the asset's [sampl]-table. Our port mirrors
-             * this with TriggerFrameSfx by asset name. */
+             * NOTE: the SFX gate has been simplified vs the original.
+             * The original engine attaches a [sampl] table to each
+             * asset at load time and only fires when that table is
+             * non-NULL. The port keeps a scene-wide table keyed by
+             * (asset_name, frame), so TriggerFrameSfx is called
+             * unconditionally — it's a no-op when no entry matches. */
             uint16_t fc = atlas->frame_count;
             if (fc && arg >= fc) arg = (uint16_t)(fc - 1);
-            EOFF(e, 0x30, uint16_t) = arg;
-            bVar4 = 1;
-            /* PORT SHORTCUT (refer FUN_004012E0 case 6): original gates the
-             * sampl-trigger on `asset->anim_script != NULL` because each
-             * asset has a per-asset [sampl] table attached at load time.
-             * Our port keeps a SCENE-WIDE g_dynamic_sfx[] (populated by
-             * ParseSamplTagsForKomnata) keyed by asset name + frame, so
-             * atlas->anim_script is unused. Calling TriggerFrameSfx
-             * unconditionally — it's a no-op when the asset+frame combo
-             * has no pool entries. Without this, frame-0 SFX set by SET_FRAME
-             * in the asset's first per-entity script tick (e.g. desok1.wyc
-             * frame 0 = Dskfik/Dsk_fik pool) silently dropped. */
-            extern void TriggerFrameSfx(const char *asset_name, int frame);
+            EOFF(e, ENT_OFF_FRAME, uint16_t) = arg;
+            frame_changed = 1;
             TriggerFrameSfx(atlas->name, (int)arg);
             break;
         }
-        case 0x09:                                  /* SET_DELAY */
-            EOFF(e, 0x3C, uint16_t) = arg;
-            EOFF(e, 0x3E, uint16_t) = arg;
+
+        case PVM_SET_DELAY:
+            /* Writes BOTH the current delay and the period so the
+             * frame-delta gate at function top re-arms with the same
+             * value after each yield. */
+            EOFF(e, ENT_OFF_DELAY,       uint16_t) = arg;
+            EOFF(e, ENT_OFF_DELAY_RESET, uint16_t) = arg;
             break;
-        case 0x0B:                                  /* CLEAR_LOOP_CTRS */
-            EOFF(e, 0x34, uint16_t) = 0;
-            EOFF(e, 0x36, uint16_t) = 0;
-            EOFF(e, 0x38, uint16_t) = 0;
+
+        case PVM_CLEAR_LOOP_CTRS:
+            EOFF(e, ENT_OFF_LOOP_A, uint16_t) = 0;
+            EOFF(e, ENT_OFF_LOOP_B, uint16_t) = 0;
+            EOFF(e, ENT_OFF_LOOP_C, uint16_t) = 0;
             break;
-        case 0x0C: case 0x0D: case 0x0E: {          /* LOOP_A / B / C */
-            uint16_t off = (op == 0x0C) ? 0x34 : (op == 0x0D) ? 0x36 : 0x38;
+
+        case PVM_LOOP_A:
+        case PVM_LOOP_B:
+        case PVM_LOOP_C: {
+            uint16_t off = (op == PVM_LOOP_A) ? ENT_OFF_LOOP_A
+                         : (op == PVM_LOOP_B) ? ENT_OFF_LOOP_B
+                                              : ENT_OFF_LOOP_C;
             uint16_t cnt = EOFF(e, off, uint16_t);
             if ((uint32_t)(cnt + 1) < arg) {
-                /* T122 — 1:1 with FUN_004012E0 case 0x0C/D/E loop body:
-                 *   uVar18 = scan_label(want);  // 0 if not found
-                 *   ...
-                 *   uVar14 = uVar18;              // unconditional assign
-                 *
-                 * Earlier port had `if (found != 0 || want < 0) next_pc = found;`
-                 * — only assigning when found OR want<0. Original always
-                 * assigns (so not-found → wraps to pc=0). Wrap-on-miss is
-                 * the intended behavior for malformed scripts. */
-                int16_t want = (int16_t)(p[4] | (p[5] << 8));
+                /* Counter not yet at limit: jump back to the matching
+                 * label. NOTE: assign next_pc unconditionally — if the
+                 * label isn't found, scan_for_label returns 0 and the
+                 * loop wraps to the bytecode head. That's the intended
+                 * behavior for malformed scripts (matches the original);
+                 * silently skipping the jump would corrupt control flow
+                 * by continuing past the body. */
+                int16_t  want  = (int16_t)(p[4] | (p[5] << 8));
                 uint16_t found = scan_for_label(bytecode,
-                                                want < 0 ? 0xFFFF : (uint16_t)want);
+                                                want < 0 ? LABEL_WILDCARD : (uint16_t)want);
                 next_pc = found;
                 EOFF(e, off, uint16_t) = (uint16_t)(cnt + 1);
             } else {
@@ -266,461 +408,404 @@ static void ExecEntityScript(Entity *e)
             }
             break;
         }
-        case 0x0F: {                                /* SET_RAND_FRAME
-             * 1:1 with FUN_004012E0 case 0x0F:
-             *   if (asset->frame_count < arg) arg = asset->frame_count;
-             *   frame = FUN_00410F50(arg);
-             *   entity[+0x30] = frame;
-             *   bVar4 = true;
-             *   if (asset->anim_script != NULL)
-             *       FUN_00401100(asset->anim_script, frame);  // per-frame SFX
-             *
-             * The SFX trigger fires when frame changes randomly (e.g.
-             * pies.wyc dog barking at random frames). Was missing —
-             * frame-set ops would skip the bark sound. */
+
+        case PVM_SET_RAND_FRAME: {
+            /* Pick a random frame in [0, arg) and trigger the per-frame
+             * SFX, same as PVM_SET_FRAME. */
             uint16_t fc = atlas->frame_count;
             if (fc && arg > fc) arg = fc;
             uint16_t f = (uint16_t)WackiRand(arg);
-            EOFF(e, 0x30, uint16_t) = f;
-            bVar4 = 1;
-            /* Same gate-removal rationale as op 0x06 above — call
-             * TriggerFrameSfx unconditionally; it's a no-op when no
-             * pool entries match. */
-            extern void TriggerFrameSfx(const char *asset_name, int frame);
+            EOFF(e, ENT_OFF_FRAME, uint16_t) = f;
+            frame_changed = 1;
             TriggerFrameSfx(atlas->name, (int)f);
             break;
         }
-        case 0x10:                                  /* SET_DELAY_AND_PAUSE */
-            EOFF(e, 0x3C, uint16_t) = arg;
+
+        case PVM_SET_DELAY_PAUSE:
+            EOFF(e, ENT_OFF_DELAY, uint16_t) = arg;
             /* fallthrough */
-        case 0x1D:                                  /* STOP_TICK */
-            bVar3 = 0;
+        case PVM_STOP_TICK:
+            keep_running = 0;
             break;
-        case 0x11: {                                /* SET_RAND_DELAY — 1:1
-             * with FUN_004012E0 case 0x11:
-             *   delay = FUN_00410F50(arg);
-             *   entity[+0x3C] = delay;
-             *   bVar3 = false;
-             * Picks a random delay in [0, arg) then yields. */
+
+        case PVM_SET_RAND_DELAY: {
+            /* Pick a random delay in [0, arg) and yield this tick. */
             uint16_t d = (uint16_t)WackiRand(arg);
-            EOFF(e, 0x3C, uint16_t) = d;
-            bVar3 = 0;
+            EOFF(e, ENT_OFF_DELAY, uint16_t) = d;
+            keep_running = 0;
             break;
         }
-        case 0x12: {                                /* ADVANCE_FRAME */
-            EOFF8(e, 0x3A) |= 1;
-            uint16_t f = (uint16_t)(EOFF(e, 0x30, uint16_t) + arg);
-            EOFF(e, 0x30, uint16_t) = f;
+
+        case PVM_ADVANCE_FRAME: {
+            /* arg < 0x80 → wrap to 0 on overflow (looping anim).
+             * arg ≥ 0x80 → clamp to last frame (one-shot anim).
+             * The bit selects which behavior — used by scripts that want
+             * an idle animation to loop but a special-action animation
+             * to "finish and stop". */
+            EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_FRAME_READY;
+            uint16_t f = (uint16_t)(EOFF(e, ENT_OFF_FRAME, uint16_t) + arg);
+            EOFF(e, ENT_OFF_FRAME, uint16_t) = f;
             if (atlas->frame_count && f >= atlas->frame_count) {
-                if (arg < 0x80) EOFF(e, 0x30, uint16_t) = 0;
-                else            EOFF(e, 0x30, uint16_t) = (uint16_t)(atlas->frame_count - 1);
-                EOFF(e, 0x3A, uint16_t) &= ~1u;
+                if (arg < 0x80) {
+                    EOFF(e, ENT_OFF_FRAME, uint16_t) = 0;
+                } else {
+                    EOFF(e, ENT_OFF_FRAME, uint16_t) = (uint16_t)(atlas->frame_count - 1);
+                }
+                EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) &= (uint16_t)~ENT_FLAG_FRAME_READY;
             }
-            bVar4 = 1;
-            /* Per-frame sound trigger — 1:1 with the original's
-             * FUN_00401100 → FUN_0040A1F0 path that fires the [sampl]
-             * tag-matched .wav for the new frame. */
-            extern void TriggerFrameSfx(const char *asset_name, int frame);
-            TriggerFrameSfx(atlas->name, (int)EOFF(e, 0x30, uint16_t));
+            frame_changed = 1;
+            TriggerFrameSfx(atlas->name, (int)EOFF(e, ENT_OFF_FRAME, uint16_t));
             break;
         }
-        case 0x13: {                                /* WAIT_FRAME (jump-by-label) */
-            uint16_t found = scan_for_label(bytecode, arg);
-            next_pc = found;
+
+        case PVM_WAIT_FRAME_LABEL:
+            next_pc = scan_for_label(bytecode, arg);
             break;
-        }
-        case 0x14: {                                /* RAND_GATE — 1:1 with
-            * Ghidra case 0x14: `if (FUN_00410F50(2) == 0) jump_to_label`.
-            * WackiRand is the 1:1 port (ROL3 + 0x3D8A479C, time-seeded). */
+
+        case PVM_RAND_GATE:
+            /* 50/50 jump: if the RNG returns 0, take the labeled branch. */
             if (WackiRand(2) == 0) {
-                uint16_t found = scan_for_label(bytecode, arg);
-                next_pc = found;
+                next_pc = scan_for_label(bytecode, arg);
             }
             break;
-        }
-        case 0x15:                                  /* WALK_TO_X (+0x44 path)
-             * Instruction width verified via Ghidra byte-pattern search
-             * (B32 audit): every op 0x15 and 0x16 instance in PE bytecode
-             * (range 0x00423000-0x00440000) carries `len=4` (= 8 bytes).
-             *
-             *   op 0x15 layout:  [op:1][len=4:1][X:2][Y:2][step:2][pad:2]
-             *   op 0x16 layout:  [op:1][len=4:1][X:2][step:2][pad:4]
-             *                                              ^^^^^^^^^^^^^
-             *                          op 0x16 reads Y from entity[+0x24]
-             *
-             * Reading p[4..5] / p[6..7] is in-bounds for all observed
-             * instructions. No len<4 variants in shipped scripts. */
-        case 0x16: {                                /* WALK_TO_XY */
-            EOFF8(e, 0x3A) |= 1;
-            /* If no path yet, plant a new one via FUN_00401150 (Bresenham). */
-            uint32_t dxr = EOFF(e, 0x4C, uint32_t);
-            uint32_t dyr = EOFF(e, 0x50, uint32_t);
+
+        case PVM_WALK_TO_X:
+            /* WALK_TO_X reads Y from the operand at p+4..5; WALK_TO_XY
+             * reuses the entity's current anchor Y. Both opcodes have
+             * dlt=4 in every shipped script — reading p[4..7] is safe.
+             * Falls through into WALK_TO_XY. */
+        case PVM_WALK_TO_XY: {
+            EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_FRAME_READY;
+
+            /* If no path is planted yet, set up Bresenham state. */
+            uint32_t dxr = EOFF(e, ENT_OFF_WALKER_DX_REM, uint32_t);
+            uint32_t dyr = EOFF(e, ENT_OFF_WALKER_DY_REM, uint32_t);
             if (dxr == 0 && dyr == 0) {
                 int16_t tx = (int16_t)arg;
-                int16_t ty = (op == 0x15) ? (int16_t)(p[4] | (p[5] << 8))
-                                          : (int16_t)EOFF(e, 0x24, uint16_t);
-                int16_t cx = (int16_t)EOFF(e, 0x22, uint16_t);
-                int16_t cy = (int16_t)EOFF(e, 0x24, uint16_t);
+                int16_t ty = (op == PVM_WALK_TO_X)
+                             ? (int16_t)(p[4] | (p[5] << 8))
+                             : (int16_t)EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t);
+                int16_t cx = (int16_t)EOFF(e, ENT_OFF_ANCHOR_X, uint16_t);
+                int16_t cy = (int16_t)EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t);
                 int16_t sdx = tx - cx, sdy = ty - cy;
                 int16_t adx = sdx < 0 ? -sdx : sdx;
                 int16_t ady = sdy < 0 ? -sdy : sdy;
                 int16_t maxlen = adx > ady ? adx : ady;
+
                 int32_t inc_x = 0, inc_y = 0;
                 if (maxlen) {
                     inc_x = (int32_t)((tx - cx) * 0x10000) / maxlen;
                     inc_y = (int32_t)((ty - cy) * 0x10000) / maxlen;
                 }
-                /* uint32 shift — 1:1 bit pattern with original
-                 * `param_1 << 0x10` @ FUN_00401150, but well-defined for
-                 * cx/cy < 0 (off-screen entry). See stubs.c BindActorWalker. */
-                EOFF(e, 0x44, int32_t) = (int32_t)((uint32_t)(uint16_t)cx << 16);
-                EOFF(e, 0x48, int32_t) = (int32_t)((uint32_t)(uint16_t)cy << 16);
-                EOFF(e, 0x4C, int32_t) = inc_x;
-                EOFF(e, 0x50, int32_t) = inc_y;
-                EOFF(e, 0x54, int16_t) = tx;
-                EOFF(e, 0x56, int16_t) = ty;
-                EOFF(e, 0x3A, uint16_t) &= ~4u;
+
+                /* Promote cx/cy to uint16 before shifting so the
+                 * resulting accumulator has the same bit pattern as
+                 * the original — defined behavior for off-screen
+                 * entries where cx/cy may be negative. */
+                EOFF(e, ENT_OFF_WALKER_X,        int32_t) = (int32_t)((uint32_t)(uint16_t)cx << 16);
+                EOFF(e, ENT_OFF_WALKER_Y,        int32_t) = (int32_t)((uint32_t)(uint16_t)cy << 16);
+                EOFF(e, ENT_OFF_WALKER_DX_REM,   int32_t) = inc_x;
+                EOFF(e, ENT_OFF_WALKER_DY_REM,   int32_t) = inc_y;
+                EOFF(e, ENT_OFF_WALKER_TGT_X,    int16_t) = tx;
+                EOFF(e, ENT_OFF_WALKER_TGT_Y,    int16_t) = ty;
+                EOFF(e, ENT_OFF_STATE_FLAGS,     uint16_t) &= (uint16_t)~ENT_FLAG_WALKER_FRESH;
             }
-            uint16_t step = (op == 0x15) ? (uint16_t)(p[6] | (p[7] << 8))
-                                         : (uint16_t)(p[4] | (p[5] << 8));
-            if (EOFF8(e, 9) & 4) step = (uint16_t)((EOFF(e, 0x58, uint16_t) * step) / 100);
+
+            /* Step count from the operand (with scale_pct applied for
+             * perspective-doubled actors). */
+            uint16_t step = (op == PVM_WALK_TO_X)
+                            ? (uint16_t)(p[6] | (p[7] << 8))
+                            : (uint16_t)(p[4] | (p[5] << 8));
+            if (EOFF8(e, 9) & 4) {
+                step = (uint16_t)((EOFF(e, ENT_OFF_SCALE_PCT, uint16_t) * step) / 100);
+            }
             if ((int16_t)step == 0) step = 1;
-            /* PORT — aliasing-safe step loop. EOFF(e, 0x4A, int16_t) reads
-             * upper 16 bits of int32 at +0x48; same memory aliased through
-             * different types. Compiler under -fstrict-aliasing may assume
-             * `int32_t += ...` followed by `int16_t == ...` reads stale
-             * value → equality check fires on wrong iteration → walker
-             * overshoots target by 1px each tick (Fjej-weź-kwiatka bug:
-             * target Y=323 reached as Y=322 due to compiler reordering,
-             * walker then re-plants because +0x50 wasn't zeroed, and
-             * continues stepping past target). Force per-iter local
-             * variable copy so each comparison reads CURRENT state. */
+
+            /* NOTE: aliasing-safe loop. The high half of the int32
+             * accumulator at +0x44 / +0x48 is read separately as an
+             * int16 at +0x46 / +0x4A — same memory aliased through two
+             * types. Under `-fstrict-aliasing` the compiler may reorder
+             * the int32 += with the subsequent int16 ==, causing the
+             * walker to overshoot the target by 1 px per tick and then
+             * never zero +0x4C/+0x50 → walker keeps stepping past.
+             * The per-iteration local-variable copies force a fresh
+             * read each iteration; `-fno-strict-aliasing` in the
+             * Makefile is the belt-and-braces. */
             for (uint16_t k = 0; k < step; ++k) {
-                int16_t pre_x = EOFF(e, 0x46, int16_t);
-                int16_t tgt_x = EOFF(e, 0x54, int16_t);
-                if (pre_x == tgt_x)
-                    EOFF(e, 0x4C, uint32_t) = 0;
-                else
-                    EOFF(e, 0x44, int32_t) += EOFF(e, 0x4C, int32_t);
-                int16_t pre_y = EOFF(e, 0x4A, int16_t);
-                int16_t tgt_y = EOFF(e, 0x56, int16_t);
-                if (pre_y == tgt_y)
-                    EOFF(e, 0x50, uint32_t) = 0;
-                else
-                    EOFF(e, 0x48, int32_t) += EOFF(e, 0x50, int32_t);
+                int16_t pre_x = EOFF(e, ENT_OFF_WALKER_X_HI, int16_t);
+                int16_t tgt_x = EOFF(e, ENT_OFF_WALKER_TGT_X, int16_t);
+                if (pre_x == tgt_x) {
+                    EOFF(e, ENT_OFF_WALKER_DX_REM, uint32_t) = 0;
+                } else {
+                    EOFF(e, ENT_OFF_WALKER_X, int32_t) += EOFF(e, ENT_OFF_WALKER_DX_REM, int32_t);
+                }
+
+                int16_t pre_y = EOFF(e, ENT_OFF_WALKER_Y_HI, int16_t);
+                int16_t tgt_y = EOFF(e, ENT_OFF_WALKER_TGT_Y, int16_t);
+                if (pre_y == tgt_y) {
+                    EOFF(e, ENT_OFF_WALKER_DY_REM, uint32_t) = 0;
+                } else {
+                    EOFF(e, ENT_OFF_WALKER_Y, int32_t) += EOFF(e, ENT_OFF_WALKER_DY_REM, int32_t);
+                }
             }
-            EOFF(e, 0x24, uint16_t) = EOFF(e, 0x4A, uint16_t);
-            EOFF(e, 0x22, uint16_t) = EOFF(e, 0x46, uint16_t);
-            if (EOFF(e, 0x4C, uint32_t) == 0 && EOFF(e, 0x50, uint32_t) == 0) {
-                EOFF(e, 0x3A, uint16_t) &= ~1u;
+
+            /* Project the high halves back to the anchor. */
+            EOFF(e, ENT_OFF_ANCHOR_X, uint16_t) = EOFF(e, ENT_OFF_WALKER_X_HI, uint16_t);
+            EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t) = EOFF(e, ENT_OFF_WALKER_Y_HI, uint16_t);
+
+            if (EOFF(e, ENT_OFF_WALKER_DX_REM, uint32_t) == 0 &&
+                EOFF(e, ENT_OFF_WALKER_DY_REM, uint32_t) == 0) {
+                EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) &= (uint16_t)~ENT_FLAG_FRAME_READY;
             }
-            /* T123 — original FUN_004012E0 case 0x15/0x16 tail @
-             * LAB_00401779 unconditionally sets bVar4 = true (= "frame
-             * was touched"). Earlier port only set it on walk-done;
-             * walking-mid path missed the post-exec block triggered by
-             * bVar4 (clearing +0x26 when flag 0x40 set — minor UX
-             * glitch on fading entities). */
-            bVar4 = 1;
+            /* Walker tick always counts as a frame-touch — the
+             * walk-tail post-exec hooks need to fire on the moving
+             * tick, not just the arrival tick. */
+            frame_changed = 1;
             break;
         }
-        case 0x17:                                  /* ADD_X */
-            EOFF(e, 0x22, uint16_t) = (uint16_t)(EOFF(e, 0x22, uint16_t) + arg);
+
+        case PVM_ADD_X:
+            EOFF(e, ENT_OFF_ANCHOR_X, uint16_t) =
+                (uint16_t)(EOFF(e, ENT_OFF_ANCHOR_X, uint16_t) + arg);
             break;
-        case 0x18:                                  /* ADD_Y */
-            ACT_LOG("0x18 ADD_Y", (int16_t)(EOFF(e, 0x24, int16_t) + (int16_t)arg));
-            EOFF(e, 0x24, uint16_t) = (uint16_t)(EOFF(e, 0x24, uint16_t) + arg);
+
+        case PVM_ADD_Y:
+            EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t) =
+                (uint16_t)(EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t) + arg);
             break;
-        case 0x19:                                  /* JUMP_IF_BIT0 */
-            if (EOFF8(e, 0x3A) & 1) {
-                uint16_t found = scan_for_label(bytecode, arg);
-                next_pc = found;
+
+        case PVM_JUMP_IF_BIT0:
+            if (EOFF8(e, ENT_OFF_STATE_FLAGS) & ENT_FLAG_FRAME_READY) {
+                next_pc = scan_for_label(bytecode, arg);
             }
             break;
-        case 0x1A:                                  /* JUMP_IF_NOT_BIT0 */
-            if (!(EOFF8(e, 0x3A) & 1)) {
-                uint16_t found = scan_for_label(bytecode, arg);
-                next_pc = found;
+
+        case PVM_JUMP_IF_NOT_BIT0:
+            if (!(EOFF8(e, ENT_OFF_STATE_FLAGS) & ENT_FLAG_FRAME_READY)) {
+                next_pc = scan_for_label(bytecode, arg);
             }
             break;
-        case 0x1B:                                  /* SET_FLAG_2 */
-            EOFF8(e, 0x3A) |= 2; break;
-        case 0x1C:                                  /* CLEAR_FLAG_2 */
-            EOFF(e, 0x3A, uint16_t) &= ~2u; break;
-        case 0x1E: {                                /* SUBSCRIPT_CALL —
-            * 1:1 with FUN_00402500 + entity[+0x2c] = new_bc + pc reset.
-            *
-            * Unresolved-target safety: if xlat returns NULL (the subroutine
-            * isn't embedded in our binary_data table yet), we MUST NOT keep
-            * the old bytecode + reset pc to 0 — that re-executes this same
-            * instruction next iteration → game hangs. Terminate the tick
-            * cleanly instead (bVar3=0), leaving the entity's state intact
-            * so the next walker tick re-tries from the same point. */
-            uint32_t addr; memcpy(&addr, p + 4, 4);
-            extern const void *xlat_binary_ptr(uint32_t);
+
+        case PVM_SET_FLAG_2:
+            EOFF8(e, ENT_OFF_STATE_FLAGS) |= ENT_FLAG_ANIM_ACTIVE;
+            break;
+
+        case PVM_CLEAR_FLAG_2:
+            EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) &= (uint16_t)~ENT_FLAG_ANIM_ACTIVE;
+            break;
+
+        case PVM_SUBSCRIPT_CALL: {
+            /* Tail-call into a different bytecode block. NOTE: if the
+             * target address isn't resolvable (subroutine not embedded
+             * in our PE blob yet), terminate the tick and leave +0x2C
+             * pointing at the current bytecode. Otherwise we'd reset
+             * pc to 0 on the SAME bytecode and re-execute this opcode
+             * forever → game hangs. */
+            uint32_t addr;
+            memcpy(&addr, p + 4, 4);
             const void *new_bc = xlat_binary_ptr(addr);
             if (!new_bc) {
-                /* Subroutine isn't embedded — terminate tick (script stays
-                 * pointed at current bytecode). Avoids infinite-loop hang
-                 * when entity script tail-calls an unembedded address. */
-                bVar3 = 0;
-                next_pc = pc;
+                keep_running = 0;
+                next_pc      = pc;
                 break;
             }
-            /* FUN_00402500 reset, then load new bytecode from operand. */
-            EOFF(e, 0x3A, uint16_t) &= ~5u;
-            EOFF(e, 0x38, uint16_t) = 0;
-            EOFF(e, 0x36, uint16_t) = 0;
-            EOFF(e, 0x34, uint16_t) = 0;
-            EOFF(e, 0x3C, uint16_t) = 0;
-            EOFF(e, 0x42, uint16_t) = 0;
-            EOFF(e, 0x40, uint16_t) = 0;
-            EOFF(e, 0x32, uint16_t) = 0;
-            EOFF(e, 0x50, uint32_t) = 0;
-            EOFF(e, 0x4C, uint32_t) = 0;
-            EOFF(e, 0x2C, uint32_t) = ent_ptr_intern((void *)new_bc);
+            reset_entity_walker_state(e);
+            EOFF(e, ENT_OFF_BYTECODE_SLOT, uint32_t) = ent_ptr_intern((void *)new_bc);
             next_pc = 0;
             break;
         }
-        case 0x1F: case 0x21:                       /* STOP / END_RESET */
-            bVar3 = 0;
-            next_pc = 0;
+
+        case PVM_STOP_RESET:
+        case PVM_END:
+            keep_running = 0;
+            next_pc      = 0;
             break;
-        case 0x20:                                  /* STOP_KEEP_PC */
-            bVar3 = 0;
-            next_pc = pc;
+
+        case PVM_STOP_KEEP_PC:
+            keep_running = 0;
+            next_pc      = pc;
             break;
-        case 0x22: {
-            /* 1:1 with FUN_004012E0 case 0x22:
-             *
-             *   DAT_0044a1a0[DAT_0044a1c8].obj  = arg1;   // pc+2
-             *   DAT_0044a1a0[DAT_0044a1c8].verb = arg2;   // pc+4
-             *   ++DAT_0044a1c8;
-             *
-             * ProcessGameFrameTick later drains this queue (up to 10
-             * entries) by calling DispatchClickEvent(obj, verb) on each.
-             *
-             * We use a 1-slot deferred queue so we don't reenter the
-             * main VM mid-entity-tick (which can mutate the entity list
-             * we're iterating over). FlushQueuedClicks drains at end of
-             * the frame, mirroring the original drain at the tail of
-             * ProcessGameFrameTick. */
-            extern void EnqueueClickEvent(uint16_t obj, uint16_t verb);
+
+        case PVM_ENQUEUE_CLICK: {
+            /* Push (obj, verb) onto the deferred click queue. The drain
+             * happens at the tail of ProcessGameFrameTick, after this
+             * walker has finished — running DispatchClickEvent inline
+             * would mutate the entity list we're currently iterating. */
             uint16_t obj  = arg;
             uint16_t verb = (uint16_t)(p[4] | (p[5] << 8));
             EnqueueClickEvent(obj, verb);
             break;
         }
-        case 0x23: {
-            /* SWAP_ATLAS_BY_ID — 1:1 with per-entity FUN_004012E0 case 0x23:
-             *   FUN_004076b0(entity, arg):
-             *     iVar1 = FUN_00405d80(1, arg);              // FindUpdateRegistration(1, id)
-             *     if (iVar1) FUN_00407600(entity, iVar1);    // bind new atlas
-             *   FUN_00402500(entity);                         // reset state
-             *
-             * FUN_00407600 (binder): writes new atlas ptr into entity[+0x28]
-             * and resets the per-entity script pc + delay counters.
-             *
-             * Earlier port did only the FUN_00402500 reset and missed the
-             * atlas swap entirely — scripts using op 0x23 to change atlas
-             * at runtime had no visible effect (entity kept old atlas).
-             *
-             * pc/delay reset overlaps the FUN_00407600 atlas-bind partial
-             * reset; we just do the FULL FUN_00402500 reset after binding. */
-            extern void *FindUpdateRegistration(uint16_t kind, uint16_t id);
-            extern uint32_t ent_ptr_intern(void *p);
+
+        case PVM_SWAP_ATLAS: {
+            /* Swap to a different atlas registered at (kind=1, id=arg)
+             * in the dispatch table. Resets walker + delay state; if
+             * the lookup fails we just fall through to the reset (the
+             * entity keeps its old atlas, which is the safest behavior). */
             AnimAsset *new_atlas = (AnimAsset *)FindUpdateRegistration(1, arg);
             if (new_atlas) {
-                /* FUN_00407600 atlas swap: entity[+0x28] = asset slot;
-                 * entity[+0x32] = 0 (pc), +0x36/+0x3C = 0 (delays). */
-                EOFF(e, 0x28, uint32_t) = ent_ptr_intern((void *)new_atlas);
-                EOFF(e, 0x32, uint16_t) = 0;
-                EOFF(e, 0x36, uint16_t) = 0;
-                EOFF(e, 0x3C, uint16_t) = 0;
+                EOFF(e, ENT_OFF_ATLAS_SLOT, uint32_t) = ent_ptr_intern(new_atlas);
+                EOFF(e, ENT_OFF_PC,         uint16_t) = 0;
+                EOFF(e, ENT_OFF_LOOP_B,     uint16_t) = 0;
+                EOFF(e, ENT_OFF_DELAY,      uint16_t) = 0;
             }
-            /* FUN_00402500 reset — same block used by op 0x1E SUBSCRIPT_CALL. */
-            EOFF(e, 0x3A, uint16_t) &= ~5u;
-            EOFF(e, 0x38, uint16_t) = 0;
-            EOFF(e, 0x36, uint16_t) = 0;
-            EOFF(e, 0x34, uint16_t) = 0;
-            EOFF(e, 0x3C, uint16_t) = 0;
-            EOFF(e, 0x42, uint16_t) = 0;
-            EOFF(e, 0x40, uint16_t) = 0;
-            EOFF(e, 0x32, uint16_t) = 0;
-            EOFF(e, 0x50, uint32_t) = 0;
-            EOFF(e, 0x4C, uint32_t) = 0;
+            reset_entity_walker_state(e);
             break;
         }
-        case 0x24:                                  /* SET_FADE */
+
+        case PVM_SET_FADE:
+            /* Mark fading-out (bit 1 of the primary-flag byte) and seed
+             * +0x26 with the script-supplied initial fade level. */
             EOFF8(e, 9) |= 2;
-            EOFF(e, 0x26, uint16_t) = arg;
-            bVar4 = 1;
+            EOFF(e, ENT_OFF_FOOT_Y, uint16_t) = arg;
+            frame_changed = 1;
             break;
 
         default:
-            /* unknown opcode: just advance */
+            /* Unknown opcode: advance without effect. */
             break;
         }
 
         pc = next_pc;
     }
 
-    /* ------ post-exec: store frame deltas, compute drawn anchor ---------- */
+    /* ============================================================== *
+     * Post-exec tidy-up.
+     *
+     * Runs whether or not the opcode loop executed (the delay gate
+     * branches straight here). Order matters: the foot-fade clear at
+     * the very top runs BEFORE the standard foot-Y bake at the bottom,
+     * so when both conditions hit the same tick, the standard bake
+     * wins.
+     * ============================================================== */
 post_exec:
-    /* CLEAR +0x26 if frame-changed AND flag 0x40 set — 1:1 with original
-     * LAB_00401a91 first block (Ghidra @ FUN_004012E0):
-     *
-     *   if (bVar4 && (entity[+8] & 0x40)) {
-     *       entity[+0x26] = 0;
-     *       entity[+8] |= 0x20;
-     *   }
-     *
-     * Runs at TOP of post-exec, BEFORE the later "+0x26 = +0x10 + +0x0c"
-     * computation, so the override at the bottom (if flag 0x200 == 0)
-     * wins over this clear when both conditions are true. Earlier port
-     * had this AFTER the override — wrong order, would clear +0x26 even
-     * for normal entities. */
-    if (bVar4 && (EOFF(e, 8, uint16_t) & 0x40)) {
-        EOFF(e, 0x26, uint16_t) = 0;
-        EOFF(e, 8, uint16_t) |= 0x20;
+    /* Fading-out + touched-this-tick → zero foot_y so the entity
+     * sinks below visible scenery before the fade pass culls it. */
+    if (frame_changed && (EOFF(e, 8, uint16_t) & ENT_PFLAG_FADING_OUT)) {
+        EOFF(e, ENT_OFF_FOOT_Y, uint16_t) = 0;
+        EOFF(e, 8, uint16_t)             |= ENT_PFLAG_FOOT_BAKED;
     }
-    EOFF(e, 0x32, uint16_t) = pc;
+    EOFF(e, ENT_OFF_PC, uint16_t) = pc;
 
-    /* Mirror anchor → drawn position (a/c) */
+    /* Mirror anchor → drawn position (with optional oscillation). */
     {
-        int16_t ax = (int16_t)EOFF(e, 0x22, uint16_t);
-        int16_t ay = (int16_t)EOFF(e, 0x24, uint16_t);
-        EOFF(e, 0x0A, int16_t) = ax;
-        EOFF(e, 0x0C, int16_t) = ay;
-        if (local_18) {
-            uint16_t idx = EOFF(e, 0x40, uint16_t);
-            EOFF(e, 0x0A, int16_t) = (int16_t)(local_18[idx] + ax);
+        int16_t ax = (int16_t)EOFF(e, ENT_OFF_ANCHOR_X, uint16_t);
+        int16_t ay = (int16_t)EOFF(e, ENT_OFF_ANCHOR_Y, uint16_t);
+        EOFF(e, ENT_OFF_DRAWN_X, int16_t) = ax;
+        EOFF(e, ENT_OFF_DRAWN_Y, int16_t) = ay;
+
+        if (osc_table_x) {
+            uint16_t idx = EOFF(e, ENT_OFF_LOOP_D, uint16_t);
+            EOFF(e, ENT_OFF_DRAWN_X, int16_t) = (int16_t)(osc_table_x[idx] + ax);
         }
-        if (local_14) {
-            uint16_t idx = EOFF(e, 0x42, uint16_t);
-            EOFF(e, 0x0C, int16_t) = (int16_t)(local_14[idx] + ay);
+        if (osc_table_y) {
+            uint16_t idx = EOFF(e, ENT_OFF_LOOP_E, uint16_t);
+            EOFF(e, ENT_OFF_DRAWN_Y, int16_t) = (int16_t)(osc_table_y[idx] + ay);
         }
     }
-    /* Stash current frame's w/h from atlas tables. Defensive bounds
-     * check — op 0x23 SWAP_ATLAS_BY_ID preserves entity[+0x30] across
-     * atlas swap, so stale frame index on a smaller new atlas could OOB. */
+
+    /* Stash the current frame's atlas width / height into the entity
+     * so renderers + hit-tests can pick them up. Clamps the frame
+     * index defensively — SWAP_ATLAS preserves +0x30 across the swap,
+     * so a stale high index on a smaller new atlas could OOB. */
     {
-        uint16_t fid = EOFF(e, 0x30, uint16_t);
-        if (atlas->frame_count && fid >= atlas->frame_count)
+        uint16_t fid = EOFF(e, ENT_OFF_FRAME, uint16_t);
+        if (atlas->frame_count && fid >= atlas->frame_count) {
             fid = (uint16_t)(atlas->frame_count - 1);
-        if (atlas->off_widths)  EOFF(e, 0x0E, uint16_t) = atlas->off_widths [fid];
-        if (atlas->off_heights) EOFF(e, 0x10, uint16_t) = atlas->off_heights[fid];
+        }
+        if (atlas->off_widths)  EOFF(e, ENT_OFF_WIDTH,  uint16_t) = atlas->off_widths [fid];
+        if (atlas->off_heights) EOFF(e, ENT_OFF_HEIGHT, uint16_t) = atlas->off_heights[fid];
     }
-    /* Clamp scale — 1:1 with original `if (0xa0 < entity[+0x58]) entity[+0x58] = 0xa0`. */
-    if (EOFF(e, 0x58, uint16_t) > 0xA0) EOFF(e, 0x58, uint16_t) = 0xA0;
 
-    /* Foot-anchor compensation — 1:1 with Ghidra FUN_004012E0 post-exec
-     * (after the clamp):
+    /* Clamp scale to the engine's max. */
+    if (EOFF(e, ENT_OFF_SCALE_PCT, uint16_t) > ENT_SCALE_MAX) {
+        EOFF(e, ENT_OFF_SCALE_PCT, uint16_t) = ENT_SCALE_MAX;
+    }
+
+    /* Foot-anchor compensation: ANIM_ACTIVE entities want the drawn
+     * position to reference their per-frame "hot point" so the foot
+     * stays at the script's anchor while the body's silhouette cycles
+     * through poses.
      *
-     *   if (entity[+0x3a] & 2) {                  // SET_FLAG_2 active
-     *       if ((flags & 0x400) == 0) {            // not perspective-scaled
-     *           if ((flags & 4) == 0) {            // not 2x doubled
-     *               drawn += atlas_off[frame];     // ×1
-     *           } else {
-     *               drawn += atlas_off[frame] * 2; // ×2
-     *           }
-     *       } else {                                // perspective-scaled
-     *           drawn += atlas_off[frame] * scale / 100;
-     *       }
-     *   }
+     *   perspective-scaled (ENT_PFLAG_PERSPECTIVE):
+     *       drawn += hot * scale_pct / 100
+     *   2× doubled (ENT_PFLAG_DOUBLED):
+     *       drawn += hot * 2
+     *   else (1:1):
+     *       drawn += hot
      *
-     * Single if/else chain — earlier port had TWO overlapping blocks
-     * that BOTH fired for entities with flag 2 set and 0x400 clear,
-     * applying foot compensation TWICE. Fixed by merging into one
-     * chain matching the original's structure.
-     *
-     * For sprites like rob1 (the glizda/worm) the per-frame hot-x
-     * SHIFTS between frames (frame 0 hot=-6, frame 2 hot=-36) — the
-     * sprite slides 30 px to keep the FOOT at the script-set scene
-     * anchor while the body cycles through poses. */
-    if (EOFF(e, 0x3A, uint16_t) & 2) {
-        uint16_t fid   = EOFF(e, 0x30, uint16_t);
+     * NOTE: the "perspective" path also fires whenever scale_pct is
+     * actually being applied by the renderer — the original engine
+     * gates this on ENT_PFLAG_PERSPECTIVE specifically, but actors
+     * spawned via the path we've reproduced don't reliably get that
+     * flag set. Treating any non-trivial scale_pct as perspective
+     * keeps foot anchoring correct both for shrinking (climbing
+     * distance) and growing (leftover scale from another actor's
+     * action). */
+    if (EOFF(e, ENT_OFF_STATE_FLAGS, uint16_t) & ENT_FLAG_ANIM_ACTIVE) {
+        uint16_t fid   = EOFF(e, ENT_OFF_FRAME, uint16_t);
         uint16_t flags = EOFF(e, 8, uint16_t);
         if (atlas->off_drawX && atlas->off_drawY && fid < atlas->frame_count) {
-            int16_t hx = (int16_t)atlas->off_drawX[fid];
-            int16_t hy = (int16_t)atlas->off_drawY[fid];
-            uint16_t scale58 = EOFF(e, 0x58, uint16_t);
-            /* PORT SHORTCUT (refer FUN_004012E0 post-exec foot-anchor block):
-             * Original gates scaled-offset path on flag 0x400 (perspective-
-             * scaled entity). Actors in stage 1 don't get flag 0x400 set in
-             * the path we've RE'd yet, so they'd always take the ×1 branch
-             * → foot-offset at natural size while EntityRenderAll scales the
-             * blit (via +0x58 from UpdateActorMovement) → sprite top in
-             * wrong place (e.g. Ebek climbing maluch at y=267 scaled to 20%
-             * but offset still -108 → sprite drawn 108px above foot anchor
-             * = floating in the sky above horizon mask).
-             *
-             * Compromise: whenever +0x58 != 0 and != 100, the renderer
-             * applies scale to the blit — so the foot offset must match.
-             * Covers both shrink (scale<100, e.g. Ebek climbing distance)
-             * AND grow (scale>100, e.g. partner-freeze leftover scale=160
-             * during another actor's action) → without grow-side coverage,
-             * sprite blit extends past anchor on the FOOT side, dropping
-             * the actor below the HUD line. */
-            if (flags & 0x400) {                   /* perspective scaled (1:1) */
-                EOFF(e, 0x0A, int16_t) = (int16_t)(EOFF(e, 0x0A, int16_t)
-                    + ((int32_t)hx * scale58) / 100);
-                EOFF(e, 0x0C, int16_t) = (int16_t)(EOFF(e, 0x0C, int16_t)
-                    + ((int32_t)hy * scale58) / 100);
-            } else if (flags & 4) {                /* ×2 doubled */
-                EOFF(e, 0x0A, int16_t) = (int16_t)(EOFF(e, 0x0A, int16_t) + hx * 2);
-                EOFF(e, 0x0C, int16_t) = (int16_t)(EOFF(e, 0x0C, int16_t) + hy * 2);
-            } else {                                /* ×1 */
-                EOFF(e, 0x0A, int16_t) = (int16_t)(EOFF(e, 0x0A, int16_t) + hx);
-                EOFF(e, 0x0C, int16_t) = (int16_t)(EOFF(e, 0x0C, int16_t) + hy);
+            int16_t  hx      = (int16_t)atlas->off_drawX[fid];
+            int16_t  hy      = (int16_t)atlas->off_drawY[fid];
+            uint16_t scale58 = EOFF(e, ENT_OFF_SCALE_PCT, uint16_t);
+
+            if (flags & ENT_PFLAG_PERSPECTIVE) {
+                EOFF(e, ENT_OFF_DRAWN_X, int16_t) = (int16_t)(
+                    EOFF(e, ENT_OFF_DRAWN_X, int16_t) + ((int32_t)hx * scale58) / 100);
+                EOFF(e, ENT_OFF_DRAWN_Y, int16_t) = (int16_t)(
+                    EOFF(e, ENT_OFF_DRAWN_Y, int16_t) + ((int32_t)hy * scale58) / 100);
+            } else if (flags & ENT_PFLAG_DOUBLED) {
+                EOFF(e, ENT_OFF_DRAWN_X, int16_t) =
+                    (int16_t)(EOFF(e, ENT_OFF_DRAWN_X, int16_t) + hx * 2);
+                EOFF(e, ENT_OFF_DRAWN_Y, int16_t) =
+                    (int16_t)(EOFF(e, ENT_OFF_DRAWN_Y, int16_t) + hy * 2);
+            } else {
+                EOFF(e, ENT_OFF_DRAWN_X, int16_t) =
+                    (int16_t)(EOFF(e, ENT_OFF_DRAWN_X, int16_t) + hx);
+                EOFF(e, ENT_OFF_DRAWN_Y, int16_t) =
+                    (int16_t)(EOFF(e, ENT_OFF_DRAWN_Y, int16_t) + hy);
             }
         }
     }
-    /* Bake in the foot_y (+0x26) when not gated by 0x200 flag.
-     * 1:1 with original LAB_00401a91 final block:
-     *   if ((entity[+8] & 0x200) == 0)
-     *       entity[+0x26] = entity[+0x10] + entity[+0x0C];
-     *
-     * This runs AFTER the top-of-post-exec clear (`bVar4 && flag 0x40`)
-     * so when both conditions hit the same tick, this override wins —
-     * matching original behavior. */
-    if (!(EOFF(e, 8, uint16_t) & 0x200)) {
-        EOFF(e, 0x26, int16_t) = (int16_t)(EOFF(e, 0x10, int16_t)
-            + EOFF(e, 0x0C, int16_t));
+
+    /* Standard foot_y bake: ENT_PFLAG_NO_FOOT_BAKE entities (HUD,
+     * speech balloons) opt out; everything else gets the conventional
+     * "foot = drawn_y + height". This runs AFTER the top-of-post-exec
+     * fade-out clear, so it wins when both fire on the same tick. */
+    if (!(EOFF(e, 8, uint16_t) & ENT_PFLAG_NO_FOOT_BAKE)) {
+        EOFF(e, ENT_OFF_FOOT_Y, int16_t) = (int16_t)(
+            EOFF(e, ENT_OFF_HEIGHT, int16_t) + EOFF(e, ENT_OFF_DRAWN_Y, int16_t));
     }
 }
 
-#undef ACT_LOG
-
-/* ========================================================================= *
- * EntityWalkerTick — 1:1 with FUN_004012B0 @ 0x004012B0.
+/* ---- EntityWalkerTick ---------------------------------------------- *
  *
- *   FUN_004024d0();                           // refresh DAT_0044e578 (g_frame_delta_ms)
- *   for (e = head; e; e = e->next)
- *       if (e->script_pc_or_kind10 != 0) FUN_004012E0(e);
+ * Once-per-frame driver. Walks the render list and executes one tick
+ * of bytecode for every entity that has an atlas bound (an entity
+ * without an atlas — most kind=4 click payloads, masks, etc. — has no
+ * VM state, so the per-entity check skips them cheaply).
  *
- * The check `param_1[10] != 0` reads the entity's `kind` field at +0x28
- * (which holds AnimAsset *). If the entity has no atlas, skip it.
- * ========================================================================= */
+ * `head` is accepted for API compatibility with the original engine's
+ * call convention; the actual iteration uses the side-band entity
+ * list so we don't rely on Entity's in-place next/prev pointers
+ * (which would overflow on 64-bit hosts).
+ *
+ * Frame-delta globals (`g_frame_delta_ms`, `g_frame_delta_ticks`) are
+ * refreshed by ProcessGameFrameTickInner before this runs, so we just
+ * read them as-is. */
 void EntityWalkerTick(Entity *head)
 {
-    /* g_frame_delta_ms / g_frame_delta_ticks are now refreshed at the
-     * TOP of ProcessGameFrameTickInner, BEFORE this runs, so we read
-     * them as-is (1:1 with the original where FUN_004024d0 ran first
-     * inside FUN_004025C0). Earlier version did a duplicate refresh
-     * here from g_tick_counter, which:
-     *   a) re-wrote g_frame_delta_ms with a stale value (last frame's
-     *      g_tick_counter end-of-frame snapshot),
-     *   b) didn't update g_frame_delta_ticks at all, so post-EntityVM
-     *      readers of ticks (UpdateCursorState) got the previous
-     *      frame's value. */
-
     (void)head;
-    int n = EntityListCount(0);
+
+    int n = EntityListCount(/*click_list=*/0);
     for (int i = 0; i < n; ++i) {
-        Entity *e = EntityListAt(0, i);
+        Entity *e = EntityListAt(/*click_list=*/0, i);
         if (!e) continue;
-        AnimAsset *a = (AnimAsset *)ent_ptr_resolve(EOFF(e, 0x28, uint32_t));
-        if (a != NULL)
+
+        AnimAsset *a = (AnimAsset *)ent_ptr_resolve(EOFF(e, ENT_OFF_ATLAS_SLOT, uint32_t));
+        if (a != NULL) {
             ExecEntityScript(e);
+        }
     }
 }
