@@ -60,7 +60,6 @@ extern Entity *EntityListAt   (int click_list, int idx);
 /* ------------------------------------------------------------------------- *
  * ClickHitTest —
  *
- *
  * Output: returns the verb_id to dispatch on click. The caller passes
  * this to DispatchClickEvent as its 2nd arg (= "target verb"), with
  * the 1st arg being the currently-held inventory item (or 0x26). */

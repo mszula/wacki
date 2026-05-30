@@ -2326,8 +2326,6 @@ static void OpenOptionsMenu(void)
 
 /* =================== sel_tlo.pic — chapter-select UI ==================== *
  *
- *
- *
  * Shown when game_over_code == 3 (player finished a stage and needs to
  * pick the next chapter to play). The screen displays 4 stage buttons;
  * each is either "available" (id=0x12..0x15, def=0..3, hover=5..8) or
