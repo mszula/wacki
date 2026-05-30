@@ -110,101 +110,14 @@ extern void ScriptCallDialogEnd  (const char *result);
 /* ScriptObj + LoadScriptFile + FindScriptByStageAndRoom +
  * ScriptObjFindSection moved to src/vm/script_obj.c. */
 
-/* ========================================================================= *
- * Register file helpers.
- * ========================================================================= */
-static inline uint32_t var_get(uint16_t i) {
-    return g_script_vars[i & 0x1FF];
-}
-static inline void var_set(uint16_t i, uint32_t v) {
-    uint16_t idx = i & 0x1FF;
-    g_script_vars[idx] = v;
-    /* DIAG (Bug 2 — pending verification): var[14] is g_game_over_code's
-     * alias (DAT_004498B8). Log non-zero writes so we can confirm end-of-
-     * stage (3=chapter-select, 4=stage-end) and death (1) triggers fire
-     * when scripts reach the right opcode. Remove once Fix #16 is shown
-     * working end-to-end. */
-    if (idx == 14 && v != 0) {
-        fprintf(stderr, "[game-over] script wrote g_script_vars[14] = %u  (1=death 3=chapter-sel 4=stage-end)\n",
-                (unsigned)v);
-    }
-    /* DIAG (Bug 5 fix #21 pending): var[17] = g_completed_stages alias.
-     * Each bit = stage completed flag. Confirm scripts set this at end-of-
-     * stage so chapter-select correctly marks the green/completed marker. */
-    if (idx == 17) {
-        fprintf(stderr, "[completed] g_script_vars[17] = 0x%X (bit map of completed stages)\n",
-                (unsigned)v);
-    }
-}
-
-/* ========================================================================= *
- * skip_to_endif — scan forward from a conditional to its matching `6` / `7`.
- *
- * 1:1 with the inner scan loop the original uses for ops 0x00..0x05 and 0x07.
- * Opens (`<6`) increase nesting depth, `6` closes, `7` matches the current
- * level's else, `0x56` aborts (end-of-script).
- *
- * CRITICAL: only 0x56 terminates the scan, NOT 0x55 (END_FORCE). The
- * original Ghidra @ 0x004078d1 inner skip loop is `do { ... } while
- * (bVar27 != 0x56);` — 0x55 is treated as a regular opcode during skip
- * (it just gets stepped over). 0x55 only terminates EXECUTION (in the
- * main switch's case 0x55 which sets bVar7=0x56). Earlier port bailed
- * on 0x55 too, which broke any IF body containing END_FORCE — the
- * skip from the (false-condition) IF would stop AT the END_FORCE
- * inside the body and return NULL, terminating the whole script.
- * Symptom: verb-7 exit-handler @ 0x00427B90 has `IF var[4]==1
- * { ...; END_FORCE; }` — the outer IF skip would terminate before
- * reaching op 0x20 GO_EXIT.
- *
- * Returns the *new* pc (pointing AT the close/else marker, which the main
- * loop will then advance past with its normal `pc += len*4`), or NULL on
- * 0x56 EOF.
- * ========================================================================= */
-static const uint16_t *skip_to_endif(const uint16_t *p)
-{
-    /* Step past the CALLING instruction (IF/ELSE) first — otherwise the
-     * IF itself counts as `op<6` → depth=1 → matching ENDIF only brings
-     * depth back to 0 instead of returning, so we'd scan past it forever.
-     * After the skip, depth=0 means "looking for THIS IF's matching
-     * ENDIF or ELSE". */
-    {
-        uint8_t initial_len = ((const uint8_t *)p)[1];
-        if (initial_len == 0) return NULL;
-        p += initial_len * 2;
-    }
-    int depth = 0;
-    for (;;) {
-        uint8_t op  = ((const uint8_t *)p)[0];
-        uint8_t len = ((const uint8_t *)p)[1];
-        if (op < 6)  ++depth;
-        if (op == 6) { if (depth == 0) return p; --depth; }
-        if (op == 7 && depth == 0) return p;
-        /* 0x56 is the only EOF terminator in the scan — see header. */
-        if (op == 0x56) return NULL;
-        if (len == 0) return NULL;          /* malformed — bail */
-        p += len * 2;                       /* len dwords = len*2 ushorts */
-    }
-}
-
-/* find a 0x16 LABEL with matching id (id from word1 of the 0x16 instruction)
- *
- * 1:1 with original case 0x17 inner loop (Ghidra @ 0x004078d1 line 691).
- * Only 0x56 EOF terminates; 0x55 (END_FORCE) is stepped over — labels can
- * legitimately appear after an END_FORCE in conditional bodies. Same bug
- * as skip_to_endif had (see header there for full diagnosis). */
-static const uint16_t *find_label(const uint16_t *base, uint16_t id)
-{
-    const uint16_t *p = base;
-    while (p) {
-        uint8_t op  = ((const uint8_t *)p)[0];
-        uint8_t len = ((const uint8_t *)p)[1];
-        if (op == 0x16 && p[1] == id) return p;
-        if (op == 0x56) return NULL;
-        if (len == 0) return NULL;
-        p += len * 2;
-    }
-    return NULL;
-}
+/* Register-file accessors (var_get/var_set) and bytecode scanners
+ * (skip_to_endif, find_label) moved to src/vm/parser.{c,h}. Local
+ * aliases keep the inline call sites readable. */
+#include "vm/parser.h"
+#define var_get        vm_var_get
+#define var_set        vm_var_set
+#define skip_to_endif  vm_skip_to_endif
+#define find_label     vm_find_label
 
 /* ========================================================================= *
  * RunScriptInterpreter — 0x00407820, 78 opcodes mapped from Ghidra.
