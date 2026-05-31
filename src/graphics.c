@@ -395,152 +395,224 @@ void InstallPalette(const uint8_t *rgb, uint16_t first)
  * enough at < 100ms for a one-time cost).
  * ========================================================================= */
 
-/* : palette → RGB12 nibble triplets (256 × 4 bytes;
- * byte 0=R, byte 1=G, byte 2=B — matches g_palette_rgb byte order
- * (.PAL files are RGB-ordered)). */
-static uint8_t  s_pal_rgb12[256][4];
-/* : RGB12 → palette idx. RGB12 index layout (per original
- * : `idx = sum_r + (sum_b * 0x10 + sum_g) * 0x10`):
- * bits 0-3 = R nibble (LOW)
- * bits 4-7 = G nibble (MIDDLE)
- * bits 8-11 = B nibble (HIGH)
- * (R-low, B-high nibble layout — NOT a typical RGB565-style ordering.) */
-static uint8_t  s_rgb12_to_pal[4096];
-/* Tint state. Original = 0x808080 = identity. Encoding
- * matches : `tint_r = param & 0xff; tint_g = (param >> 8)
- * & 0xff; tint_b = (param >> 16) & 0xff` — so the param is "RGB-encoded"
- * uint32 with R in LOW byte. */
-static uint32_t s_tint_color = 0x808080;
-static uint32_t s_tint_r = 0x80, s_tint_g = 0x80, s_tint_b = 0x80;
+/* ---- RGB12 alpha-quant LUT constants ------------------------------ */
 
-/* RebuildAlphaQuantLuts head + brute-force build.
- *
- * Distance weights from original ( inner loop):
- * R diff × 900 (= 0x384)
- * G diff × 3481 (= 0xD99)
- * B diff × 121 (= 0x79)
- * These approximate BT.601 perceived luminance — G strongest, B weakest.
- *
- * T116 reverted (2026-05-27) — earlier port added a `Wacki.444` disk
- * cache mirroring the original ( head reads `.444` file
- * via ). The cache made sense on a 1997 Pentium 90 where
- * brute-forcing 4096 × 256 = 1M iterations took ~50ms. Modern CPU
- * benchmark: **1.66 ms / build** — perceptibly free.
- *
- * Original's disk cache was a perf optimization for the era, not a
- * functional requirement. Removed to drop the extra disk file +
- * stale-cache risk + complexity. Brute-force every InstallPalette call;
- * the output bytes are byte-identical to what the cache would yield. */
-void RebuildAlphaQuantLuts(void)
+/* 8-bpp palette size + bytes per .PAL entry (R, G, B). */
+#define PALETTE_SIZE                256
+#define PALETTE_BYTES_PER_ENTRY     3
+
+/* RGB12 = three 4-bit channels packed into 12 bits → 16^3 = 4096 keys.
+ * Nibble layout per original: R is LOW, G MIDDLE, B HIGH (NOT a
+ * typical RGB565-style ordering). */
+#define RGB12_KEY_COUNT             4096
+#define RGB12_NIBBLE_MASK           0xF
+#define RGB12_NIBBLE_BITS           4
+#define RGB12_R_SHIFT               0
+#define RGB12_G_SHIFT               4
+#define RGB12_B_SHIFT               8
+#define RGB12_MAX_CHANNEL           0xF   /* per-channel saturation cap */
+
+/* 8-bit palette colours convert to RGB12 nibbles by >>4. */
+#define RGB888_TO_NIBBLE_SHIFT      4
+
+/* Brute-force inverse-LUT distance weights. From the original engine's
+ * inner loop — approximate BT.601 perceived luminance squared:
+ *   R diff × 900   (≈ 0.30² × 10000)
+ *   G diff × 3481  (≈ 0.59² × 10000)
+ *   B diff × 121   (≈ 0.11² × 10000)
+ * G dominates, B is weakest. */
+#define COLOR_DISTANCE_WEIGHT_R     900
+#define COLOR_DISTANCE_WEIGHT_G     3481
+#define COLOR_DISTANCE_WEIGHT_B     121
+
+/* Initial best-distance sentinel for the LUT-build inner loop. */
+#define COLOR_DISTANCE_SENTINEL     0x7FFFFFFF
+
+/* Index 0 is the engine's "transparent / colour-key" entry, so the
+ * inverse-LUT search starts at palette index 1. */
+#define PALETTE_NONZERO_FIRST       1
+
+/* Tint multiplier — RGB-encoded uint32 with R in LOW byte. 0x80 per
+ * channel = identity (no tint); the multiply is fixed-point Q1.7 so
+ * `(channel * tint) >> TINT_SCALE_SHIFT` reads as
+ * `channel * (tint / 0x80)`. */
+#define TINT_IDENTITY               0x808080u
+#define TINT_NEUTRAL_CHANNEL        0x80
+#define TINT_CHANNEL_MASK           0xFF
+#define TINT_R_SHIFT                0
+#define TINT_G_SHIFT                8
+#define TINT_B_SHIFT                16
+#define TINT_SCALE_SHIFT            7    /* log2(0x80) — fixed-point Q1.7 */
+
+/* RGB-encoded tint params decompose into per-channel Q1.7 multipliers
+ * with R in the LOW byte, G in MID, B in HI. */
+
+/* ---- module state ------------------------------------------------- */
+
+/* Palette → RGB12 nibble triplets (byte order R/G/B/0). */
+static uint8_t  s_pal_rgb12[PALETTE_SIZE][4];
+
+/* RGB12 → nearest palette index. */
+static uint8_t  s_rgb12_to_pal[RGB12_KEY_COUNT];
+
+/* Current tint state. */
+static uint32_t s_tint_color = TINT_IDENTITY;
+static uint32_t s_tint_r = TINT_NEUTRAL_CHANNEL;
+static uint32_t s_tint_g = TINT_NEUTRAL_CHANNEL;
+static uint32_t s_tint_b = TINT_NEUTRAL_CHANNEL;
+
+/* ---- helpers ------------------------------------------------------ */
+
+/* Convert the live g_palette_rgb (256 × R/G/B bytes) into the per-
+ * palette-entry RGB12 nibble triplet used by the quant kernels. */
+static void rebuild_rgb12_palette(void)
 {
-    /* Step 1: copy palette to s_pal_rgb12 (byte order R/G/B/0). */
-    for (int i = 0; i < 256; ++i) {
-        s_pal_rgb12[i][0] = g_palette_rgb[i*3 + 0] >> 4;  /* R nibble */
-        s_pal_rgb12[i][1] = g_palette_rgb[i*3 + 1] >> 4;  /* G nibble */
-        s_pal_rgb12[i][2] = g_palette_rgb[i*3 + 2] >> 4;  /* B nibble */
+    for (int i = 0; i < PALETTE_SIZE; ++i) {
+        s_pal_rgb12[i][0] =
+            g_palette_rgb[i * PALETTE_BYTES_PER_ENTRY + 0] >> RGB888_TO_NIBBLE_SHIFT;
+        s_pal_rgb12[i][1] =
+            g_palette_rgb[i * PALETTE_BYTES_PER_ENTRY + 1] >> RGB888_TO_NIBBLE_SHIFT;
+        s_pal_rgb12[i][2] =
+            g_palette_rgb[i * PALETTE_BYTES_PER_ENTRY + 2] >> RGB888_TO_NIBBLE_SHIFT;
         s_pal_rgb12[i][3] = 0;
     }
-    /* Step 2: brute-force inverse LUT — 256 candidates per 4096 RGB12 keys.
- * ~1.66 ms on modern CPU; no caching needed. */
-    for (int rgb12 = 0; rgb12 < 4096; ++rgb12) {
-        int r = (rgb12 >> 0) & 0xf;   /* LOW nibble = R */
-        int g = (rgb12 >> 4) & 0xf;   /* MIDDLE nibble = G */
-        int b = (rgb12 >> 8) & 0xf;   /* HIGH nibble = B */
-        int best_idx = 1, best_dist = 0x7FFFFFFF;
-        for (int p = 1; p < 256; ++p) {
-            int dr = r - s_pal_rgb12[p][0];
-            int dg = g - s_pal_rgb12[p][1];
-            int db = b - s_pal_rgb12[p][2];
-            int dist = dr*dr*900 + dg*dg*3481 + db*db*121;
-            if (dist < best_dist) { best_dist = dist; best_idx = p; }
-            if (dist == 0) break;
-        }
-        s_rgb12_to_pal[rgb12] = (uint8_t)best_idx;
-    }
-    /* Reset tint to identity. */
-    s_tint_color = 0x808080;
-    s_tint_r = 0x80;
-    s_tint_g = 0x80;
-    s_tint_b = 0x80;
 }
 
-/* SetAlphaTint Sets tint multiplier as
- * RGB-encoded uint32 (R=LOW byte, B=HIGH byte). 0x808080 = identity
- * (no tint). Values < 0x80 darken, > 0x80 brighten the corresponding
- * channel. */
+/* Pack three RGB12 nibbles into the inverse-LUT key. */
+static inline int pack_rgb12_key(int r, int g, int b)
+{
+    return (r << RGB12_R_SHIFT)
+         | (g << RGB12_G_SHIFT)
+         | (b << RGB12_B_SHIFT);
+}
+
+/* Brute-force nearest-palette-index lookup for a single RGB12 triple. */
+static uint8_t find_nearest_palette_index(int r, int g, int b)
+{
+    int best_idx  = PALETTE_NONZERO_FIRST;
+    int best_dist = COLOR_DISTANCE_SENTINEL;
+    for (int p = PALETTE_NONZERO_FIRST; p < PALETTE_SIZE; ++p) {
+        int dr = r - s_pal_rgb12[p][0];
+        int dg = g - s_pal_rgb12[p][1];
+        int db = b - s_pal_rgb12[p][2];
+        int dist = dr * dr * COLOR_DISTANCE_WEIGHT_R
+                 + dg * dg * COLOR_DISTANCE_WEIGHT_G
+                 + db * db * COLOR_DISTANCE_WEIGHT_B;
+        if (dist < best_dist) {
+            best_dist = dist;
+            best_idx  = p;
+        }
+        if (dist == 0) break;
+    }
+    return (uint8_t)best_idx;
+}
+
+/* Apply the active tint multiplier to one RGB12 sample triple,
+ * clamping each channel to RGB12_MAX_CHANNEL. */
+static inline void apply_tint_clamped(int *r, int *g, int *b)
+{
+    if (s_tint_color == TINT_IDENTITY) return;
+    *r = (*r * (int)s_tint_r) >> TINT_SCALE_SHIFT;
+    *g = (*g * (int)s_tint_g) >> TINT_SCALE_SHIFT;
+    *b = (*b * (int)s_tint_b) >> TINT_SCALE_SHIFT;
+    if (*r > RGB12_MAX_CHANNEL) *r = RGB12_MAX_CHANNEL;
+    if (*g > RGB12_MAX_CHANNEL) *g = RGB12_MAX_CHANNEL;
+    if (*b > RGB12_MAX_CHANNEL) *b = RGB12_MAX_CHANNEL;
+}
+
+/* Common tail for the 1D / 2D box-filter samplers: divide each running
+ * sum by the contributing-pixel count, mask back to a nibble, apply
+ * the tint, and look up the result in the inverse LUT. n==0 → fully
+ * transparent → return palette idx 0 (colour-key). */
+static uint8_t finalize_sample(int sum_r, int sum_g, int sum_b, int n)
+{
+    if (n == 0) return 0;
+    if (n > 1) {
+        sum_r = (sum_r / n) & RGB12_NIBBLE_MASK;
+        sum_g = (sum_g / n) & RGB12_NIBBLE_MASK;
+        sum_b = (sum_b / n) & RGB12_NIBBLE_MASK;
+    }
+    apply_tint_clamped(&sum_r, &sum_g, &sum_b);
+    return s_rgb12_to_pal[pack_rgb12_key(sum_r, sum_g, sum_b)];
+}
+
+/* Accumulate one pixel into the running RGB12 sums (no-op for
+ * transparent index-0 pixels). */
+static inline void accumulate_pixel(uint8_t v,
+                                    int *sum_r, int *sum_g, int *sum_b, int *n)
+{
+    if (!v) return;
+    *sum_r += s_pal_rgb12[v][0];
+    *sum_g += s_pal_rgb12[v][1];
+    *sum_b += s_pal_rgb12[v][2];
+    ++*n;
+}
+
+/* ---- public API --------------------------------------------------- */
+
+/* RebuildAlphaQuantLuts — recompute both the palette → RGB12 forward
+ * table and the RGB12 → palette inverse table whenever the palette
+ * changes. Brute-force build is ~1.66 ms on modern CPUs — the
+ * original 1997 build had a `Wacki.444` disk cache for the same
+ * reason, dropped here as a perf optimization not needed today. */
+void RebuildAlphaQuantLuts(void)
+{
+    rebuild_rgb12_palette();
+
+    for (int rgb12 = 0; rgb12 < RGB12_KEY_COUNT; ++rgb12) {
+        int r = (rgb12 >> RGB12_R_SHIFT) & RGB12_NIBBLE_MASK;
+        int g = (rgb12 >> RGB12_G_SHIFT) & RGB12_NIBBLE_MASK;
+        int b = (rgb12 >> RGB12_B_SHIFT) & RGB12_NIBBLE_MASK;
+        s_rgb12_to_pal[rgb12] = find_nearest_palette_index(r, g, b);
+    }
+
+    /* Reset tint to identity on every palette swap. */
+    s_tint_color = TINT_IDENTITY;
+    s_tint_r = TINT_NEUTRAL_CHANNEL;
+    s_tint_g = TINT_NEUTRAL_CHANNEL;
+    s_tint_b = TINT_NEUTRAL_CHANNEL;
+}
+
+/* SetAlphaTint — set the tint multiplier as an RGB-encoded uint32
+ * (R=LOW byte, B=HIGH byte). TINT_IDENTITY = no tint; values < 0x80
+ * darken the channel, > 0x80 brighten it. */
 void SetAlphaTint(uint32_t rgb)
 {
     s_tint_color = rgb;
-    s_tint_r = rgb & 0xff;
-    s_tint_g = (rgb >> 8) & 0xff;
-    s_tint_b = (rgb >> 16) & 0xff;
+    s_tint_r = (rgb >> TINT_R_SHIFT) & TINT_CHANNEL_MASK;
+    s_tint_g = (rgb >> TINT_G_SHIFT) & TINT_CHANNEL_MASK;
+    s_tint_b = (rgb >> TINT_B_SHIFT) & TINT_CHANNEL_MASK;
 }
 
-/* sample_box_1d Averages src pixels across a
- * row span; non-zero pixels contribute to running R/G/B totals. Returns
- * the nearest palette index for the averaged RGB12 value. */
+/* sample_box_1d — average non-transparent pixels across a `count`-
+ * wide source span, then look up the resulting RGB12 triple in the
+ * inverse LUT. Used by mode-1 (1D horizontal) alpha-scaled blits. */
 static uint8_t sample_box_1d(const uint8_t *p, int count)
 {
     int sum_r = 0, sum_g = 0, sum_b = 0, n = 0;
     if (count < 1) count = 1;
     for (int i = 0; i < count; ++i) {
-        uint8_t v = p[i];
-        if (v) {
-            sum_r += s_pal_rgb12[v][0];
-            sum_g += s_pal_rgb12[v][1];
-            sum_b += s_pal_rgb12[v][2];
-            ++n;
-        }
+        accumulate_pixel(p[i], &sum_r, &sum_g, &sum_b, &n);
     }
-    if (n == 0) return 0;
-    if (n > 1) {
-        sum_r = (sum_r / n) & 0xf;
-        sum_g = (sum_g / n) & 0xf;
-        sum_b = (sum_b / n) & 0xf;
-    }
-    if (s_tint_color != 0x808080) {
-        sum_r = (sum_r * (int)s_tint_r) >> 7; if (sum_r > 0xf) sum_r = 0xf;
-        sum_g = (sum_g * (int)s_tint_g) >> 7; if (sum_g > 0xf) sum_g = 0xf;
-        sum_b = (sum_b * (int)s_tint_b) >> 7; if (sum_b > 0xf) sum_b = 0xf;
-    }
-    /* rgb12 layout: R=LOW, G=MIDDLE, B=HIGH (matches lookup). */
-    return s_rgb12_to_pal[sum_r | (sum_g << 4) | (sum_b << 8)];
+    return finalize_sample(sum_r, sum_g, sum_b, n);
 }
 
-/* sample_box_2d Same as 1D but spans `height`
- * rows × `width` cols around the source pixel. `src_stride` is the
- * source row pitch (= src_w). */
+/* sample_box_2d — same as 1D but spans `height` rows × `width` cols
+ * around the source pixel. `src_stride` is the row pitch. Used by
+ * mode-2 (2D box-filter) alpha-scaled blits. */
 static uint8_t sample_box_2d(const uint8_t *p, int width, int src_stride,
                              int height)
 {
     int sum_r = 0, sum_g = 0, sum_b = 0, n = 0;
-    if (width < 1) width = 1;
+    if (width  < 1) width  = 1;
     if (height < 1) height = 1;
     for (int y = 0; y < height; ++y) {
         const uint8_t *row = p + y * src_stride;
         for (int x = 0; x < width; ++x) {
-            uint8_t v = row[x];
-            if (v) {
-                sum_r += s_pal_rgb12[v][0];
-                sum_g += s_pal_rgb12[v][1];
-                sum_b += s_pal_rgb12[v][2];
-                ++n;
-            }
+            accumulate_pixel(row[x], &sum_r, &sum_g, &sum_b, &n);
         }
     }
-    if (n == 0) return 0;
-    if (n > 1) {
-        sum_r = (sum_r / n) & 0xf;
-        sum_g = (sum_g / n) & 0xf;
-        sum_b = (sum_b / n) & 0xf;
-    }
-    if (s_tint_color != 0x808080) {
-        sum_r = (sum_r * (int)s_tint_r) >> 7; if (sum_r > 0xf) sum_r = 0xf;
-        sum_g = (sum_g * (int)s_tint_g) >> 7; if (sum_g > 0xf) sum_g = 0xf;
-        sum_b = (sum_b * (int)s_tint_b) >> 7; if (sum_b > 0xf) sum_b = 0xf;
-    }
-    /* rgb12 layout: R=LOW, G=MIDDLE, B=HIGH (matches lookup). */
-    return s_rgb12_to_pal[sum_r | (sum_g << 4) | (sum_b << 8)];
+    return finalize_sample(sum_r, sum_g, sum_b, n);
 }
 
 /* BlitAlphaScaled Caller passes a packed
