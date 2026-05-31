@@ -157,113 +157,194 @@ static void sigint_handler(int sig)
     SDL_PushEvent(&ev);
 }
 
-/* ------------------------------------------------------------------------- *
- * WackiMain — the real entry point.
- *
- * Mirrors WinMain @ 0x004043B0 but uses the SDL platform abstraction.
- * ------------------------------------------------------------------------- */
-int WackiMain(int argc, char **argv)
+/* ---- CLI parsing ------------------------------------------------- */
+
+/* Parsed command-line state — set by parse_cli_args, possibly
+ * overridden by apply_env_overrides. */
+typedef struct CliArgs {
+    uint32_t    seed_override;
+    int         seed_set;
+    int         start_stage;     /* 1..5 = dev jump, 0 = normal flow */
+    const char *play_avi;        /* single-AVI test mode (--play-avi) */
+    int         test_cutscenes;  /* batch cutscene sweep (--test-cutscenes) */
+} CliArgs;
+
+#define DEV_START_STAGE_CLAMP_MIN   1
+#define DEV_START_STAGE_CLAMP_MAX   5
+#define SCALE_FACTOR_MAX            8
+
+static void parse_cli_args(int argc, char **argv, CliArgs *out)
 {
-    /* T133 — SIGINT (Ctrl-C) → graceful shutdown. Installed first so it
- * covers init phase too. */
-    signal(SIGINT, sigint_handler);
+    *out = (CliArgs){0};
 
-
-    /* T45 — parse --headless before any SDL init. Env var WACKI_HEADLESS=1
- * works equivalently for CI runners that can't easily change argv. */
-    uint32_t seed_override = 0;
-    int      seed_set      = 0;
-    const char *play_avi   = NULL;     /* T29/T30 — single-AVI test mode */
-    int test_cutscenes     = 0;        /* T29 — batch test all cutscenes */
-    int start_stage        = 0;        /* DEV — --start-stage N: skip menu+intro,
- * mark stages 1..(N-1) as completed, jump
- * straight into stage N gameplay. Useful
- * during testing to avoid replaying earlier
- * stages on every iteration. */
     for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--headless") == 0) g_headless = 1;
+        if (strcmp(argv[i], "--headless") == 0) {
+            g_headless = 1;
+        }
         else if (strcmp(argv[i], "--start-stage") == 0 && i + 1 < argc) {
-            start_stage = atoi(argv[++i]);
-            if (start_stage < 1 || start_stage > 5) start_stage = 0;
+            int n = atoi(argv[++i]);
+            if (n < DEV_START_STAGE_CLAMP_MIN ||
+                n > DEV_START_STAGE_CLAMP_MAX) n = 0;
+            out->start_stage = n;
         }
         /* T44 — deterministic smoke harness: --seed N sets WackiRand
- * seed before any rand call. Combined with --headless gives a
- * reproducible smoke run for CI assertions. */
+         * seed before any rand call. */
         else if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
-            seed_override = (uint32_t)strtoul(argv[++i], NULL, 0);
-            seed_set      = 1;
+            out->seed_override = (uint32_t)strtoul(argv[++i], NULL, 0);
+            out->seed_set      = 1;
         }
-        /* T54 — HiDPI scaling. --scale N enlarges window NxN, keeps
- * framebuffer at native 640×480 via SDL_RenderSetLogicalSize.
- * --scaler nearest|linear|best controls upscale filtering. */
+        /* T54 — HiDPI scaling. --scale N enlarges window NxN; --scaler
+         * nearest|linear|best controls upscale filtering. */
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
             g_scale_factor = atoi(argv[++i]);
             if (g_scale_factor < 1) g_scale_factor = 1;
-            if (g_scale_factor > 8) g_scale_factor = 8;     /* sanity */
+            if (g_scale_factor > SCALE_FACTOR_MAX) {
+                g_scale_factor = SCALE_FACTOR_MAX;
+            }
         }
         else if (strcmp(argv[i], "--scaler") == 0 && i + 1 < argc) {
             g_scale_mode = argv[++i];
         }
-        /* T29/T30 — play a single cutscene then exit. Useful for QA
- * runs without needing to drive the game to the death/intro
- * trigger. Usage: ./wacki --play-avi DANE_14.DTA */
+        /* T29 / T30 — single-AVI test mode + batch cutscene sweep. */
         else if (strcmp(argv[i], "--play-avi") == 0 && i + 1 < argc) {
-            play_avi = argv[++i];
+            out->play_avi = argv[++i];
         }
-        /* T29 — iterate over all known cutscene files (intros, alts,
- * death), play each briefly, report success/failure. Designed
- * for headless CI to catch decoder regressions. */
         else if (strcmp(argv[i], "--test-cutscenes") == 0) {
-            test_cutscenes = 1;
-            g_no_pacing    = 1;     /* batch mode: don't sleep per frame */
+            out->test_cutscenes = 1;
+            g_no_pacing         = 1;     /* batch mode: don't sleep per frame */
         }
-        /* T29 — force-fast decode for cutscenes (no SDL_Delay between
- * frames). Useful for single-AVI verification too. */
+        /* T29 — force-fast decode for cutscenes (no SDL_Delay). */
         else if (strcmp(argv[i], "--no-pacing") == 0) {
             g_no_pacing = 1;
         }
     }
-    {
-        const char *env = getenv("WACKI_HEADLESS");
-        if (env && *env && *env != '0') g_headless = 1;
-    }
-    if (start_stage == 0) {
-        const char *env = getenv("WACKI_START_STAGE");
+}
+
+/* Apply env-var fallbacks for the flags the CLI didn't touch. Lets CI
+ * runners that can't easily change argv (WACKI_HEADLESS, WACKI_START_
+ * STAGE, etc.) configure the engine via the environment instead. */
+static void apply_env_overrides(CliArgs *args)
+{
+    const char *env;
+
+    env = getenv("WACKI_HEADLESS");
+    if (env && *env && *env != '0') g_headless = 1;
+
+    if (args->start_stage == 0) {
+        env = getenv("WACKI_START_STAGE");
         if (env && *env) {
             int n = atoi(env);
-            if (n >= 1 && n <= 5) start_stage = n;
+            if (n >= DEV_START_STAGE_CLAMP_MIN &&
+                n <= DEV_START_STAGE_CLAMP_MAX) args->start_stage = n;
         }
     }
-    if (start_stage) {
-        extern int g_dev_start_stage;
-        g_dev_start_stage = start_stage;
-        fprintf(stderr, "[wacki] dev mode: jump to stage %d (skip menu+intro)\n",
-                start_stage);
+
+    if (!args->seed_set) {
+        env = getenv("WACKI_SEED");
+        if (env && *env) {
+            args->seed_override = (uint32_t)strtoul(env, NULL, 0);
+            args->seed_set      = 1;
+        }
     }
-    if (!seed_set) {
-        const char *env = getenv("WACKI_SEED");
-        if (env && *env) { seed_override = (uint32_t)strtoul(env, NULL, 0); seed_set = 1; }
-    }
+
     if (g_scale_factor == 0) {
-        const char *env = getenv("WACKI_SCALE");
+        env = getenv("WACKI_SCALE");
         if (env && *env) g_scale_factor = atoi(env);
     }
-    {
-        const char *env = getenv("WACKI_SCALER");
-        if (env && *env) g_scale_mode = env;
+
+    env = getenv("WACKI_SCALER");
+    if (env && *env) g_scale_mode = env;
+}
+
+/* Apply the parsed args' early-side effects: dev-stage jump, headless
+ * SDL drivers, RNG seed override. Done after env merge but before SDL
+ * init so the env-forced drivers stick. */
+static void apply_early_cli_effects(const CliArgs *args)
+{
+    if (args->start_stage) {
+        extern int g_dev_start_stage;
+        g_dev_start_stage = args->start_stage;
+        fprintf(stderr, "[wacki] dev mode: jump to stage %d (skip menu+intro)\n",
+                args->start_stage);
     }
     if (g_headless) {
-        /* Force SDL's null video backend so SDL_Init doesn't try to
- * connect to Cocoa/X11/Wayland. Caller can still override by
- * setting SDL_VIDEODRIVER before launch (rare). */
+        /* Force SDL's null video / audio backends so SDL_Init doesn't
+         * try to connect to Cocoa / X11 / Wayland. Caller can still
+         * override by setting SDL_VIDEODRIVER before launch (rare). */
         setenv("SDL_VIDEODRIVER", "dummy", 0);
         setenv("SDL_AUDIODRIVER", "dummy", 0);
         fprintf(stderr, "[wacki] headless mode\n");
     }
-    if (seed_set) {
-        WackiRandSeed(seed_override);
-        fprintf(stderr, "[wacki] WackiRand seed = 0x%08x\n", seed_override);
+    if (args->seed_set) {
+        WackiRandSeed(args->seed_override);
+        fprintf(stderr, "[wacki] WackiRand seed = 0x%08x\n", args->seed_override);
     }
+}
+
+/* Try to load WACKI.EXE as a passive PE image so xlat_binary_ptr can
+ * resolve original .data / .rdata / .text addresses (verb tables,
+ * scripts, etc.) that haven't been manually transcribed into binary_
+ * data.c. Missing or unreadable → port falls back to the manually-
+ * embedded blobs only (current behaviour). */
+static void try_load_pe_image(void)
+{
+    extern int PeLoaderInit(const char *exe_path);
+    char p[512];
+    snprintf(p, sizeof p, "%s/WACKI.EXE", g_cd_path);
+    if (PeLoaderInit(p)) return;
+    snprintf(p, sizeof p, "%s/wacki.exe", g_cd_path);
+    PeLoaderInit(p);
+}
+
+/* ---- cutscene test modes ----------------------------------------- */
+
+/* All cutscene files that ship in DANE_*.DTA. Order matches stage
+ * order so a batch sweep walks the engine's natural playback sequence. */
+static const char *const k_known_cutscenes[] = {
+    "DANE_10.DTA", "DANE_11.DTA", "DANE_12.DTA", "DANE_13.DTA",
+    "DANE_14.DTA", "DANE_21.DTA", "DANE_22.DTA", "DANE_30.DTA",
+    "DANE_31.DTA", "DANE_32.DTA", "DANE_40.DTA", "DANE_41.DTA",
+    "DANE_42.DTA", "DANE_50.DTA", "DANE_51.DTA", "DANE_52.DTA",
+};
+#define KNOWN_CUTSCENE_COUNT \
+    (sizeof k_known_cutscenes / sizeof k_known_cutscenes[0])
+
+static int run_cutscene_test_mode(const CliArgs *args)
+{
+    if (args->play_avi) {
+        fprintf(stderr, "[cutscene-test] play '%s'\n", args->play_avi);
+        PlaySceneCutsceneAvi(args->play_avi);
+        fprintf(stderr, "[cutscene-test] done\n");
+        return 1;
+    }
+    if (args->test_cutscenes) {
+        fprintf(stderr, "[cutscene-test] batch %zu files\n",
+                KNOWN_CUTSCENE_COUNT);
+        for (size_t i = 0; i < KNOWN_CUTSCENE_COUNT; ++i) {
+            fprintf(stderr, "[cutscene-test] [%zu/%zu] %s\n",
+                    i + 1, KNOWN_CUTSCENE_COUNT, k_known_cutscenes[i]);
+            PlaySceneCutsceneAvi(k_known_cutscenes[i]);
+        }
+        fprintf(stderr, "[cutscene-test] done\n");
+        return 1;
+    }
+    return 0;
+}
+
+/* ------------------------------------------------------------------------- *
+ * WackiMain — the real entry point. Mirrors the original WinMain but
+ * routes everything through the SDL platform abstraction.
+ * ------------------------------------------------------------------------- */
+int WackiMain(int argc, char **argv)
+{
+    /* T133 — SIGINT (Ctrl-C) → graceful shutdown. Installed first so
+     * it covers init phase too. */
+    signal(SIGINT, sigint_handler);
+
+    CliArgs args;
+    parse_cli_args(argc, argv, &args);
+    apply_env_overrides(&args);
+    apply_early_cli_effects(&args);
 
     if (CheckCdRomDrive() != 2) {
         fprintf(stderr,
@@ -277,20 +358,7 @@ int WackiMain(int argc, char **argv)
     fprintf(stderr, "[wacki] build " __DATE__ " " __TIME__ "\n");
     fprintf(stderr, "[wacki] data source: %s\n", g_cd_path);
 
-    /* Optional: load WACKI.EXE as a passive PE image so xlat_binary_ptr
- * can resolve original .data/.rdata/.text addresses (verb tables,
- * scripts, etc.) that haven't been manually transcribed into the
- * port's binary_data.c. Missing or unreadable → port falls back to
- * the manually-embedded blobs only (current behaviour). */
-    extern int PeLoaderInit(const char *exe_path);
-    {
-        char p[512];
-        snprintf(p, sizeof p, "%s/WACKI.EXE", g_cd_path);
-        if (!PeLoaderInit(p)) {
-            snprintf(p, sizeof p, "%s/wacki.exe", g_cd_path);
-            PeLoaderInit(p);
-        }
-    }
+    try_load_pe_image();
 
     if (!PlatformInit(WACKI_SCREEN_W, WACKI_SCREEN_H, "Wacki")) return 1;
 
@@ -301,55 +369,15 @@ int WackiMain(int argc, char **argv)
         return 1;
     }
 
-    /* T29/T30 — cutscene test modes. Run AFTER InitializeGameSubsystems
- * (which mounts archives + builds stage table) so PlaySceneCutsceneAvi
- * can find the .dta files via the standard try_play_at chain, and
- * BEFORE RunMainGameLoop so we don't load menu state we'll throw
- * away. Both modes exit after their run instead of dropping into
- * the menu. */
-    if (play_avi) {
-        fprintf(stderr, "[cutscene-test] play '%s'\n", play_avi);
-        PlaySceneCutsceneAvi(play_avi);
-        fprintf(stderr, "[cutscene-test] done\n");
-        PlatformShutdown();
-        return 0;
-    }
-    if (test_cutscenes) {
-        /* Walks every known cutscene file. Each call blocks until the
- * AVI finishes (or fails to open); we log start/end so a CI
- * runner can grep for failures. */
-        static const char *cutscenes[] = {
-            "DANE_10.DTA",          /* engine intro */
-            "DANE_11.DTA",          /* alt-stage 5 (credits roll?) */
-            "DANE_12.DTA",          /* mid-game */
-            "DANE_13.DTA",          /* ? */
-            "DANE_14.DTA",          /* death */
-            "DANE_21.DTA",          /* stage 1 alt */
-            "DANE_22.DTA",          /* stage 1 alt3 */
-            "DANE_30.DTA",          /* stage 2 intro */
-            "DANE_31.DTA",          /* stage 2 alt */
-            "DANE_32.DTA",          /* stage 2 alt3 */
-            "DANE_40.DTA",          /* stage 3 intro */
-            "DANE_41.DTA",          /* stage 3 alt */
-            "DANE_42.DTA",          /* stage 3 alt3 */
-            "DANE_50.DTA",          /* stage 4 intro */
-            "DANE_51.DTA",          /* stage 4 alt */
-            "DANE_52.DTA",          /* stage 4 alt3 */
-        };
-        fprintf(stderr, "[cutscene-test] batch %zu files\n",
-                sizeof cutscenes / sizeof cutscenes[0]);
-        for (size_t i = 0; i < sizeof cutscenes / sizeof cutscenes[0]; ++i) {
-            fprintf(stderr, "[cutscene-test] [%zu/%zu] %s\n",
-                    i + 1, sizeof cutscenes / sizeof cutscenes[0], cutscenes[i]);
-            PlaySceneCutsceneAvi(cutscenes[i]);
-        }
-        fprintf(stderr, "[cutscene-test] done\n");
+    /* Cutscene-only test modes exit after their run instead of dropping
+     * into the main menu. Both modes run AFTER InitializeGameSubsystems
+     * so PlaySceneCutsceneAvi has the archive mounted. */
+    if (run_cutscene_test_mode(&args)) {
         PlatformShutdown();
         return 0;
     }
 
     RunMainGameLoop();
-
     PlatformShutdown();
     return 0;
 }
