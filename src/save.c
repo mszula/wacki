@@ -44,13 +44,16 @@ void LoadSaveStateOrInitialize(void)
     if (!loaded) {
         memset(&g_save, 0, sizeof g_save);
         g_save.magic = WACKI_SAVE_MAGIC;
-        /* T129 — defaults (LoadSaveStateOrInitialize)
- * @ 0x0040A5C0 tail. Per Ghidra: 1, 1, 1, 0, 1, 1, 1 — note that
- * speech_color_index (= sound_on in our struct) defaults to ZERO. Earlier
- * port defaulted to 1; first-launch sound state was wrong vs
- * original (original starts with sfx muted, port started unmuted). */
+        /* First-launch defaults. T129 originally seeded sound_on=0 to
+         * match the original engine (the 1997 build shipped with SFX
+         * muted on first launch and required the user to toggle Solund
+         * → SFX-on to hear them). The port has NO Solund button wired
+         * to sound_on (only music/voice/subtitles/dialogues/extra),
+         * so a fresh-install user has no way to enable SFX from inside
+         * the game. Default to 1 so SFX work out of the box; users who
+         * want the original mute behavior can edit Wacki.sav byte 5. */
         g_save.settings = (WackiSettings){
-            .video_mode = 1, .sound_on = 0, .music_on = 1, .pad0 = 0,
+            .video_mode = 1, .sound_on = 1, .music_on = 1, .pad0 = 0,
             .voice_on = 1, .subtitles_on = 1, .dialogues_on = 1, .pad1 = 0
         };
         for (int i = 0; i < WACKI_SAVE_SLOTS; ++i) {

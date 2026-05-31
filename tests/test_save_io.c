@@ -7,7 +7,8 @@
  *
  * Coverage:
  *   - LoadSaveStateOrInitialize sets correct defaults when no file exists
- *     (sound_on=0, music_on=1, voice_on=1 etc. per T129 fix)
+ *     (sound_on=1, music_on=1, voice_on=1 — port default: SFX on at
+ *     first launch since there's no in-game UI to toggle sound_on)
  *   - "Pusty" name on every slot
  *   - WriteSaveFile + LoadSaveStateOrInitialize roundtrip preserves bytes
  *   - Atomic write: Wacki.sav.tmp doesn't leak on success
@@ -75,9 +76,11 @@ TEST(load_with_no_file_zeroes_then_sets_defaults)
     /* Magic */
     ASSERT_EQ(g_save.magic, WACKI_SAVE_MAGIC);
 
-    /* T129 fix: sound_on defaults to 0, NOT 1. */
+    /* Port default: sound_on=1 so SFX work out of the box (the port has
+     * no in-game UI to toggle sound_on, unlike the original engine's
+     * Solund→Sound button). */
     ASSERT_EQ(g_save.settings.video_mode,   1);
-    ASSERT_EQ(g_save.settings.sound_on,     0);
+    ASSERT_EQ(g_save.settings.sound_on,     1);
     ASSERT_EQ(g_save.settings.music_on,     1);
     ASSERT_EQ(g_save.settings.voice_on,     1);
     ASSERT_EQ(g_save.settings.subtitles_on, 1);
@@ -193,8 +196,8 @@ TEST(loading_short_file_falls_back)
     LoadSaveStateOrInitialize();
 
     ASSERT_EQ(g_save.magic, WACKI_SAVE_MAGIC);
-    /* Defaults must be installed (sound_on default = 0). */
-    ASSERT_EQ(g_save.settings.sound_on, 0);
+    /* Defaults must be installed (port default: sound_on = 1). */
+    ASSERT_EQ(g_save.settings.sound_on, 1);
 
     restore_test_cwd();
 }
