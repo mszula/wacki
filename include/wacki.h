@@ -684,17 +684,14 @@ extern uint16_t  g_perspective_step;
 extern void *g_dialogues_obj;
 extern void *g_scripts_obj;
 extern void *g_items_obj;
-extern AnimAsset *g_panel_cursor;
-extern AnimAsset *g_panel_asset;        /* DAT_00453744 — stage panel.wyc */
-extern AnimAsset *g_items_atlas;        /* DAT_0044E6AC — przedm.wyc icons */
+extern AnimAsset *g_panel_asset;        /* stage panel.wyc atlas */
+extern AnimAsset *g_items_atlas;        /* przedm.wyc inventory icons */
 extern Entity *g_actor[2];
 
-/* Panel verb selection — FUN_00407260 / DAT_0044346A / DAT_0044E450. */
+/* Panel verb selection — see hud/panel.c. */
 extern uint16_t g_panel_verb_tab[6];
 extern uint16_t g_hover_panel_verb;
-extern uint16_t g_hover_scene_verb;       /* DAT_0044988C — T31 v2 cursor */
-extern uint8_t  g_panel_cursor_redirect;
-extern uint8_t  g_panel_cursor_redirect2;
+extern uint16_t g_hover_scene_verb;       /* T31 v2 — cursor state machine */
 void PanelHitTest(void);
 /* Item-name voice-over (FUN_00402230 / FUN_004021c0 1:1).
  * LoadItemNamesTable reads Item.scr at boot — returns highest index seen.

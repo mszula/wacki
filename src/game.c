@@ -80,8 +80,7 @@ extern void PaletteFadeInOut(uint16_t pct, const uint8_t *pal,
                              void *cb);
 extern void *g_dialogues_obj;
 extern void *g_scripts_obj;
-extern void *g_items_obj;                       /* */
-extern AnimAsset *g_panel_cursor;               /* g_panel_cursor (Krazek.pic) */
+extern void *g_items_obj;
 
 /* g_stage_table is defined in stubs.c — see PTR_PTR_00442FA8 in the binary. */
 

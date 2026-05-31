@@ -72,16 +72,13 @@ uint16_t  g_settings_anim_active = 2;   /* g_settings_anim_active — komnata fl
  * 8-15 needed by
  * ScriptCallBgMaskSetup perspective
  * band count `(flags & 0xff02) << 1`). */
-uint16_t  g_active_target_y = 0;        /* g_active_target_y */
 uint16_t  g_selected_save_slot = 0;
-int       g_cd_drive_letter_present = 1;/* g_cd_drive_letter_present */
 
 void     *g_dialogues_obj = NULL;
 void     *g_scripts_obj   = NULL;
 void     *g_items_obj     = NULL;
-AnimAsset *g_panel_cursor = NULL;       /* g_panel_cursor */
-AnimAsset *g_panel_asset  = NULL;       /* g_panel_asset — stage panel (panel.wyc) */
-AnimAsset *g_items_atlas  = NULL;       /* g_items_atlas — przedm.wyc icons */
+AnimAsset *g_panel_asset  = NULL;       /* stage panel (panel.wyc) */
+AnimAsset *g_items_atlas  = NULL;       /* przedm.wyc inventory icons */
 Entity   *g_actor[2]      = { NULL, NULL };
 
 /* g_hover_scene_verb — written by ClickHitTest; read by cursor-state

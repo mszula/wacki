@@ -1,17 +1,11 @@
 /* tests/test_panel_hit_test.c — verb-panel hit-test (production PanelHitTest).
  *
- * src/stubs.c PanelHitTest() (1:1 with FUN_00407260) maps mouse coords to
- * a panel verb. The HUD verb-bar at the top of the screen has 6 button
- * cells at panel-local (300,20), (345,20), (390,20), (435,20), (480,20),
- * (525,20); each cell is 40x40 pixels (0x28). When the mouse falls inside
- * a cell, g_hover_panel_verb is set to g_panel_verb_tab[i]. Outside any
- * cell — or when the panel is hidden — g_hover_panel_verb resets to 0x26
- * (the "neutral verb" sentinel).
- *
- * When g_panel_cursor_redirect is non-zero AND the cursor lands on a
- * button, the verb is also stashed into g_held_item (cursor-as-verb
- * pickup path, e.g. selecting "give" from the panel and then clicking
- * the target).
+ * PanelHitTest maps mouse coords to a panel verb. The HUD verb-bar at the
+ * bottom of the screen has 6 button cells at panel-local (300,20),
+ * (345,20), (390,20), (435,20), (480,20), (525,20); each cell is 40x40
+ * pixels. When the mouse falls inside a cell, g_hover_panel_verb is set
+ * to g_panel_verb_tab[i]. Outside any cell — or when the panel is hidden
+ * — g_hover_panel_verb resets to 0x26 (the "neutral verb" sentinel).
  *
  * These tests cover:
  *   - default "no hit" sentinel
@@ -20,9 +14,6 @@
  *   - mouse above panel top
  *   - direct hits on each of 6 cells → matching verb
  *   - boundary conditions (exact pixel edges)
- *   - cursor-redirect side effect → g_held_item update
- *
- * Reference: src/stubs.c:515 (port) / FUN_00407260 (Ghidra).
  */
 
 #include "test.h"
@@ -37,8 +28,6 @@ extern void PanelHitTest(void);
 extern AnimAsset *g_panel_asset;
 extern uint16_t   g_settings_anim_active;
 extern uint16_t   g_hover_panel_verb;
-extern uint8_t    g_panel_cursor_redirect;
-extern uint8_t    g_panel_cursor_redirect2;
 extern uint16_t   g_panel_verb_tab[6];
 extern uint16_t   g_held_item;
 extern int16_t    s_mouse_x;
@@ -64,8 +53,6 @@ static void reset_panel(int16_t panel_x, int16_t panel_y)
     g_panel_asset = &s_panel;
     g_settings_anim_active = 1;             /* bit 0 = panel visible */
     g_hover_panel_verb = 0x26;
-    g_panel_cursor_redirect  = 0;
-    g_panel_cursor_redirect2 = 0;
     g_held_item = 0x26;
 
     /* Pre-populate the verb table with distinct values so we can
@@ -327,60 +314,6 @@ TEST(panel_with_non_zero_origin_button_5)
     ASSERT_EQ(g_hover_panel_verb, 0x06);
 }
 
-/* ---- cursor-redirect side effect ------------------------------------ */
-
-TEST(panel_cursor_redirect_stashes_into_held_item_on_hit)
-{
-    /* When redirect is armed AND mouse lands on a button: the verb
-     * goes to g_held_item AND both redirect flags clear. This is
-     * the "panel verb becomes the cursor" code path. */
-    reset_panel(0, 0);
-    g_panel_cursor_redirect  = 1;
-    g_panel_cursor_redirect2 = 1;
-    g_held_item = 0xAA;                     /* sentinel — should get overwritten */
-    s_mouse_x = 320;
-    s_mouse_y = 40;
-    PanelHitTest();
-
-    ASSERT_EQ(g_hover_panel_verb, 0x01);
-    ASSERT_EQ(g_held_item, 0x01);           /* verb copied in */
-    ASSERT_EQ(g_panel_cursor_redirect,  0); /* both flags cleared */
-    ASSERT_EQ(g_panel_cursor_redirect2, 0);
-}
-
-TEST(panel_cursor_redirect_inactive_does_not_touch_held_item)
-{
-    /* Redirect NOT armed → g_held_item must remain its prior value
-     * even on a hit. */
-    reset_panel(0, 0);
-    g_panel_cursor_redirect = 0;
-    g_held_item = 0xBB;
-    s_mouse_x = 320;
-    s_mouse_y = 40;
-    PanelHitTest();
-
-    ASSERT_EQ(g_hover_panel_verb, 0x01);
-    ASSERT_EQ(g_held_item, 0xBB);           /* untouched */
-}
-
-TEST(panel_cursor_redirect_armed_but_no_hit_does_not_consume)
-{
-    /* Redirect armed but mouse misses every cell → must NOT clear
-     * the redirect flags (they fire later when a button IS hit). */
-    reset_panel(0, 0);
-    g_panel_cursor_redirect  = 1;
-    g_panel_cursor_redirect2 = 1;
-    g_held_item = 0xCC;
-    s_mouse_x = 10;                         /* far from any button */
-    s_mouse_y = 40;
-    PanelHitTest();
-
-    ASSERT_EQ(g_hover_panel_verb, 0x26);
-    ASSERT_EQ(g_held_item, 0xCC);
-    ASSERT_EQ(g_panel_cursor_redirect,  1); /* preserved */
-    ASSERT_EQ(g_panel_cursor_redirect2, 1);
-}
-
 /* ---- verb-tab content propagates ------------------------------------ */
 
 TEST(panel_verb_tab_change_reflects_in_hover_verb)
@@ -444,9 +377,6 @@ SUITE(panel_hit_test)
     RUN_TEST(panel_gap_between_button_0_and_1_misses);
     RUN_TEST(panel_with_non_zero_origin_translates_correctly);
     RUN_TEST(panel_with_non_zero_origin_button_5);
-    RUN_TEST(panel_cursor_redirect_stashes_into_held_item_on_hit);
-    RUN_TEST(panel_cursor_redirect_inactive_does_not_touch_held_item);
-    RUN_TEST(panel_cursor_redirect_armed_but_no_hit_does_not_consume);
     RUN_TEST(panel_verb_tab_change_reflects_in_hover_verb);
     RUN_TEST(panel_resets_hover_verb_on_each_call);
 }
