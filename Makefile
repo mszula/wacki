@@ -55,7 +55,8 @@ ENGINE_SRCS = \
 	src/scene/play_loop.c   src/scene/komnata_scene.c                \
 	src/audio/sound_queue.c   src/audio/cutscene.c                \
 	src/script_bridge/palette.c src/script_bridge/entity.c        \
-	src/text/balloon.c src/anim/resolver.c src/util/screenshot.c  \
+	src/text/balloon.c src/text/dialog.c                          \
+	src/anim/resolver.c src/util/screenshot.c                     \
 	src/anim/paint_primitives.c src/anim/alpha_blit.c             \
 	src/menu/chapter_select.c src/menu/slot_picker.c                 \
 	src/menu/options.c        src/menu/menu_loop.c                   \
@@ -111,7 +112,8 @@ TEST_ENGINE_SRCS = \
 	src/scene/bg_mask.c src/scene/spawn.c src/scene/komnata.c     \
 	src/audio/sound_queue.c                                       \
 	src/script_bridge/palette.c src/script_bridge/entity.c        \
-	src/text/balloon.c src/anim/resolver.c                        \
+	src/text/balloon.c src/text/dialog.c                          \
+	src/anim/resolver.c                                           \
 	src/stubs.c     src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
 	src/actor/render.c src/actor/alloc.c \
