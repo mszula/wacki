@@ -70,42 +70,41 @@ uint16_t g_speech_dismiss_ticks         = 0;
  * path as g_actor[]. */
 Entity *g_speech_balloon = NULL;
 
-/* Speaker animation unbind state — mirrors the original op 0x09 epilogue
- * (RunScriptInterpreter case 9, line ~480 of ):
+/* Speaker animation unbind state — mirrors the original op 0x09
+ * epilogue. After the balloon dismisses, the original re-binds the
+ * speaker entity to its dialog slot's idle-animation bytecode;
+ * without this re-bind the speaker stays frozen in the "talking"
+ * frame.
  *
- * The original re-binds the speaker entity to the dialog slot's `data`
- * bytecode (idle animation) AFTER the balloon dismisses. Without it the
- * speaker stays frozen in the "talking" frame.
- *
- * Port stores the bind args here at op 0x09 time; TickSpeechBalloon
- * applies them when the timer hits zero (= original wait-loop exit). */
+ * The port stores the bind args here at op 0x09 time;
+ * TickSpeechBalloon applies them when the dismiss timer hits zero
+ * (= original wait-loop exit). */
 uint16_t g_speech_unbind_speaker = 0;
 uint32_t g_speech_unbind_data    = 0;
 
-/* T117 — Polish-diacritic → Futura-glyph translation table (
- * init @ 0x0040C740). The original engine maps 18 CP-1250
- * Polish characters to custom Futura.30 glyph slots @ indices 0xC2..0xFB.
- * Identity for all other bytes. Source pairs lifted from
- * polish_diac_src_table (source CP-1250) + polish_diac_dst_table (target Futura slot) in PE.
+/* T117 — Polish-diacritic → Futura-glyph translation table.
  *
- * Without this LUT, op 0x09 SHOW_TEXT would either:
- * (a) render Polish chars as wrong glyphs (whatever lives at CP-1250
- * codepoint in Futura.30 — possibly garbage), or
- * (b) render them as blanks (if outside font's first..last_char range).
+ * The original engine maps 18 CP-1250 Polish characters to custom
+ * Futura.30 glyph slots at indices 0xC2..0xFB. All other bytes pass
+ * through identity. Source pairs lifted byte-for-byte from the PE
+ * (CP-1250 source table → Futura slot target table).
  *
- * Called once at engine boot (PreloadCommonAssets tail) so it's ready
- * before any op 0x09 fires. */
+ * Without this LUT, op 0x09 SHOW_TEXT would either render Polish
+ * chars as wrong glyphs (whatever lives at the CP-1250 codepoint in
+ * Futura.30 — possibly garbage) or as blanks (if outside the font's
+ * first..last_char range).
+ *
+ * Called once at engine boot (PreloadCommonAssets tail) so it's
+ * ready before any op 0x09 fires. */
 static uint8_t g_text_translation_lut[256];
 static int     g_text_lut_built = 0;
 
 void TextTranslationLutInit(void)
 {
     if (g_text_lut_built) return;
-    /* Identity mapping for all 256 bytes ( z head). */
+    /* Identity mapping for all 256 bytes. */
     for (int i = 0; i < 256; ++i) g_text_translation_lut[i] = (uint8_t)i;
-    /* Override 18 entries — Polish diacritics → Futura slots. Table
- * lifted byte-for-byte from PE: source @ 0x00445E40, target @
- * 0x00445E58 (each 18 bytes). */
+    /* Override 18 entries — Polish diacritics → Futura slots. */
     static const uint8_t cp1250_src[POLISH_DIACRITIC_COUNT] = {
         0xA5, 0xC6, 0xCA, 0xA3, 0xD1, 0xD3, 0x8C, 0xAF, 0x8F,   /* Ą Ć Ę Ł Ń Ó Ś Ż Ź */
         0xB9, 0xE6, 0xEA, 0xB3, 0xF1, 0xF3, 0x9C, 0x9F, 0xBF    /* ą ć ę ł ń ó ś ź ż */
@@ -120,10 +119,10 @@ void TextTranslationLutInit(void)
     g_text_lut_built = 1;
 }
 
-/* T117 — translate input text via LUT into output buffer.
- *. Stops on NUL byte in TRANSLATED stream
- * (an override mapping a char to 0x00 would terminate early — the
- * Polish-diacritic LUT never does this so we're safe in practice). */
+/* T117 — translate input text via LUT into output buffer. Stops on
+ * NUL in the TRANSLATED stream (an override mapping a char to 0x00
+ * would terminate early; the Polish-diacritic LUT never does this so
+ * we're safe in practice). */
 static void translate_script_text(const char *in, char *out, size_t out_sz)
 {
     if (!in || !out || out_sz < 1) { if (out_sz) out[0] = 0; return; }
