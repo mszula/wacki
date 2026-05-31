@@ -117,24 +117,23 @@ extern void ScreenshotToPcxAutoIncrement(void);  /* extracted from 'P' branch */
 extern void ScreenshotToBmpAutoIncrement(void);  /* 'B' branch */
 extern void FlushQueuedClicks(void);
 
-/* ProcessGameFrameTick —
+/* ProcessGameFrameTick — original per-tick sequence:
  *
- * Original sequence:
- * PeekMessage / WaitMessage if backgrounded
- * screenshot keys ('P' PCX, 'B' BMP)
- * — composite/blit frame
- * — cursor sprite update (inventory pickup)
- * — bottom-panel hit-test (sets g_hover_panel_verb verb)
- * — mouse hit-test (sets g_hover_scene_verb hover_verb)
- * UpdateActorMovement — drives g_actor[] walkers per cursor
- * — per-entity VM tick (ExecEntityScript)
- * / 00406EB0— prop/dialogue tick (deferred)
- * — EntityRenderAll with z-sort
- * drain click_queue — FlushQueuedClicks → DispatchClickEvent
+ *   1. Pump events (PeekMessage / WaitMessage if backgrounded)
+ *   2. Screenshot keys ('P' = PCX, 'B' = BMP)
+ *   3. Composite + blit the frame
+ *   4. Cursor sprite update (inventory pickup)
+ *   5. Bottom-panel hit-test → g_hover_panel_verb
+ *   6. Mouse hit-test → g_hover_scene_verb
+ *   7. UpdateActorMovement — drive g_actor[] walkers per cursor
+ *   8. Per-entity VM tick (ExecEntityScript)
+ *   9. Prop / dialogue tick (deferred)
+ *  10. EntityRenderAll with z-sort
+ *  11. Drain click_queue — FlushQueuedClicks → DispatchClickEvent
  *
- * Blocking script ops (op 0x12 ANIM_BOTH_WAIT, op 0x14 WAIT_MS, op 0x15
- * WAIT_ENTITY) loop on this; without driving the walker + render here,
- * those waits visually freeze the scene. */
+ * Blocking script ops (op 0x12 ANIM_BOTH_WAIT, op 0x14 WAIT_MS,
+ * op 0x15 WAIT_ENTITY) loop on this; without driving the walker +
+ * render here, those waits visually freeze the scene. */
 /* Forward decl for PaintHudOverlay use. */
 void paint_anim_button_at(AnimAsset *atlas, uint16_t frame,
                           int16_t base_x, int16_t base_y, int paint);
@@ -142,7 +141,7 @@ void paint_anim_button_at(AnimAsset *atlas, uint16_t frame,
 void HandleSceneInput(void);
 int paint_rawb_pic(const void *blob, uint32_t size, int as_overlay);
 
-/* Functions moved to other TUs but still called from game.c. */
+/* Externs into sibling TUs. */
 extern void PaintHudOverlay(void);
 extern void ProcessGameFrameTickInner(void);
 extern void PaintCursor(void);
@@ -169,11 +168,10 @@ extern const void *PeLoaderRead(uint32_t va);
  * Flow: search verb_table for verb_id, run that script — if it returns
  * non-zero, *also* search object_table for obj_id and run that script.
  *
- * Original reads both tables out of static PE memory (g_actor_walk_anim_table =
- * absolute pointer). The port resolves them through PeLoaderRead, then
- * xlats the script pointer either to a manually-embedded blob in
- * binary_data.c or back to PE memory.
- * ------------------------------------------------------------------------- */
+ * The original reads both tables out of static PE memory as absolute
+ * pointers. The port resolves them through PeLoaderRead, then xlats
+ * the script pointer either to a manually-embedded blob in
+ * binary_data.c or back to PE memory. */
 uint32_t g_stage_va = 0;            /* original PE VA of current stage def */
 uint16_t g_held_item = 0x26;        /* currently held inventory item
                                      * (0x26 = neutral / nothing held —
@@ -310,16 +308,16 @@ extern AnimAsset *LoadAssetFromDtaBase(const char *);
 /* Forward decls for the menu-BG snapshot used by RunMenuScene's
  * overlay branch (definitions sit further down near
  * paint_slot_list). */
-/* SAVE_THUMB_W / SAVE_THUMB_H moved to wacki.h. Non-static so
- * src/menu/slot_picker.c can read it from the save-commit path
- * (CapturePendingThumbnail writes here before opszyns opens). */
+/* Non-static so src/menu/slot_picker.c can read it from the save-
+ * commit path (CapturePendingThumbnail writes here before opszyns
+ * opens). */
 uint8_t g_save_thumb_pending[SAVE_THUMB_W * SAVE_THUMB_H];
 
 extern void SnapshotBackbufferForMenu(void);
 
-/* "asset (1, 10)" hook used by HandleMainMenuClick — set in RunMenuScene
- * to the mask atlas asset (matching the engine's RegisterEntityForUpdate
- * call at 0x0040B5E0). */
+/* "asset (kind=1, id=10)" hook used by HandleMainMenuClick — set by
+ * RunMenuScene to the active menu's mask atlas so the on_click
+ * handler can fetch it for its title-animation block. */
 AnimAsset *g_menu_asset_10 = NULL;
 
 
@@ -343,28 +341,26 @@ extern Entity *g_render_list_head;
 extern void    EntityWalkerTick(Entity *head);
 extern void    EntityRenderAll (Entity *head);
 
-/* ------------------------------------------------------------------------- *
- * RunGameStageLoop —
+/* ---- RunGameStageLoop -------------------------------------------- *
  *
- * Original control flow (decoded from ):
+ * Original control flow:
+ *   1. Zero script_vars + entity_state (FULL_RESET path)
+ *   2. ResetInventory
+ *   3. Clear entity / mask lists, reset panel
+ *   4. if (stage && !(flags & 0x10)) PlaySceneCutsceneAvi(intro_avi)
+ *   5. LoadKomnata(g_cur_komnata)
+ *   6. Per-frame loop:
+ *      - dispatch clicks (use-on-item + actor-toggle branch)
+ *      - save UI if requested
+ *      - SPACE mid-frame actor toggle
+ *      - ProcessGameFrameTick
+ *      - game-over handling (cases 1/3/4)
+ *   7. Exit when exit_signal is set.
  *
- * zero script_vars + entity_state;
- *; // ResetInventory
- *;; // clear lists + reset panel
- * if (stage && !(flags & 0x10)) PlaySceneCutsceneAvi(intro_avi);
- * (g_cur_komnata); // LoadKomnata
- * // click dispatch with use-on-item / actor-toggle branch
- * // save UI if requested
- * // SPACE-mid-frame toggle
- * ProcessGameFrameTick;
- * // game-over handling (cases 1/3/4)
- * if (exit_signal) return;
- *
- * Flags:
- *   bit 1 (0x02) = FULL RESET (new game): zero vars + ResetInventory
- *                  + LoadStage
- *   bit 4 (0x10) = SKIP INTRO AVI (came from save load)
- *   bit 0+4 (0x11) combos used after F12 menu / save UI */
+ * Flag bits:
+ *   0x02 = FULL RESET (new game): zero vars + ResetInventory + LoadStage
+ *   0x10 = SKIP INTRO AVI (came from save load)
+ *   0x11 combos used after F12 menu / save UI */
 
 /* Forward externs for chapter-select state used by the chapter-pick
  * epilogue (defined in src/menu/chapter_select.c). */

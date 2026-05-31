@@ -36,9 +36,9 @@
 
 extern const void *PeLoaderRead(uint32_t va);
 
-/* xlat_asset_name — returns a NUL-terminated C string for `va` if it
- * points inside the original .data string region used for asset
- * filenames (0x004283C0..). PE memory holds the strings verbatim. */
+/* xlat_asset_name — returns a NUL-terminated C string for `va` when
+ * it points inside the original .data string region used for asset
+ * filenames. PE memory holds the strings verbatim. */
 const char *xlat_asset_name(uint32_t va)
 {
     if (!va) return NULL;

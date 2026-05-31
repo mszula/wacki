@@ -127,20 +127,21 @@ extern uint8_t  g_palette_rgb[256*3];
  * default to ~16 ms (60 fps) which matches our SDL pacing. */
 uint32_t g_frame_delta_ms = 16;
 
-/* Frame delta in 10 ms TICKS — The
- * original game arms timeSetEvent (call site at 0x00403D84) with a 10 ms
- * periodic timer whose ISR does `INC g_tick_counter`. That
- * counter is sampled in into g_frame_delta_ticks = (now - prev)
- * 10 ms units. EVERY in-PE site that reads g_frame_delta_ticks (cursor anim
- * accumulator, entity VM frame countdown +0x3C, dialog/prop timer, op
- * 0x14 WAIT_MS countdown, op 0x26/0x3D anim-frame waits, dialog choice
- * dismiss) expects this unit, not real milliseconds. Driving them with
- * g_frame_delta_ms (real ms) makes everything animate ~10× too fast.
+/* Frame delta in 10 ms TICKS.
+ *
+ * The original game arms a 10 ms timeSetEvent ISR that increments
+ * g_tick_counter; g_frame_delta_ticks holds (now - prev) ticks per
+ * frame. EVERY in-PE site that reads it (cursor anim accumulator,
+ * entity VM frame countdown +0x3C, dialog/prop timer, op 0x14
+ * WAIT_MS, op 0x26/0x3D anim-frame waits, dialog-choice dismiss)
+ * expects this unit, not real milliseconds. Driving them with
+ * g_frame_delta_ms (real ms) makes everything animate ~10× too
+ * fast.
  *
  * Updated in lockstep with g_frame_delta_ms inside the PGFT Inner /
  * EntityWalkerTick dt blocks; an accumulator carries the sub-10 ms
- * remainder so we don't drift over time at frame rates that aren't a
- * clean multiple of 10 (e.g. 16 ms @ 60 fps emits 2/1/2/1/… ticks). */
+ * remainder so we don't drift at frame rates that aren't a clean
+ * multiple of 10 (e.g. 16 ms @ 60 fps emits 2/1/2/1/… ticks). */
 uint16_t g_frame_delta_ticks = 1;
 
 /* Palette fade machinery
@@ -160,50 +161,13 @@ uint16_t g_frame_delta_ticks = 1;
  *
  * Port state mirrors:
  * s_pal_fade_step = fade_step_alt (per-step advance) */
-/* Palette fade (ScriptCallPalLoad + ScriptCallPalFadeStep) moved to
- * src/script_bridge/palette.c. */
 
 void ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset);  /* fwd decl */
-
-/* BG mask setup (ScriptCallBgMaskSetup) moved to
- * src/scene/bg_mask.c. */
-
-/* Click hit-test (FindEntityByVerbId, ClickHitTest) moved to
- * src/scene/hit_test.c.
- *
- * Mask-list registration (ScriptCallRegMaskList) and the
- * VisibleMasks* compatibility stubs moved to
- * src/scene/mask_list.c. */
 
 extern Entity *AllocEntity(uint16_t w, uint16_t h, uint16_t kind, uint16_t flags);
 extern void    LinkEntityToList(Entity **head, Entity *e, int position);
 extern Entity *g_render_list_head;
 extern Entity *g_click_list_head;
 extern void    RegisterEntityForUpdate(Entity *e, uint16_t kind, uint16_t id);
-extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);  /* */
+extern void   *FindUpdateRegistration(uint16_t kind, uint16_t id);
 extern const void *xlat_binary_ptr(uint32_t);
-
-/* ------------------------------------------------------------------------- *
- * SpawnActorEntity — used for Ebek/Fjej.
- *
- * Original engine pre-spawns both actors at game start with their atlas
- * (ebek.wyc / fjej.wyc) bound and verb_id = 1/2 in the click payload, so
- * - op 0x28 SET_ENTITY_XY id=1 → (1) finds Ebek's click
- * entity → returns its owner render entity → moves it.
- * - op 0x28 SET_ENTITY_XY id=2 → same for Fjej.
- * - DispatchClickEvent + verb_table searches resolve actor verb_ids.
- *
- * Returns the spawned render entity (= g_actor[idx]). Owns:
- * - kind=2 render entity registered (kind=2, id) in update table,
- * linked to render list
- * - kind=4 click entity (offset+8 = 1 in click list), bound to
- * a tiny 1-entry verb table { count=1, verb_id }, linked to
- * click list + registered (kind=4, id) in update table */
-extern Entity *AllocEntity(uint16_t w, uint16_t h, uint16_t kind, uint16_t flags);
-
-/* SpawnActorEntity + ScriptCallSpawnEntity moved to
- * src/scene/spawn.c. */
-
-/* Asset / entity script bridges (ScriptCallLoadAsset, DestroyEnt,
- * EnableEnt, HideEnt, ShowEnt, WalkMode, WalkTo, AttachProp) moved
- * to src/script_bridge/entity.c. */
