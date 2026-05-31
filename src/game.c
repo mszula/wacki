@@ -3490,213 +3490,209 @@ static const char *play_demo_scene(const DemoScene *scene)
  * indirection and pulls the actor-walk-anim setup + initial DemoScene
  * lookup directly into the canonical RunGameStageLoop body. */
 
+/* ---- RunGameStageLoop constants + helpers ------------------------- */
+
+/* Stage-1 fallback: PE VA of stage 1's StageDef + its etap id. Used
+ * when RunGameStageLoop was entered without FULL_RESET (so LoadStage(1)
+ * hasn't run) AND without SAVE_LOAD (so LoadSaveSlot didn't restore
+ * g_stage_va). Without the fallback, DispatchClickEvent can't find
+ * the verb tables and clicks silently no-op. */
+#define STAGE_FALLBACK_VA               0x00428220u
+#define STAGE_FALLBACK_ETAP             1
+#define KOMNATA_FALLBACK                1
+
+/* Stage-end AVI filenames. DEATH and CREDITS_STING are global to the
+ * RunGameStageLoop epilogue; per-stage outros + transitions live on
+ * the StageDef as alt_avi / alt3_avi. */
+#define DEATH_AVI                       "Dane_14.dta"
+#define CREDITS_STING_AVI               "Dane_13.dta"
+
+/* `g_completed_stages` is a 32-bit bitmask of finished etaps. We only
+ * set a bit if g_cur_etap fits in the mask. */
+#define COMPLETED_STAGES_BITMASK_MAX    32
+
+/* Initialize stage state on entry. FULL_RESET (flag 0x02) zeroes script
+ * vars + ResetInventory + LoadStage(1); SAVE_LOAD (flag 0x10) trusts
+ * LoadSaveSlot's prior g_stage_va / g_cur_komnata restore but falls
+ * back to stage-1 defaults if either was missed. */
+static void prepare_stage_state(uint8_t flags)
+{
+    if (flags & STAGE_LOAD_FLAG_FULL_RESET) {
+        apply_full_reset();
+        LoadStage(STAGE_FALLBACK_ETAP);
+    }
+    if (flags & STAGE_LOAD_FLAG_SAVE_LOAD) {
+        if (!g_stage_va) {
+            g_stage_va  = STAGE_FALLBACK_VA;
+            g_cur_etap  = STAGE_FALLBACK_ETAP;
+        }
+        if (g_cur_komnata == 0) g_cur_komnata = KOMNATA_FALLBACK;
+    }
+}
+
+/* Demo-fallback: if neither flag bit ran, set g_stage_va to stage 1 so
+ * DispatchClickEvent finds the verb tables. */
+static void ensure_stage_va_default(void)
+{
+    if (!g_stage_va) {
+        g_stage_va = STAGE_FALLBACK_VA;
+        g_cur_etap = STAGE_FALLBACK_ETAP;
+    }
+}
+
+/* Drive one stage's gameplay loop: load the start komnata, run
+ * play_demo_scene until it returns, then clear entity list + silence
+ * any looping per-room SFX. */
+static void run_initial_komnata_scene(uint16_t cur_komnata)
+{
+    LoadKomnataScene(cur_komnata);
+    if (!g_current_scene) {
+        fprintf(stderr,
+                "[scene] RunGameStageLoop: LoadKomnataScene(%u) yielded no scene\n",
+                cur_komnata);
+        return;
+    }
+
+    (void)play_demo_scene((const DemoScene *)g_current_scene);
+
+    extern void EntityListClearAll(void);
+    extern void ResetFrameSfxState(void);
+    EntityListClearAll();
+    /* Silence any looping (N,M) SFX still mixing — the original frees
+     * every per-komnata asset on gameplay exit; SampleTable destructors
+     * stop their wavs. Without this, a [sampl] WAV (N,M) loop started
+     * mid-scene keeps playing into the menu after ESC / Pytanie TAK. */
+    ResetFrameSfxState();
+}
+
+/* Mark the current etap as completed in g_completed_stages. The
+ * original sets this elsewhere (likely via a script-op write through
+ * a var-indirection); we set it defensively in the epilogue so the
+ * chapter-select map shows progress regardless of trigger source. */
+static void mark_current_stage_completed(void)
+{
+    if (g_cur_etap >= 1 && g_cur_etap <= COMPLETED_STAGES_BITMASK_MAX) {
+        g_completed_stages |= 1u << (g_cur_etap - 1);
+        fprintf(stderr,
+                "[game-over=%d] stage %u completed (g_completed_stages=0x%X)\n",
+                GAME_OVER_STAGE_END_AVI,
+                (unsigned)g_cur_etap, g_completed_stages);
+    }
+}
+
+/* Play one of the StageDef's per-stage AVIs if it's non-NULL. */
+static void play_stage_avi_if(const char *avi, int code, const char *kind)
+{
+    if (!avi) return;
+    fprintf(stderr, "[game-over=%d] %s AVI: %s\n", code, kind, avi);
+    PlaySceneCutsceneAvi(avi);
+}
+
+/* game_over_code == GAME_OVER_CHAPTER_PICK (3). Plays the just-finished
+ * stage's outro, stashes its transition AVI, shows the chapter-select
+ * map, loads the picked stage, then plays the stashed transition.
+ *
+ * 8-step order mirrors the original engine exactly. Step 4 (all_done →
+ * credits sting + DROP into the map) intentionally does NOT bail so
+ * the user can see the assembled ACME map and click the green finale
+ * button — an earlier port `break`ed here and made stage 5 unreachable
+ * from a regular playthrough. */
+static void handle_game_over_chapter_pick(void)
+{
+    /* Step 1: refresh buttons; tells us whether all 4 stages are done. */
+    int all_done = SelTloRefreshButtons();
+
+    /* Step 2: outro of just-finished stage + stash alt3 for later. */
+    const char *stashed_alt3 = NULL;
+    if (!all_done && g_stage) {
+        play_stage_avi_if(g_stage->alt_avi, GAME_OVER_CHAPTER_PICK, "outro");
+        stashed_alt3 = g_stage->alt3_avi;
+    }
+
+    /* Step 3: re-refresh — belt-and-braces in case the AVI ran a script
+     * op that flipped a completion bit. */
+    all_done = SelTloRefreshButtons();
+
+    /* Step 4: all stages done → credits sting, then drop into the map. */
+    if (all_done) {
+        fprintf(stderr, "[game-over=%d] all stages done → %s + map with "
+                        "green button\n",
+                GAME_OVER_CHAPTER_PICK, CREDITS_STING_AVI);
+        PlaySceneCutsceneAvi(CREDITS_STING_AVI);
+    }
+
+    /* Step 5: chapter-select menu. */
+    s_chapter_pick = 0;
+    RunMenuScene(0, &g_sel_tlo_scene);
+
+    /* Step 6: load picked stage (1..4 = regular, 5 = Monter finale). */
+    if (s_chapter_pick >= 1 && s_chapter_pick <= DEV_PICK_FINALE) {
+        fprintf(stderr, "[game-over=%d] LoadStage(%d)\n",
+                GAME_OVER_CHAPTER_PICK, s_chapter_pick);
+        LoadStage((uint16_t)s_chapter_pick);
+    }
+
+    /* Step 7: third pass — post-load button rebuild. */
+    all_done = SelTloRefreshButtons();
+
+    /* Step 8: intro AVI of newly-loaded stage (the prev stage's "going
+     * to X" transition stashed in step 2). Skipped on finale path. */
+    if (!all_done && stashed_alt3) {
+        play_stage_avi_if(stashed_alt3, GAME_OVER_CHAPTER_PICK, "transition");
+    }
+}
+
+/* game_over_code == GAME_OVER_STAGE_END_AVI (4). Plays both the outro
+ * and transition AVIs back-to-back without the chapter-select menu —
+ * used when stage-end is "automatic" (no player choice). */
+static void handle_game_over_stage_end_avi(void)
+{
+    if (g_stage) {
+        play_stage_avi_if(g_stage->alt_avi,
+                          GAME_OVER_STAGE_END_AVI, "outro");
+        play_stage_avi_if(g_stage->alt3_avi,
+                          GAME_OVER_STAGE_END_AVI, "transition");
+    }
+    mark_current_stage_completed();
+}
+
+/* Post-loop game-over dispatcher: 1=death AVI, 3=chapter-pick UI,
+ * 4=stage-end double AVI + completion bit. Unknown codes are no-ops. */
+static void run_game_over_epilogue(void)
+{
+    switch (g_game_over_code) {
+    case GAME_OVER_DEATH:
+        PlaySceneCutsceneAvi(DEATH_AVI);
+        return;
+    case GAME_OVER_CHAPTER_PICK:
+        handle_game_over_chapter_pick();
+        return;
+    case GAME_OVER_STAGE_END_AVI:
+        handle_game_over_stage_end_avi();
+        return;
+    }
+}
+
 void RunGameStageLoop(uint8_t flags)
 {
-    g_game_over_code = 0;
+    g_game_over_code = GAME_OVER_NONE;
 
-    /* FULL RESET branch — (flags & 2) block @
- * 0x0040BEFA..0x0040BF35. The original DOES NOT memset all of
- * g_entity_state — it only zeroes the in_inventory_flag (+2) of each
- * entry, preserving the panel_verb_id (+0) identity mapping seeded by
- * PreloadCommonAssets. Earlier port wiped the whole block, which made
- * InventoryAddItem read panel_verb_id=0 and ultimately PaintHudOverlay
- * skip every slot. */
-    if (flags & 0x02) {
-        memset(g_script_vars,  0, sizeof g_script_vars);
-        {
-            uint16_t *es = (uint16_t *)g_entity_state;
-            for (int idx = 0; idx < 0x8E; ++idx) {
-                es[idx * 4 + 1] = 0;        /* in_inventory_flag only */
-            }
-        }
-        ResetInventory();
-        LoadStage(1);
-    }
+    prepare_stage_state(flags);
 
-    /* SAVE-LOAD branch (flag 0x10): g_cur_komnata is already set by
- * LoadSaveSlot. Skip intro AVI, jump straight into play. */
-    if (flags & 0x10) {
-        /* Make sure stage state is sane — if g_stage_va wasn't restored
- * by LoadSaveSlot, fall back to stage 1. */
-        if (!g_stage_va) { g_stage_va = 0x00428220; g_cur_etap = 1; }
-        if (g_cur_komnata == 0) g_cur_komnata = 1;
-    }
-
-    /* T39 inlined body (was play_first_scene_demo). Single-call
- * play_demo_scene drives the gameplay loop until ESC / F12 TAK /
- * PlatformShouldQuit / g_scene_quit. All komnata transitions
- * happen in-place via LoadKomnataScene (T22 phase B). */
     extern uint32_t g_tick_counter;
-    extern void EntityListClearAll(void);
-    extern void LoadActorWalkAnims(uint32_t stage_va);
+    extern void     LoadActorWalkAnims(uint32_t stage_va);
 
-    g_stats.boot_tick = g_tick_counter;             /* T56 — playthrough timer */
-    /* Stage-1 demo fallback — if RunGameStageLoop was entered without
- * flags 0x02 (so LoadStage(1) wasn't called) or 0x10 (save-load),
- * set g_stage_va explicitly so DispatchClickEvent finds the verb
- * tables. */
-    if (!g_stage_va) {
-        g_stage_va = 0x00428220;
-        g_cur_etap = 1;
-    }
+    g_stats.boot_tick = g_tick_counter;
+    ensure_stage_va_default();
     LoadActorWalkAnims(g_stage_va);
 
-    uint16_t cur_komnata = (g_cur_komnata != 0) ? g_cur_komnata : 1;
-    g_cur_komnata = cur_komnata;        /* play_demo_scene prologue reads */
+    uint16_t cur_komnata = (g_cur_komnata != 0) ? g_cur_komnata
+                                                : KOMNATA_FALLBACK;
+    g_cur_komnata = cur_komnata;
 
-    /* Initial scene: call LoadKomnataScene which handles ANY stage via
- * the komnata table (LoadKomnata) + DemoScene synth fallback for
- * komnaty not in s_demo_scenes[]. Previously hardcoded k_names[]
- * only covered stage 1's 4 komnaty — stage 3's start_komnata=6
- * (or any stage 2+ entry) hit "no DemoScene" + bailed without
- * running play_demo_scene. */
-    LoadKomnataScene(cur_komnata);
-    if (g_current_scene) {
-        (void)play_demo_scene((const DemoScene *)g_current_scene);
-        EntityListClearAll();
-        /* Stop any looping (N,M) SFX still running — the original frees
- * every per-komnata asset on gameplay exit ( chain),
- * each SampleTable destructor stops its wavs.
- * Without this, e.g. a [sampl] WAV (N,M) loop started mid-scene
- * keeps mixing into the menu after the user backs out via ESC /
- * Pytanie TAK / death cutscene path. ResetFrameSfxState walks
- * g_sfx_state[] and silences active channels (same call used by
- * LoadKomnata between rooms). */
-        extern void ResetFrameSfxState(void);
-        ResetFrameSfxState();
-    } else {
-        fprintf(stderr, "[scene] RunGameStageLoop: LoadKomnataScene(%u) yielded no scene\n",
-                cur_komnata);
-    }
+    run_initial_komnata_scene(cur_komnata);
 
-    /* Post-loop game-over handling — switch on
- * g_game_over_code at the bottom of each iteration. */
-    if (g_game_over_code) {
-        switch (g_game_over_code) {
-        case 1:                                   /* death */
-            PlaySceneCutsceneAvi("Dane_14.dta");
-            break;
-        case 3: {                                 /* chapter-select UI —
- *
- * Order of operations matches original exactly:
- * 1. Refresh sel_tlo buttons (1st pass) — computes all_done
- * 2. If !all_done AND g_stage non-null: play current stage's
- * alt_avi (outro), stash alt3_avi for post-pick playback
- * 3. Refresh buttons again (2nd pass, original is redundant
- * here but we mirror it for fidelity)
- * 4. If all_done: play Dane_13.dta (credits) + bail
- * 5. RunMenuScene(sel_tlo) → user picks stage
- * 6. LoadStage(picked)
- * 7. Refresh buttons (3rd pass post-load)
- * 8. If still !all_done: play stashed alt3_avi (= "transition
- * into picked stage") */
-
-            /* Step 1: first pass — sets g_sel_tlo_scene buttons + tells
- * us whether all 4 are completed. */
-            int all_done = SelTloRefreshButtons();
-
-            /* Step 2: outro of just-finished stage + stash alt3 for later.
- *
- * 0x0040C2EE: PlaySceneCutsceneAvi(stage+0x2A) = alt_avi,
- * local_1c = stage+0x2E = alt3_avi. */
-            const char *stashed_alt3 = NULL;
-            if (!all_done && g_stage) {
-                if (g_stage->alt_avi) {
-                    fprintf(stderr, "[game-over=3] outro AVI: %s\n",
-                            g_stage->alt_avi);
-                    PlaySceneCutsceneAvi(g_stage->alt_avi);
-                }
-                stashed_alt3 = g_stage->alt3_avi;
-            }
-
-            /* Step 3: second pass — redundant with step 1 but matches
- * the original's belt-and-braces double-rebuild. State could
- * conceivably have changed during the AVI (script via op
- * dispatches?) so re-checking is safe. */
-            all_done = SelTloRefreshButtons();
-
-            /* Step 4: all stages done → play Dane_13.dta credits sting,
- * then DROP into the menu so the user sees the assembled
- * ACME on the map and can click the green "finale" button
- * (id=0x16). @ 0x0040C3F4:
- * LoadStage((ushort));
- * — note no early bail. The previous port version `break`ed
- * here, which meant the player never saw the green button
- * and the Monter stage 5 finale was unreachable from a
- * regular playthrough. */
-            if (all_done) {
-                fprintf(stderr, "[game-over=3] all stages done → Dane_13.dta + map with green button\n");
-                PlaySceneCutsceneAvi("Dane_13.dta");
-            }
-
-            /* Step 5: chapter-select menu. With button_count=5 (set by
- * SelTloRefreshButtons when all_done) the ACME-complete green
- * button is now hit-testable; SelTloClick writes
- * s_chapter_pick=5 on hit. */
-            s_chapter_pick = 0;
-            RunMenuScene(0, &g_sel_tlo_scene);
-
-            /* Step 6: load picked stage. NOTE — original
- * stores the pick in via a separate click
- * handler; our SelTloClick writes s_chapter_pick directly
- * (1-based). 5 = Monter finale (intro=Dane_12, alt=Dane_11,
- * alt3=Dane_13). */
-            if (s_chapter_pick >= 1 && s_chapter_pick <= 5) {
-                fprintf(stderr, "[game-over=3] LoadStage(%d)\n", s_chapter_pick);
-                LoadStage((uint16_t)s_chapter_pick);
-            }
-
-            /* Step 7: third pass — post-load button rebuild. */
-            all_done = SelTloRefreshButtons();
-
-            /* Step 8: intro AVI of newly-loaded stage. The original
- * plays the alt3_avi stashed from BEFORE the load — that's
- * the prev stage's "going to X" transition. Skipped on the
- * finale path because stashed_alt3 stays NULL (set only
- * when !all_done in step 2). */
-            if (!all_done && stashed_alt3) {
-                fprintf(stderr, "[game-over=3] transition AVI: %s\n",
-                        stashed_alt3);
-                PlaySceneCutsceneAvi(stashed_alt3);
-            }
-            break;
-        }
-        case 4:                                   /* stage-end —
- * @ 0x0040C328:
- *;;
- * // fall through to common epilogue:
- *
- * Plays BOTH outro (alt_avi) and transition (alt3_avi)
- * back-to-back without the chapter-select menu between
- * them. Used when stage-end is "automatic" (no player
- * choice required). */
-            if (g_stage) {
-                if (g_stage->alt_avi) {
-                    fprintf(stderr, "[game-over=4] outro AVI: %s\n",
-                            g_stage->alt_avi);
-                    PlaySceneCutsceneAvi(g_stage->alt_avi);
-                }
-                if (g_stage->alt3_avi) {
-                    fprintf(stderr, "[game-over=4] transition AVI: %s\n",
-                            g_stage->alt3_avi);
-                    PlaySceneCutsceneAvi(g_stage->alt3_avi);
-                }
-            }
-            /* Mark current stage as completed so next chapter-select
- * shows it as done. Original sets the bit elsewhere (likely
- * via a script op that writes through a var-indirection
- * mapping — exact path still under RE); we set it here as
- * a defensive port shortcut so the user-visible behaviour
- * is correct regardless of trigger source. */
-            if (g_cur_etap >= 1 && g_cur_etap <= 32) {
-                g_completed_stages |= 1u << (g_cur_etap - 1);
-                fprintf(stderr, "[game-over=4] stage %u completed "
-                                "(g_completed_stages=0x%X)\n",
-                        (unsigned)g_cur_etap, g_completed_stages);
-            }
-            break;
-        }
-    }
+    if (g_game_over_code) run_game_over_epilogue();
 }
 
 /* ------------------------------------------------------------------------- *
