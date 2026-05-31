@@ -399,6 +399,11 @@ AnimAsset *g_menu_asset_10 = NULL;
 #define TITLE_HOVER_FRAME_OFFSET        5
 #define TITLE_BUTTON_COUNT              5
 
+/* The engine's "neutral / no verb" sentinel — sprinkled through every
+ * SceneDef-walking helper and through HandleSceneInput. 0x26 was the
+ * original engine's default fall-through value for verb dispatch. */
+#define SCENE_NEUTRAL_VERB              0x26
+
 /* HandleMainMenuClick trigger sentinel: 0 = INIT (one-time per-frame
  * setup pass when the title is first entered). */
 #define MAIN_MENU_TRIGGER_INIT          0
@@ -810,143 +815,202 @@ static int hit_test_buttons(SceneDef *scene, AnimAsset *atlas,
 extern int16_t s_mouse_x;       /* main.c — set from SDL_MOUSEMOTION */
 extern int16_t s_mouse_y;
 
+/* ---- RunMenuScene constants + helpers ----------------------------- */
+
+/* Menu loop runs ~60 fps. SDL_Delay 16 ms / frame leaves headroom
+ * for the per-tick callback + paint pass to complete. */
+#define MENU_FRAME_DELAY_MS         16
+
+/* ESC inside a menu returns this rc (= MAIN_MENU_RC_QUIT_CONFIRM_A).
+ * The outer caller treats it as "user wants to back out". Scenes that
+ * set SCENE_FLAG_DISABLE_ESC opt out of the binding. */
+#define MENU_ESC_RC                 MAIN_MENU_RC_QUIT_CONFIRM_A
+
+/* .pic RAWB header layout — width and height live at offsets 4..7 as
+ * little-endian 16-bit values. */
+#define RAWB_HEADER_OFF_WIDTH       4
+#define RAWB_HEADER_OFF_HEIGHT      6
+
+/* A .pic shorter than this y-threshold AND not full-width is treated
+ * as a sub-fullscreen overlay (Pytanie quit-confirm, Solund options,
+ * etc.) — see paint_menu_background. */
+#define MENU_OVERLAY_HEIGHT_THRESH  400
+
+/* Load the SceneDef's BG .pic + button mask atlas. Returns 1 if bg
+ * was loaded, 0 otherwise; writes the atlas pointer to *out_buttons. */
+static int load_menu_scene_assets(SceneDef *scene,
+                                  void **out_bg_raw, uint32_t *out_bg_size,
+                                  AnimAsset **out_buttons)
+{
+    int bg_loaded = 0;
+    *out_bg_raw   = NULL;
+    *out_bg_size  = 0;
+    *out_buttons  = NULL;
+
+    if (scene->background_pic) {
+        bg_loaded = LoadFileFromDta(scene->background_pic,
+                                    out_bg_raw, out_bg_size);
+    }
+    if (scene->mask_file) {
+        *out_buttons = LoadAssetFromDtaBase(scene->mask_file);
+    }
+    /* The mask atlas is "entity (kind=1, id=10)" in the original — the
+     * on_click handler fetches it via the asset hook for its title-
+     * animation block. */
+    g_menu_asset_10 = *out_buttons;
+    return bg_loaded;
+}
+
+/* Decide whether a .pic is a sub-fullscreen overlay (Pytanie-sized)
+ * vs a full-screen scene background. */
+static int rawb_is_overlay(const void *bg_raw)
+{
+    const uint8_t *bp = (const uint8_t *)bg_raw;
+    int bg_w = bp[RAWB_HEADER_OFF_WIDTH]
+             | (bp[RAWB_HEADER_OFF_WIDTH + 1] << 8);
+    int bg_h = bp[RAWB_HEADER_OFF_HEIGHT]
+             | (bp[RAWB_HEADER_OFF_HEIGHT + 1] << 8);
+    return bg_w < WACKI_SCREEN_W || bg_h < MENU_OVERLAY_HEIGHT_THRESH;
+}
+
+/* Paint the menu's BG layer. Full-screen scenes draw the .pic
+ * directly; overlay scenes restore the captured gameplay snapshot
+ * (or clear to colour 0 if no snapshot exists) so cursor trails /
+ * closed-submenu remnants don't accumulate in the margin. */
+static void paint_menu_background(const void *bg_raw, uint32_t bg_size)
+{
+    int overlay = rawb_is_overlay(bg_raw);
+    extern uint8_t *g_back_shadow;
+    if (overlay) {
+        if (g_menu_bg_snapshot_valid && g_back_shadow) {
+            memcpy(g_back_shadow, g_menu_bg_snapshot,
+                   (size_t)WACKI_SCREEN_W * WACKI_SCREEN_H);
+        } else {
+            FlipBuffersClearWith(0);
+        }
+    }
+    paint_rawb_pic(bg_raw, bg_size, overlay);
+}
+
+/* Walk the SceneDef's button table for whichever sprite the mouse is
+ * currently over. Returns (button_idx, button_id) via out params;
+ * idx = -1 when nothing is hovered (and id falls back to NEUTRAL). */
+static void resolve_menu_hover(SceneDef *scene, AnimAsset *buttons,
+                               int *out_idx, uint16_t *out_id)
+{
+    int idx = (buttons && (s_mouse_x | s_mouse_y))
+            ? hit_test_buttons(scene, buttons, s_mouse_x, s_mouse_y)
+            : -1;
+    *out_idx = idx;
+    *out_id  = (idx >= 0) ? scene->buttons[idx].id : SCENE_NEUTRAL_VERB;
+}
+
+/* Fire the SceneDef's on_click handler with the hovered button's id
+ * (or -1 when nothing is hovered — the cb's per-frame logic still
+ * runs that way, just no switch-case matches). Returns the cb's rc. */
+static int run_menu_click_callback(SceneDef *scene,
+                                   int hover_btn, uint16_t hover_id)
+{
+    int trigger = -1;
+    if (g_lmb_clicked && hover_btn >= 0) {
+        trigger = (int)hover_id;
+    }
+    g_lmb_clicked = 0;
+    return scene->on_click(trigger);
+}
+
+/* Paint the SceneDef's button layer: every button's def sprite, then
+ * the hovered button's hover sprite on top. */
+static void paint_menu_buttons(SceneDef *scene, AnimAsset *buttons,
+                               int hover_btn)
+{
+    if (!buttons) return;
+    for (int i = 0; i < scene->button_count; ++i) {
+        paint_anim_button(buttons, scene->buttons[i].def_anim);
+    }
+    if (hover_btn >= 0) {
+        paint_anim_button(buttons, scene->buttons[hover_btn].hover_anim);
+    }
+}
+
+/* Paint the cursor on top of the menu. Menus have no scene-hover-verb
+ * and no held item, so the cursor state machine settles on state 0
+ * (default arrow); the call still drives frame advance so the cursor
+ * is animated the moment we re-enter gameplay. */
+static void paint_menu_cursor(void)
+{
+    g_hover_scene_verb = SCENE_NEUTRAL_VERB;
+    g_hover_panel_verb = SCENE_NEUTRAL_VERB;
+    UpdateCursorState();
+    PaintCursor();
+}
+
+/* Poll ESC / platform-quit. ESC sets the menu-back rc unless the
+ * scene opted out via SCENE_FLAG_DISABLE_ESC. */
+static int poll_menu_keyboard_quit(SceneDef *scene)
+{
+    if (HasPendingKey()) {
+        uint16_t k = WaitForKey();
+        if (k == VK_ESCAPE && !(scene->flags & SCENE_FLAG_DISABLE_ESC)) {
+            return MENU_ESC_RC;
+        }
+    }
+    if (PlatformShouldQuit()) return MAIN_MENU_RC_HARD_QUIT;
+    return MAIN_MENU_RC_NONE;
+}
+
 int RunMenuScene(int transition_mode, SceneDef *scene)
 {
     (void)transition_mode;
 
-    void      *bg_raw  = NULL; uint32_t bg_size = 0;
+    void      *bg_raw  = NULL;
+    uint32_t   bg_size = 0;
     AnimAsset *buttons = NULL;
-    int        bg_loaded = 0;
-
-    if (scene->background_pic)
-        bg_loaded = LoadFileFromDta(scene->background_pic, &bg_raw, &bg_size);
-    if (scene->mask_file)
-        buttons = LoadAssetFromDtaBase(scene->mask_file);
-
-    /* @ 0x0040B5E0: the mask atlas is registered as
- * entity (kind=1, id=10) so the on_click handler can fetch it via
- * (1, 10) for its background animation block. */
-    g_menu_asset_10 = buttons;
+    int bg_loaded = load_menu_scene_assets(scene, &bg_raw, &bg_size, &buttons);
 
     if (!bg_loaded) FlipBuffersClearWith(0);
 
-    fprintf(stderr, "[menu] entered: bg='%s' mask='%s' atlas-frames=%d btns=%d\n",
+    fprintf(stderr,
+            "[menu] entered: bg='%s' mask='%s' atlas-frames=%d btns=%d\n",
             scene->background_pic ? scene->background_pic : "(none)",
             scene->mask_file      ? scene->mask_file      : "(none)",
             buttons ? buttons->frame_count : 0,
             scene->button_count);
 
-    /* INIT the on_click handler once with trigger 0 (case 0 in
- * HandleMainMenuClick: load Tlo.pal/menu.pal, start CD music). */
-    if (scene->on_click) scene->on_click(0);
+    /* INIT the on_click handler once with the INIT trigger so HandleMain
+     * MenuClick can do its first-frame setup (palette install, BGM). */
+    if (scene->on_click) scene->on_click(MAIN_MENU_TRIGGER_INIT);
 
-    int rc = 0;
+    int rc = MAIN_MENU_RC_NONE;
     do {
-        /* Pump events first so g_lmb_clicked / g_key_state reflect this
- * tick's input before we run the click+animation callback. */
         PumpWin32Messages();
 
-        /* Hover detection:
- * walk the buttons, find the one whose def_anim rect contains
- * the mouse cursor, and use its .id as the "hover key" passed to
- * the on_click callback every frame. (Original engine stores this
- * in g_hover_scene_verb and resets to 0x26 when nothing is hovered;
- * here we just pass it directly to cb.) */
-        int hover_btn = (buttons && (s_mouse_x | s_mouse_y))
-                      ? hit_test_buttons(scene, buttons, s_mouse_x, s_mouse_y)
-                      : -1;
-        uint16_t hover_id = (hover_btn >= 0)
-                          ? scene->buttons[hover_btn].id : 0x26;
+        int      hover_btn;
+        uint16_t hover_id;
+        resolve_menu_hover(scene, buttons, &hover_btn, &hover_id);
 
-        /* Compose the frame into the shadow buffer (bottom → top):
- * 1. background .pic (if scene has one)
- * 2. cb — paints the animated full-screen WACKI flipbook
- * 3. default-state button sprites for every button
- * 4. hover-state sprite for the hovered button (if any)
- */
-        if (bg_loaded) {
-            /* Treat sub-fullscreen .pics as transparent overlays (Pytanie
- * dialog), fullscreen ones as opaque scene backgrounds. The
- * RAWB header at +4/+6 stores the size; quick peek to decide. */
-            const uint8_t *bp = (const uint8_t *)bg_raw;
-            int bg_w = bp[4] | (bp[5] << 8);
-            int bg_h = bp[6] | (bp[7] << 8);
-            int overlay = (bg_w < WACKI_SCREEN_W || bg_h < 400);
-            /* Sub-fullscreen overlay bg leaves margins around the .pic.
- * Without restoring something, cursor trails / closed
- * inner-menu remnants accumulate. If a gameplay snapshot
- * was captured (OpenOptionsMenu), restore it under the
- * overlay so margins show the gameplay scene (and the
- * cursor's previous position gets wiped each frame). For
- * scenes without snapshot (main menu Load reached BEFORE
- * gameplay starts), fall back to clear-with-0. */
-            extern uint8_t *g_back_shadow;
-            if (overlay) {
-                if (g_menu_bg_snapshot_valid && g_back_shadow) {
-                    memcpy(g_back_shadow, g_menu_bg_snapshot,
-                           (size_t)WACKI_SCREEN_W * WACKI_SCREEN_H);
-                } else {
-                    FlipBuffersClearWith(0);
-                }
-            }
-            paint_rawb_pic(bg_raw, bg_size, overlay);
-        }
+        if (bg_loaded) paint_menu_background(bg_raw, bg_size);
 
-        /* Click → fire cb with the hovered button's id (trigger). When
- * nothing is hovered, pass -1 so the cb's per-frame logic still
- * runs (animation tick) but no switch-case matches. */
         if (scene->on_click) {
-            int trigger = -1;
-            if (g_lmb_clicked && hover_btn >= 0) {
-                trigger = (int)hover_id;
-                /* g_panel_cursor_redirect2 is the "this-frame LMB" flag the cb cases
- * gate on. We can't model that without the whole
- * entity system, but firing trigger on the click frame is
- * the same observable behaviour. */
-            }
-            g_lmb_clicked = 0;
-            int r = scene->on_click(trigger);
+            int r = run_menu_click_callback(scene, hover_btn, hover_id);
             if (r > 0) rc = r;
         }
-        if (buttons) {
-            /* Default-state buttons (always drawn) */
-            for (int i = 0; i < scene->button_count; ++i)
-                paint_anim_button(buttons, scene->buttons[i].def_anim);
-            /* Hover overlay (one sprite at most, on top of everything) */
-            if (hover_btn >= 0)
-                paint_anim_button(buttons,
-                                  scene->buttons[hover_btn].hover_anim);
-        }
-        /* Optional overlay pass — runs AFTER button + hover sprites.
- * Save/Load menus use this to repaint the slot text on top of
- * the row-highlight hover sprite (which otherwise covers it). */
+
+        paint_menu_buttons(scene, buttons, hover_btn);
         if (scene->after_paint) scene->after_paint();
-        /* T31 v2 — cursor sprite on top of the menu. In the menu there's no
- * scene hover-verb (no clickable scene objects) and no held item, so
- * the state machine settles on state 0 = olowek (default arrow). The
- * call still drives frame advance for the unused anim states so the
- * cursor is animated the moment we re-enter gameplay. */
-        g_hover_scene_verb = 0x26;
-        g_hover_panel_verb = 0x26;
-        UpdateCursorState();
-        PaintCursor();
-        /* Single flush per iteration — once everything is on the shadow */
+        paint_menu_cursor();
         FlushFrameToPrimary();
-        /* Top up the music queue so the loop is seamless. */
         TickMenuMusic();
 
-        if (HasPendingKey()) {
-            uint16_t k = WaitForKey();
-            if (k == VK_ESCAPE && !(scene->flags & SCENE_FLAG_DISABLE_ESC))
-                rc = 4;
-        }
-        if (PlatformShouldQuit()) rc = 99;
-        SDL_Delay(16);                        /* ~60 fps pacing */
-    } while (rc == 0);
+        int quit_rc = poll_menu_keyboard_quit(scene);
+        if (quit_rc != MAIN_MENU_RC_NONE) rc = quit_rc;
+
+        SDL_Delay(MENU_FRAME_DELAY_MS);
+    } while (rc == MAIN_MENU_RC_NONE);
 
     if (buttons) FreeAsset(buttons);
     if (bg_raw)  xfree(bg_raw);
-    g_menu_asset_10 = NULL;       /* invalidated after free */
+    g_menu_asset_10 = NULL;
     return rc;
 }
 
@@ -2879,8 +2943,8 @@ int SelTloRefreshButtons(void)
 #define PAGE_NEXT_BTN_Y0               443
 #define PAGE_NEXT_BTN_Y1               473
 
-/* Scene-input verb codes. */
-#define SCENE_NEUTRAL_VERB             0x26
+/* Scene-input verb codes. SCENE_NEUTRAL_VERB lives in the title block
+ * up top (shared with menu/cursor code). */
 #define SCENE_USE_ON_ITEM_VERB         0x0F
 #define SCENE_PICKUP_TARGET_VAR_IDX    0x0F   /* g_script_vars[0x0F] holds target verb */
 
