@@ -168,6 +168,32 @@ int  OpenDtaArchiveFile(const char *path);
 int  LoadFileFromDta(const char *name, void **out_buf, uint32_t *out_size);
 void DepackPkv2Buffer(void *src, void *dst, void (*progress)(int));
 
+/* ---- pe_loader.c ------------------------------------------------- *
+ *
+ * Resolves original WACKI.EXE addresses (verb tables, scripts,
+ * asset filename strings, …) into host pointers. The engine binary
+ * embeds the original .rdata + .data sections as a const slice
+ * table at build time (see include/wacki/embedded_exe.h) — no
+ * runtime init needed.
+ *
+ * PeLoaderInit / PeLoaderInitFromMemory parse a PE blob at runtime
+ * and override the embedded table; used by the test suite (which
+ * constructs synthetic PE blobs) and by tools that want to inspect
+ * a different image. PeLoaderFree drops the override and falls back
+ * to the embedded path. */
+int          PeLoaderInit(const char *exe_path);
+int          PeLoaderInitFromMemory(const uint8_t *file, size_t fsz,
+                                    const char *label);
+void         PeLoaderFree(void);
+const void  *PeLoaderRead(uint32_t va);
+int          PeLoaderLoaded(void);
+int          PeLoaderContainsVA(uint32_t va);
+
+/* Translate an original-VA pointer (asset filename / bytecode /
+ * data) into a usable host pointer. */
+const void  *xlat_binary_ptr(uint32_t addr);
+const char  *xlat_asset_name(uint32_t addr);
+
 /* ---- assets.c ---------------------------------------------------- */
 
 AnimAsset *LoadAssetFromDtaBase(const char *name);

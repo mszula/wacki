@@ -32,8 +32,27 @@ DEBUG_CFLAGS = -O0 -g -fno-omit-frame-pointer \
                -std=gnu99 -I include
 DEBUG_LDFLAGS = -fsanitize=address -fsanitize=undefined
 
+# ---- embedded WACKI.EXE data sections --------------------------------------
+# tools/embed-pe-data reads WACKI.EXE and emits a generated C source
+# with the .rdata + .data raw bytes as a const slice table + blob.
+# The engine PE-loader resolves original VAs against this table at
+# runtime — no PE parsing, no file I/O after build. Other sections
+# (.text x86 code, .idata, .rsrc) are skipped (we never reference
+# them). Build-time dep: data/WACKI.EXE must exist; generated file is
+# gitignored.
+EMBEDDED_PE_SRC = src/embedded_wacki_pe.c
+EMBEDDED_PE_BIN = data/WACKI.EXE
+EMBED_PE_TOOL   = tools/embed-pe-data
+
+$(EMBED_PE_TOOL): tools/embed-pe-data.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+$(EMBEDDED_PE_SRC): $(EMBEDDED_PE_BIN) $(EMBED_PE_TOOL)
+	./$(EMBED_PE_TOOL) $(EMBEDDED_PE_BIN) $(EMBEDDED_PE_SRC)
+
 # ---- modules ----------------------------------------------------------------
 ENGINE_SRCS = \
+	$(EMBEDDED_PE_SRC) \
 	src/main.c     src/game.c    src/graphics.c  src/audio.c     \
 	src/archive.c  src/depack.c  src/assets.c    src/vm/main.c   \
 	src/actor/intern.c    src/actor/registration.c \
@@ -101,6 +120,7 @@ TEST_SRCS = \
 	tests/test_engine_stubs.c
 
 TEST_ENGINE_SRCS = \
+	tests/embedded_wacki_pe_stub.c                 \
 	src/depack.c    src/archive.c  src/graphics.c \
 	src/pe_loader.c src/heap.c     src/cygio.c    \
 	src/assets.c    src/font.c     src/save.c     \
@@ -165,4 +185,5 @@ tests/run-tests: $(TEST_SRCS) $(TEST_ENGINE_SRCS)
 
 clean:
 	rm -f wacki wacki-debug dta-extract pkv2-depack tests/run-tests \
+	      $(EMBEDDED_PE_SRC) $(EMBED_PE_TOOL)                        \
 	      *.o src/*.o tools/*.o tests/*.o

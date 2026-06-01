@@ -59,7 +59,6 @@
 /* Path buffer size for the data-root + helper file-search snprintf. */
 #define ARCHIVE_PROBE_PATH_BYTES            1024
 #define UPPERCASE_NAME_BYTES                64
-#define PE_PROBE_PATH_BYTES                 512
 
 /* Tick is the multimedia timer at ~1 kHz on the original; SDL_GetTicks
  * matches that cadence so 1000 ticks ≈ 1 wall-clock second. */
@@ -322,20 +321,6 @@ static void apply_early_cli_effects(const CliArgs *args)
     }
 }
 
-/* Try to load WACKI.EXE as a passive PE image so xlat_binary_ptr can
- * resolve original .data / .rdata / .text addresses (verb tables,
- * scripts, etc.). Missing or unreadable → the port falls back to the
- * manually-embedded blobs in binary_data.c. */
-static void try_load_pe_image(void)
-{
-    extern int PeLoaderInit(const char *exe_path);
-    char p[PE_PROBE_PATH_BYTES];
-    snprintf(p, sizeof p, "%s/WACKI.EXE", g_data_root);
-    if (PeLoaderInit(p)) return;
-    snprintf(p, sizeof p, "%s/wacki.exe", g_data_root);
-    PeLoaderInit(p);
-}
-
 /* ---- cutscene test modes --------------------------------------- */
 
 /* Every cutscene file that ships in DANE_*.DTA. Order matches stage
@@ -395,7 +380,9 @@ int WackiMain(int argc, char **argv)
     fprintf(stderr, "[wacki] build " __DATE__ " " __TIME__ "\n");
     fprintf(stderr, "[wacki] data source: %s\n", g_data_root);
 
-    try_load_pe_image();
+    /* WACKI.EXE's .rdata + .data sections are linked into the binary
+     * (see include/wacki/embedded_exe.h); PeLoaderRead resolves
+     * against them with no runtime init. */
 
     if (!PlatformInit(WACKI_SCREEN_W, WACKI_SCREEN_H, "Wacki")) return 1;
 
