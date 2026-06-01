@@ -175,22 +175,22 @@ Sekwencja:
 sequenceDiagram
     participant Caller as Game loop
     participant FLIC as PlayFlicAviFile
-    participant SDL as SDL_AudioDevice (cutscene)
+    participant SDL as SDL_AudioDevice
     participant Mixer as Mixer device
 
-    Note over Mixer: mixer device open<br/>during gameplay
-    Caller->>FLIC: PlayFlicAviFile("Dane_10.dta")
-    FLIC->>Mixer: (mixer NOT touched here —<br/>see note below)
-    FLIC->>SDL: audio_ensure<br/>open new device for AVI spec
-    Note over SDL: SDL2 normalnie potrafi<br/>multiple devices, ale na mmiyoo<br/>jeden device naraz
+    Note over Mixer: mixer device open w gameplay'u
+    Caller->>FLIC: PlayFlicAviFile Dane_10.dta
+    FLIC->>Mixer: mixer NOT touched here — see note below
+    FLIC->>SDL: audio_ensure — open new device for AVI spec
+    Note over SDL: SDL2 normalnie wspiera multiple devices, ale na mmiyoo jeden device naraz
     loop per frame
-        FLIC->>SDL: SDL_QueueAudio<br/>(audio body z 01wb)
-        FLIC->>FLIC: flic_decode_frame<br/>+ FlushFrameToPrimary
+        FLIC->>SDL: SDL_QueueAudio — audio body z 01wb
+        FLIC->>FLIC: flic_decode_frame + FlushFrameToPrimary
     end
-    Caller->>FLIC: user click → skip
+    Caller->>FLIC: user click — skip
     FLIC->>SDL: SDL_PauseAudioDevice + SDL_ClearQueuedAudio
-    FLIC->>SDL: audio_release<br/>close device
-    Note over Mixer: mixer może teraz<br/>re-take audio slot
+    FLIC->>SDL: audio_release — close device
+    Note over Mixer: mixer może teraz re-take audio slot
 ```
 
 Note: w aktualnej implementacji mixer device pozostaje otwarty

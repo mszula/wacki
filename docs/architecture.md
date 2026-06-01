@@ -101,32 +101,32 @@ int main(argc, argv)
 
 ```mermaid
 sequenceDiagram
-    participant Loop as play_loop.c<br/>scene iteration
+    participant Loop as play_loop.c
     participant Tick as ProcessGameFrameTickInner
     participant Plat as platform_sdl.c
-    participant VM as actor/vm.c<br/>per-entity VM
+    participant VM as actor/vm.c
     participant Wlk as actor/walker.c
     participant Hit as scene/hit_test.c
     participant Snd as audio/sfx.c
     participant Rend as actor/render.c
-    participant HUD as hud/cursor.c<br/>hud/panel.c
+    participant HUD as hud
     participant GR as graphics.c
 
-    Loop->>Tick: ProcessGameFrameTickInner()
-    Tick->>Plat: PlatformPumpEvents (SDL events,<br/>virtual cursor d-pad poll)
-    Tick->>Tick: refresh_frame_deltas<br/>(g_frame_delta_ms/ticks)
-    Tick->>VM: EntityWalkerTick<br/>(per-entity VM)
+    Loop->>Tick: ProcessGameFrameTickInner
+    Tick->>Plat: PlatformPumpEvents — SDL events + virtual cursor d-pad poll
+    Tick->>Tick: refresh_frame_deltas — g_frame_delta_ms/ticks
+    Tick->>VM: EntityWalkerTick — per-entity VM
     VM->>Wlk: WALK_TO step
-    VM->>Snd: TriggerFrameSfx<br/>(per atlas frame_idx change)
+    VM->>Snd: TriggerFrameSfx — per atlas frame_idx change
     Tick->>Hit: PanelHitTest + ClickHitTest
     Tick->>Wlk: UpdateActorMovement
-    Tick->>VM: HandleSceneInput<br/>(RMB / LMB → DispatchClickEvent)
-    Tick->>Rend: EntityRenderAll<br/>(Z-sort by foot_y, blit shadow)
+    Tick->>VM: HandleSceneInput — RMB/LMB → DispatchClickEvent
+    Tick->>Rend: EntityRenderAll — Z-sort by foot_y, blit shadow
     Tick->>HUD: PaintHudOverlay
     Loop->>GR: FlushFrameToPrimary
-    GR->>Plat: PlatformPresent<br/>(SDL_LockTexture + RenderCopy)
+    GR->>Plat: PlatformPresent — SDL_LockTexture + RenderCopy
     Loop->>Snd: TickMenuMusic
-    Loop->>Loop: EnginePaceFrame(33)<br/>deadline-aware cap
+    Loop->>Loop: EnginePaceFrame — deadline-aware 33ms cap
 ```
 
 Klawiatura w pętli głównej:
