@@ -151,7 +151,13 @@ TEST(case_fold_basename_retry_uppercase_fallback)
     memset(blob, 0, sizeof blob);
     build_one_entry_dta(blob, "TEST.BIN", p);
 
-    const char *upper_path = "/tmp/wacki-test-CASE-FOLD.DTA";
+    /* The loader uppercases the FULL basename on retry (every a-z
+     * → A-Z), so the on-disk filename has to be fully uppercase for
+     * the retry to find it. Previously this path used partial
+     * uppercase ("...CASE-FOLD.DTA") which happened to work on
+     * macOS APFS (case-insensitive by default) but failed under a
+     * case-sensitive Linux filesystem. */
+    const char *upper_path = "/tmp/WACKI-TEST-CASE-FOLD.DTA";
     write_file_bytes(upper_path, blob, 88);
 
     /* Try opening with lowercase basename — should fail fopen first
