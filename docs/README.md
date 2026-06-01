@@ -17,6 +17,7 @@ dokument tu odzwierciedla zarówno **jak engine był zaprojektowany w
 | [pe-loader.md](pe-loader.md) | Trick z embedowaniem `WACKI.EXE` jako passive image |
 | [asset-format.md](asset-format.md) | Binarna specyfikacja: DTA / PKv2 / ANIM / MASK / FILD / PIC / PAL |
 | [flic-decoder.md](flic-decoder.md) | Cutscene'y — AAFLC w AVI: dekoder, audio path, pacing |
+| [save-file.md](save-file.md) | `Wacki.sav` — format na dysku, atomic write, slot lifecycle, F5/F9 |
 | [glossary.md](glossary.md) | Polskie terminy z silnika i scenariuszy — szybkie tłumaczenie |
 | [health-bar-depletion.md](health-bar-depletion.md) | Open research note — mechanizm odejmowania życia |
 
