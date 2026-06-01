@@ -16,6 +16,7 @@ dokument tu odzwierciedla zarówno **jak engine był zaprojektowany w
 | [entity-system.md](entity-system.md) | Struct `Entity`, kategorie (`kind`), lista renderera/clicków, lifecycle |
 | [pe-loader.md](pe-loader.md) | Trick z embedowaniem `WACKI.EXE` jako passive image |
 | [asset-format.md](asset-format.md) | Binarna specyfikacja: DTA / PKv2 / ANIM / MASK / FILD / PIC / PAL |
+| [flic-decoder.md](flic-decoder.md) | Cutscene'y — AAFLC w AVI: dekoder, audio path, pacing |
 | [glossary.md](glossary.md) | Polskie terminy z silnika i scenariuszy — szybkie tłumaczenie |
 | [health-bar-depletion.md](health-bar-depletion.md) | Open research note — mechanizm odejmowania życia |
 

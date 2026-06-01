@@ -1,10 +1,11 @@
-# Wacki port — architecture
+# Wacki — architektura portu
 
-High-level map of modules, scene lifecycle, and the per-frame tick.
-Pair this with [script-vm.md](script-vm.md) (main VM opcode table),
-[per-entity-vm.md](per-entity-vm.md) (per-entity VM),
-[audio-pipeline.md](audio-pipeline.md), [entity-system.md](entity-system.md),
-[pe-loader.md](pe-loader.md), and [asset-format.md](asset-format.md).
+Wysokopoziomowa mapa modułów, scene lifecycle i per-frame tick.
+Pary tematyczne: [script-vm.md](script-vm.md) (główna tablica
+opcode'ów VM), [per-entity-vm.md](per-entity-vm.md) (per-entity VM),
+[audio-pipeline.md](audio-pipeline.md),
+[entity-system.md](entity-system.md), [pe-loader.md](pe-loader.md),
+[asset-format.md](asset-format.md), [flic-decoder.md](flic-decoder.md).
 
 ---
 
@@ -73,22 +74,22 @@ Tools (separate binaries in `tools/`):
 
 ---
 
-## 2. Entry flow
+## 2. Ścieżka startu
 
 ```
 int main(argc, argv)
 └── WackiMain
-    ├── parse --headless / --seed / --scale / --scaler (T44/T45/T54)
-    ├── CheckCdRomDrive          → scan for Dane_02.dta (env, ./data, etc.)
-    ├── PeLoaderInit(WACKI.EXE)  → map PE as passive image
-    ├── PlatformInit             → SDL_Init + Window + Renderer + Texture
+    ├── parsuj --headless / --seed / --scale / --scaler
+    ├── FindDataRoot           → szukaj Dane_02.dta (env, ./data, …)
+    ├── PeLoaderInit           → mapuj embed PE jako passive image
+    ├── PlatformInit           → SDL_Init + Window + Renderer + Texture
     ├── InitializeGameSubsystems
     │   ├── OpenDtaArchiveFile("Dane_02.dta")
-    │   ├── LoadScriptFile        for Item.scr, Wacky.scr, Gadki.scr
-    │   ├── PreloadCommonAssets   ebek/fjej/przedm/Futura.30 + BuildStageTable
+    │   ├── LoadScriptFile dla Item.scr, Wacky.scr, Gadki.scr
+    │   ├── PreloadCommonAssets ebek/fjej/przedm/Futura.30 + BuildStageTable
     │   └── InitializeMmTimer
     └── RunMainGameLoop
-        └── RunMenuScene → on "New game" → RunGameStageLoop(flags=2)
+        └── RunMenuScene → na "New game" → RunGameStageLoop(flags=2)
                                             └── LoadStage(1)
                                             └── play_first_scene_demo
                                                 └── play_demo_scene (per komnata)
@@ -96,7 +97,7 @@ int main(argc, argv)
 
 ---
 
-## 3. Per-frame tick (in-game)
+## 3. Per-frame tick (w trakcie gry)
 
 ```mermaid
 sequenceDiagram
@@ -144,25 +145,25 @@ hardkodowanego `SDL_Delay(33)` w siedmiu miejscach (`play_loop.c`,
 
 ---
 
-## 4. Scene lifecycle
+## 4. Cykl życia sceny
 
 ```
 RunGameStageLoop(flags)
-  ├── if (flags & 0x02)   reset script_vars, ResetInventory, LoadStage(1)
-  ├── play_first_scene_demo  (port shortcut for stage-1 demo entry)
+  ├── jeśli (flags & 0x02) reset script_vars, ResetInventory, LoadStage(1)
+  ├── play_first_scene_demo  (port shortcut dla stage-1 demo entry)
   │
-  │  for each komnata in stage:
+  │  dla każdej komnaty w stage:
   │   ├── LoadKomnata(id)
-  │   │   ├── EntityListClearAll      (preserve actors per T4 r24)
-  │   │   ├── PanelPageSwap           (reload first 6 inventory slots)
+  │   │   ├── EntityListClearAll   (zachowane actor'y — special case)
+  │   │   ├── PanelPageSwap        (reload pierwsze 6 inventory slots)
   │   │   └── RunScriptInterpreter(enter_script)
-  │   ├── play_demo_scene(scene)      → main loop above
-  │   │   └── (loop exits when g_pending_komnata != 0 or ESC)
-  │   └── repeat for next komnata
+  │   ├── play_demo_scene(scene)   → main loop powyżej
+  │   │   └── (loop exits gdy g_pending_komnata != 0 albo ESC)
+  │   └── powtórz dla kolejnej komnaty
   │
-  └── On exit:
+  └── Na wyjściu:
       ├── game_over_code 1 → death AVI Dane_14.dta
-      ├── game_over_code 3 → chapter-select UI (T25, deferred)
+      ├── game_over_code 3 → chapter-select UI (deferred)
       └── game_over_code 4 → stage-end AVI g_stage->alt_avi
 ```
 
@@ -233,38 +234,38 @@ Eliminuje jedno 1.2 MB memcpy per frame vs naive `SDL_UpdateTexture`
 (który robi expand do staging buffera + drugi copy). Fallback path jest
 zachowany jeśli Lock zawiedzie.
 
-Blit families:
+Rodziny blit'ów:
 
 | Funkcja | Use case |
 |---|---|
-| `BlitSpriteToBackbuffer` | flat 8bpp copy with color-key |
-| `PaintImageToBackbuffer` | flat 8bpp copy without color-key |
-| `BlitSpriteScaledColorKey[Flip]` | scaled actor render (x-step LUT, perspective) |
-| `BlitAlphaScaled[ToBackbuffer]` | alpha-plane scaled blit — 3 modes |
-| `DepackRleFrame` | unpack RLE-encoded ANIM frames (kind=3) |
+| `BlitSpriteToBackbuffer` | flat 8bpp copy z color-key'em |
+| `PaintImageToBackbuffer` | flat 8bpp copy bez color-key'a |
+| `BlitSpriteScaledColorKey[Flip]` | scaled actor render (x-step LUT, perspektywa) |
+| `BlitAlphaScaled[ToBackbuffer]` | alpha-plane scaled blit — 3 tryby |
+| `DepackRleFrame` | rozpakuj RLE-encoded ANIM frames (kind=3) |
 
-Alpha-plane modes:
+Tryby alpha-plane:
 - 0 = nearest neighbor z x-step LUT
-- 1 = 1D horizontal box filter + RGB12 quantization
-- 2 = 2D box filter + RGB12 quantization
+- 1 = 1D horizontal box filter + RGB12 kwantyzacja
+- 2 = 2D box filter + RGB12 kwantyzacja
 
-Tint via `SetAlphaTint(bgr)` (0x808080 = identity); LUTs auto-rebuilds
-na `InstallPalette`.
+Tint przez `SetAlphaTint(bgr)` (0x808080 = identity); LUT-y auto-rebuilds
+przy `InstallPalette`.
 
 ---
 
-## 8. Entity system
+## 8. System Entity
 
 Pełen opis: [entity-system.md](entity-system.md). Skrót:
 
 - Każdy obiekt sceny = `Entity` struct ~256 B, dostęp przez byte-offsety
-  z `include/entity_offsets.h` (`EOFF(e, off, type)` macro)
-- Cztery `kind` wartości: 1 (atlas-z-verb-table), 2 (clickable sprite),
+  z `include/entity_offsets.h` (makro `EOFF(e, off, type)`)
+- Cztery wartości `kind`: 1 (atlas z verb-table), 2 (clickable sprite),
   3 (walk-behind mask / animated prop), 4 (click payload — invisible)
-- Dwie listy parallel'ne: **render list** (Z-sorted by foot_y, blit
+- Dwie równoległe listy: **render list** (Z-sorted by foot_y, blit
   back-to-front) i **click list** (hit-test targets, walked back-to-front)
 - **Update table** osobno — `RegisterEntityForUpdate(e, kind, id)`
-  rezerwuje logical `(kind, id)`. Lookup LIFO żeby script'y mogły
+  rezerwuje logical `(kind, id)`. Lookup LIFO żeby skrypty mogły
   shadow'ować i restoreować registracje.
 
 ---
@@ -272,7 +273,7 @@ Pełen opis: [entity-system.md](entity-system.md). Skrót:
 ## 9. Save / load (save.c)
 
 ```
-WackiSaveFile (on disk = in memory):
+WackiSaveFile (na dysku = w pamięci):
 ├── magic         "SAVE"
 ├── settings      WackiSettings (sound/music/voice/subtitles flags)
 └── slots[10]     WackiSlot:
@@ -286,14 +287,15 @@ WackiSaveFile (on disk = in memory):
 ```
 
 API:
-- `LoadSaveStateOrInitialize` — read Wacki.sav or zero-init
+- `LoadSaveStateOrInitialize` — czyta Wacki.sav albo zero-init
 - `LoadSaveSlot(idx)` — restore vars + LoadStage(etap)
-- `WriteSaveFile` — dump g_save back to disk
-- `QuickSaveToSlot(idx)` / `QuickLoadFromSlot(idx)` (T53) — F5/F9
+- `WriteSaveFile` — dump g_save z powrotem na dysk (atomic write
+  via tmp+rename, na Windows `MoveFileEx` zamiast `rename`)
+- `QuickSaveToSlot(idx)` / `QuickLoadFromSlot(idx)` — F5/F9
 
 ---
 
-## 10. Build targets (Makefile)
+## 10. Targety builda (Makefile)
 
 | Target | Output | Uwagi |
 |---|---|---|
@@ -303,22 +305,22 @@ API:
 | `make debug` | `dist/wacki-debug` | `-O0 -g -fsanitize=address,undefined` |
 | `make test` | `dist/run-tests` | 468 testów, <1s |
 | `make miyoo` | `dist/wacki-miyoo` | Cross-compile via Docker dla armv7l (Miyoo Mini Plus) |
-| `make run` | (runs `./dist/wacki`) | Quick test |
+| `make run` | (uruchamia `./dist/wacki`) | Quick test |
 | `make clean` | — | Wyrzuca cały `dist/` |
 
 Default CFLAGS: `-O2 -Wall -Wextra -Wpedantic`.
-`STATIC_SDL2=1` knob włącza static link + size opts (`-Os`, section GC,
+Knob `STATIC_SDL2=1` włącza static link + size opts (`-Os`, section GC,
 LTO na desktopie). `TARGET=miyoo` (+ `CROSS_COMPILE=arm-linux-gnueabihf-`)
 kierunkuje do ARM Cortex-A7 + NEON + hardfloat.
 
-Runtime flags:
+Flagi runtime:
 
 | Flaga | Env equivalent | Efekt |
 |---|---|---|
 | `--headless` | `WACKI_HEADLESS=1` | Skip Window/Renderer/Texture (CI smoke) |
-| `--seed N` | `WACKI_SEED=N` | Set `WackiRand` seed (deterministic playback) |
-| `--scale N` | `WACKI_SCALE=N` | Window N×640 × N×480 (framebuffer stays 640×480) |
-| `--scaler MODE` | `WACKI_SCALER=MODE` | `nearest` / `linear` / `best` — render scale quality |
+| `--seed N` | `WACKI_SEED=N` | Ustaw `WackiRand` seed (deterministic playback) |
+| `--scale N` | `WACKI_SCALE=N` | Window N×640 × N×480 (framebuffer 640×480) |
+| `--scaler MODE` | `WACKI_SCALER=MODE` | `nearest` / `linear` / `best` — jakość scaling'u |
 | — | `WACKI_PATH=...` | Override ścieżki do `Dane_*.dta` |
 
 CI matrix: macOS arm64, Linux x86_64, Windows x86_64 (MSYS2/mingw),

@@ -1,18 +1,19 @@
-# Wacki binary asset formats
+# Wacki — formaty binarnych assetów
 
-Spec for the data files shipped on the Wacki CD: container archive
-(`Dane_NN.dta`), compression (`PKv2`), and the individual asset types
+Specyfikacja plików danych z płyty Wackich: kontener archiwum
+(`Dane_NN.dta`), kompresja (`PKv2`) oraz poszczególne typy assetów
 (`ANIM`, `MASK`, `FILD`, `PIC`, `PAL`).
 
-All values are little-endian, all coordinates are 16-bit, all pixel
-data is 8-bit paletted (palette in `paleta.pal` or per-stage variant).
+Wszystkie wartości są little-endian, wszystkie współrzędne 16-bitowe,
+wszystkie piksele 8-bit paletted (paleta w `paleta.pal` albo
+per-stage wariancie).
 
 ---
 
-## 1. Container — `Dane_NN.dta`
+## 1. Kontener — `Dane_NN.dta`
 
-A DTA archive holds many compressed assets in a single file with a
-directory at the end. Two magic markers delimit the directory:
+Archiwum DTA trzyma wiele skompresowanych assetów w jednym pliku z
+katalogiem na końcu. Dwa markery magic delimitują katalog:
 
 ```
 +-----------+-------------------------+
@@ -27,224 +28,222 @@ directory at the end. Two magic markers delimit the directory:
 +-----------+-------------------------+
 ```
 
-### 1.1 Header (12 bytes at offset 0)
-| Off | Size | Field    | Notes                       |
-|----:|-----:|----------|-----------------------------|
-|   0 | 4    | `magic`  | `'BASE'` = 0x45534142       |
-|   4 | 4    | `compressed_size`   | size of `BASE` payload region |
-|   8 | 4    | `unpacked_size`     | (informational; 0 in disk samples) |
+### 1.1 Nagłówek (12 bajtów od offsetu 0)
+| Off | Size | Field | Notes |
+|----:|-----:|---|---|
+|   0 | 4 | `magic` | `'BASE'` = 0x45534142 |
+|   4 | 4 | `compressed_size` | rozmiar payloadu BASE |
+|   8 | 4 | `unpacked_size` | (informacyjnie; 0 w shipped samples) |
 
-After the header, the payload region is a sequence of PKv2-compressed
-blobs concatenated back-to-back. Each entry's offset is stored in
-the directory.
+Za nagłówkiem payload region to ciąg PKv2-skompresowanych blobów
+konkatenowanych back-to-back. Offset każdego wpisu trzymany w katalogu.
 
-### 1.2 Directory (`SPIS`)
-At the end of the file:
+### 1.2 Katalog (`SPIS`)
+Na końcu pliku:
 
-| Off | Size | Field        | Notes                              |
-|----:|-----:|--------------|------------------------------------|
-|   0 | 4    | `magic`      | `'SPIS'` = 0x53495053              |
-|   4 | 4    | `count`      | number of directory entries (1782 in Dane_02) |
-|   8 | 16×N | `entry[N]`   | filename + file offset per entry   |
+| Off | Size | Field | Notes |
+|----:|-----:|---|---|
+|   0 | 4    | `magic` | `'SPIS'` = 0x53495053 |
+|   4 | 4    | `count` | liczba wpisów (1782 w `Dane_02`) |
+|   8 | 16×N | `entry[N]` | nazwa + offset per wpis |
 
-Each directory entry is 16 bytes:
+Każdy wpis katalogu = 16 bajtów:
 
-| Off | Size | Field        | Notes                              |
-|----:|-----:|--------------|------------------------------------|
-|   0 | 12   | `name`       | nul-padded ASCII (DOS 8.3-ish, e.g. `EBEK.WYC`)|
-|  12 | 4    | `file_offset`| absolute byte offset of entry in archive |
+| Off | Size | Field | Notes |
+|----:|-----:|---|---|
+|   0 | 12 | `name` | nul-padded ASCII (DOS 8.3-ish, np. `EBEK.WYC`) |
+|  12 | 4  | `file_offset` | absolutny byte offset wpisu w archiwum |
 
-The port treats names case-insensitively (case-folds at lookup time),
-since macOS ISO9660 mounts can present mixed case.
+Port traktuje nazwy case-insensitively (case-fold w lookup time),
+ponieważ mounty ISO9660 na macOS mogą zwracać mixed case.
 
-### 1.3 Lookup flow (port code: `src/archive.c`)
+### 1.3 Lookup flow (port: `src/archive.c`)
 ```c
-OpenDtaArchiveFile(path)  → mmap or fread the whole archive
+OpenDtaArchiveFile(path)  → mmap lub fread całego archiwum
 LoadFileFromDta(name, &raw, &sz):
-    walk dir, case-fold compare name
-    seek file_offset, read PKv2 header, DepackPkv2Buffer → raw
+    walk directory, case-fold compare name
+    seek file_offset, czytaj PKv2 header, DepackPkv2Buffer → raw
 ```
 
 ---
 
-## 2. Compression — `PKv2`
+## 2. Kompresja — `PKv2`
 
-LZ77 + Huffman-style prefix codes. Each file entry inside a DTA
-starts with a 12-byte PKv2 header:
+LZ77 + prefixy Huffman-style. Każdy wpis pliku w DTA zaczyna się
+12-bajtowym headerem PKv2:
 
-| Off | Size | Field              |
-|----:|-----:|--------------------|
-|   0 | 4    | `magic` = 'PKv2'   |
-|   4 | 4    | `compressed_size`  |
-|   8 | 4    | `unpacked_size`    |
+| Off | Size | Field |
+|----:|-----:|---|
+|   0 | 4 | `magic` = 'PKv2' |
+|   4 | 4 | `compressed_size` |
+|   8 | 4 | `unpacked_size` |
 
-The compressed stream follows. Port decoder lives in `src/depack.c`
-(`DepackPkv2Buffer`); standalone tool `tools/pkv2-depack.c` decompresses
-a single blob.
+Stream skompresowany następuje. Port'owy dekoder żyje w `src/depack.c`
+(`DepackPkv2Buffer`); standalone tool `tools/pkv2-depack.c`
+dekompresuje pojedynczy blob.
 
-The decoder reads two state bytes near the end of the compressed buffer
-(bit-stream count + buf at offsets `eot-0x19` / `eot-0x1A`) then a u32
-initial-literal length at `eot-0x1E`. It walks the stream backward in
-bit terms while writing the output forward. The literal/match codes
-use variable-length prefixes whose tables są zrekonstruowane z
-oryginalnego dekodera.
+Dekoder czyta dwa state bytes blisko końca compressed buffer (bit-stream
+count + buf pod offsetami `eot-0x19` / `eot-0x1A`), potem u32
+initial-literal length pod `eot-0x1E`. Chodzi po strumieniu wstecz w
+bit terms, zapisując output do przodu. Literal/match codes używają
+prefix'ów variable-length, których tablice zostały zrekonstruowane
+z oryginalnego dekodera.
 
 **Port status:** byte-perfect. `tools/dta-validate.sh` weryfikuje
 wszystkie 1782 wpisy z `DANE_02.DTA` przeciwko
-`tools/dta-baseline.sha256` i przechodzi. Historyczne wzmianki
-o "off-by-X approximations" w starszych wersjach dokumentacji
-są przestarzałe.
+`tools/dta-baseline.sha256` i przechodzi.
 
 ---
 
-## 3. ANIM atlas — `.wyc` (`ASSET_MAGIC_ANIM = 'ANIM'`)
+## 3. Atlas ANIM — `.wyc` (`ASSET_MAGIC_ANIM = 'ANIM'`)
 
-Sprite atlases (actors, props, masks). The header is 16 bytes, then
-several parallel arrays follow, then the pixel blobs:
+Atlasy sprite'ów (aktorzy, propy, maski). Header 16 bajtów, potem
+kilka parallel arrays, na końcu pixel bloby:
 
-| Off | Size | Field                       |
-|----:|-----:|-----------------------------|
-|   0 | 4    | `magic` = 'ANIM' (0x4D494E41) |
-|   4 | 4    | (reserved)                  |
-|   8 | 2    | `frame_count`               |
-|  10 | 2    | (reserved)                  |
-|  12 | 2    | flag_22 (alpha-plane / 8bpp click select bits) |
-|  14 | 2    | offset to pixel-offset table (relative to file start) |
+| Off | Size | Field |
+|----:|-----:|---|
+|   0 | 4 | `magic` = 'ANIM' (0x4D494E41) |
+|   4 | 4 | (reserved) |
+|   8 | 2 | `frame_count` |
+|  10 | 2 | (reserved) |
+|  12 | 2 | `flag_22` (alpha-plane / 8bpp click select bits) |
+|  14 | 2 | offset do pixel-offset table (relative to file start) |
 
-After the header, three uint16 arrays of length `frame_count`:
-- `off_widths[i]`   — frame width in pixels
-- `off_heights[i]`  — frame height in pixels
-- `off_drawX[i]`    — draw-offset X (foot-anchor compensation)
-- `off_drawY[i]`    — draw-offset Y
+Za headerem trzy uint16 arrays długości `frame_count`:
+- `off_widths[i]`  — szerokość klatki w pixelach
+- `off_heights[i]` — wysokość klatki w pixelach
+- `off_drawX[i]`   — draw-offset X (kompensacja foot-anchor)
+- `off_drawY[i]`   — draw-offset Y
 
-Then a `uint32_t pix_off_arr[frame_count]` of byte offsets (relative
-to file start) for each frame's pixel data. The pixel data itself is
-either raw 8bpp (`kind=2`) or RLE-compressed (`kind=3`).
+Potem `uint32_t pix_off_arr[frame_count]` z byte offsetami (relative
+to file start) na pixel data każdej klatki. Sam pixel data to albo
+raw 8bpp (`kind=2`) albo RLE-compressed (`kind=3`).
 
-### 3.1 RLE encoding (`kind=3`)
-Header is 3 bytes:
-| Off | Size | Field            | Notes |
-|----:|-----:|------------------|-------|
-|   0 | 1    | `fill_value`     | usually 0 = transparent |
-|   1 | 1    | `marker_A`       | byte introducing run-of-fill |
-|   2 | 1    | `marker_B`       | byte introducing run-of-arbitrary-value |
+### 3.1 Kodowanie RLE (`kind=3`)
+Header to 3 bajty:
 
-Stream rules:
-- `byte == marker_A` → next byte = count-1; emit `count` × `fill_value`
-- `byte == marker_B` → next byte = count-1; next byte = value; emit `count` × value
-- otherwise → emit the byte once
+| Off | Size | Field | Notes |
+|----:|-----:|---|---|
+|   0 | 1 | `fill_value` | zwykle 0 = transparent |
+|   1 | 1 | `marker_A` | wprowadza run-of-fill |
+|   2 | 1 | `marker_B` | wprowadza run-of-arbitrary-value |
 
-Decoder: `DepackRleFrame` in `src/graphics.c`.
+Reguły streamu:
+- `byte == marker_A` → następny byte = count-1; emit `count` × `fill_value`
+- `byte == marker_B` → następny byte = count-1; następny = value; emit `count` × value
+- w innym wypadku → emit byte raz
 
-### 3.2 `flag_22` bits
-| Bit | Meaning                                          |
-|----:|--------------------------------------------------|
-| 0   | alpha-plane source (use RGB12 quantization blit) |
-| 1   | 8bpp click test (vs 1bpp packed)                 |
+Dekoder: `DepackRleFrame` w `src/graphics.c`.
 
-Routed by:
-- entity flag 0x100 (`actor.c:1050`) → BlitAlphaScaled mode 2
-- click-mask flag at entity[+0x14] (`stubs.c:1789+`)
+### 3.2 Bity `flag_22`
+| Bit | Znaczenie |
+|----:|---|
+| 0 | alpha-plane source (użyj RGB12 quantization blit) |
+| 1 | 8bpp click test (vs 1bpp packed) |
 
----
-
-## 4. MASK file — `.msk` (`ASSET_MAGIC_MASK = 'MASK'`)
-
-Click-region masks. Same overall structure as ANIM (header + per-frame
-metadata + pixel blobs) but with 1-bpp packed pixel data — `(w+7) & ~7
-/ 8` bytes per row. Used for hit-testing (`ClickHitTest` switch on
-flag_22 bit at entity[+0x14]).
+Routowane przez:
+- entity flag 0x100 (`actor/render.c`) → BlitAlphaScaled mode 2
+- click-mask flag pod entity[+0x14] (`stubs.c`)
 
 ---
 
-## 5. FILD walkability — `.fld` (`ASSET_MAGIC_FILD = 'FILD'`)
+## 4. Plik MASK — `.msk` (`ASSET_MAGIC_MASK = 'MASK'`)
 
-Per-room walkability bitmap. Single frame, 1-bpp packed, sized to the
-walkable region of the background. Header records origin (`ox`, `oy`)
-and stride for partial-bitmap overlays.
-
-| Off | Size | Field        | Notes                                 |
-|----:|-----:|--------------|---------------------------------------|
-|   0 | 4    | `magic`      | 'FILD' (0x444C4946)                   |
-|   4 | 2    | `w`          | bitmap width in pixels                |
-|   6 | 2    | `h`          | bitmap height                         |
-|   8 | 2    | `ox`         | origin X on background                |
-|  10 | 2    | `oy`         | origin Y on background                |
-|  12 | 2    | `stride`     | bytes per row (`= (w+7)/8`)           |
-|  14 | ...  | pixels       | 1-bpp packed, LSB = leftmost          |
-
-Bit set → walkable. Read by `is_walkable_at(x,y)` in `src/game.c`.
+Maski regionów klikalnych. Struktura podobna do ANIM (header +
+per-frame metadata + pixel bloby) ale z 1-bpp packed pixel data —
+`(w+7) & ~7 / 8` bajtów per row. Używane do hit-testingu
+(`ClickHitTest` switch na flag_22 bit pod entity[+0x14]).
 
 ---
 
-## 6. PIC backgrounds — `.pic`
+## 5. Walkability FILD — `.fld` (`ASSET_MAGIC_FILD = 'FILD'`)
 
-Static room backgrounds, 8-bpp paletted, full screen-size (640×480).
-Format (port: `paint_rawb_pic` consumer):
+Per-room bitmapa walkability. Pojedyncza klatka, 1-bpp packed,
+rozmiar = walkable region tła. Header trzyma origin (`ox`, `oy`)
+i stride dla partial-bitmap overlays.
 
-| Off  | Size | Field    | Notes                            |
-|-----:|-----:|----------|----------------------------------|
-|    0 | 2    | `w`      | width  (typically 640)           |
-|    2 | 2    | `h`      | height (typically 480)           |
-|    4 | 0x304| header   | misc flags + padding             |
-|  0x308 | w*h | pixels   | flat 8bpp                        |
+| Off | Size | Field | Notes |
+|----:|-----:|---|---|
+|   0 | 4 | `magic` | 'FILD' (0x444C4946) |
+|   4 | 2 | `w` | szerokość w pixelach |
+|   6 | 2 | `h` | wysokość |
+|   8 | 2 | `ox` | origin X na tle |
+|  10 | 2 | `oy` | origin Y na tle |
+|  12 | 2 | `stride` | bajtów per row (`= (w+7)/8`) |
+|  14 | … | pixels | 1-bpp packed, LSB = leftmost |
 
-The 0x308 prefix is treated as opaque metadata by the port (consumed
-by `paint_rawb_pic` which only reads pixels from offset 0x308).
+Bit set → walkable. Czytane przez `is_walkable_at(x,y)` w `src/game.c`.
 
 ---
 
-## 7. PAL palette — `.pal`
+## 6. Tła PIC — `.pic`
 
-Flat 256×3 BGR triplets (768 bytes total). Loaded directly into
-`g_palette_rgb` and applied via `InstallPalette` which also rebuilds
-the RGB12 quantization LUTs for alpha-plane rendering (T7).
+Statyczne tła pokoi, 8-bpp paletted, full screen-size (640×480).
+Format (consumer: `paint_rawb_pic`):
+
+| Off | Size | Field | Notes |
+|----:|-----:|---|---|
+|     0 | 2 | `w` | szerokość (typowo 640) |
+|     2 | 2 | `h` | wysokość (typowo 480) |
+|     4 | 0x304 | header | misc flags + padding |
+| 0x308 | w*h | pixels | flat 8bpp |
+
+Prefix 0x308 jest traktowany jako opaque metadata przez port
+(`paint_rawb_pic` czyta pixele tylko od offsetu 0x308).
+
+---
+
+## 7. Paleta PAL — `.pal`
+
+Flat 256×3 BGR triplety (768 bajtów total). Ładowana bezpośrednio do
+`g_palette_rgb` i aplikowana przez `InstallPalette` która rebuilduje
+też LUT-y RGB12 quantization dla alpha-plane rendering.
 
 ```
 +--- byte 0 ---+--- byte 1 ---+--- byte 2 ---+ ...
 | B[0]         | G[0]         | R[0]         | B[1] ...
 ```
 
-The original engine occasionally fades-loads a partial palette (rows
-N..N+M only); this maps to `InstallPalette(rgb, first)` where `first`
-selects the starting index.
+Oryginał czasami fadem ładuje partial paletę (rzędy N..N+M tylko);
+mapuje to się na `InstallPalette(rgb, first)` gdzie `first` wybiera
+starting index.
 
 ---
 
-## 8. Futura.30 bitmap font
+## 8. Bitmap font Futura.30
 
-Custom bitmap font. Loaded once at startup (`PreloadCommonAssets`),
-parsed by `ParseFutFontFile` (`src/font.c`). The format is a Big-
-Endian header + per-glyph descriptor array + glyph bitmaps (1-bpp
-packed for system text, color-plane for menu text).
+Custom bitmap font. Ładowany raz przy starcie (`PreloadCommonAssets`),
+parsowany przez `ParseFutFontFile` (`src/font.c`). Format to
+Big-Endian header + per-glyph descriptor array + glyph bitmaps
+(1-bpp packed dla system text, color-plane dla menu text).
 
-Used by:
-- `RenderTextLineToBuffer` for op 0x09 PRINT and dialog speech
-- `MeasureTextLine` for layout
+Używany przez:
+- `RenderTextLineToBuffer` dla op 0x09 PRINT i dialog speech
+- `MeasureTextLine` dla layoutu
 
-Glyph table is the standard Mazovia ASCII range used in Polish DOS-era
-games (codes 0x80+).
+Glyph table to standardowy zakres Mazovia ASCII używany w polskich
+grach z DOS-erki (kody 0x80+).
 
 ---
 
 ## Reference implementations
 
-| Format | Reader                              | Writer (tool)              |
-|--------|-------------------------------------|----------------------------|
-| DTA    | `src/archive.c`                     | `tools/dta-extract.c`      |
-| PKv2   | `src/depack.c`                      | `tools/pkv2-depack.c`      |
-| ANIM   | `src/assets.c` (`LoadAssetFromDtaBase`) | — (game-time decoder)  |
-| MASK   | `src/assets.c` + `ClickHitTest`     | — |
-| FILD   | `src/assets.c` + `is_walkable_at`   | — |
-| PIC    | `paint_rawb_pic` in `src/game.c`    | — |
-| PAL    | `InstallPalette` in `src/graphics.c`| — |
-| Font   | `src/font.c`                        | — |
+| Format | Reader | Writer (tool) |
+|---|---|---|
+| DTA | `src/archive.c` | `tools/dta-extract.c` |
+| PKv2 | `src/depack.c` | `tools/pkv2-depack.c` |
+| ANIM | `src/assets.c` (`LoadAssetFromDtaBase`) | — (decoder game-time) |
+| MASK | `src/assets.c` + `ClickHitTest` | — |
+| FILD | `src/assets.c` + `is_walkable_at` | — |
+| PIC | `paint_rawb_pic` w `src/game.c` | — |
+| PAL | `InstallPalette` w `src/graphics.c` | — |
+| Font | `src/font.c` | — |
 
-For binary-faithful asset round-tripping (e.g. extracting frames to
-PNG, repacking), build the standalone tools:
+Dla binary-faithful asset round-trippingu (np. ekstrakcja klatek do
+PNG, repakowanie), zbuduj standalone tools:
 
-```
+```bash
 make tools
-./dta-extract /Volumes/WACKI_1/Dane_02.dta out/
-./pkv2-depack out/EBEK.WYC ebek.raw
+./dist/dta-extract /Volumes/WACKI_1/Dane_02.dta out/
+./dist/pkv2-depack out/EBEK.WYC ebek.raw
 ```
