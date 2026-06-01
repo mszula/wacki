@@ -108,7 +108,9 @@ jobs:
         id: sdl2-cache
         with:
           path: sdl2-install
-          key: sdl2-static-${{ matrix.os }}-${{ env.SDL2_VERSION }}
+          # Bump the suffix when changing the cmake flags below so
+          # cached builds from older flag sets don't get reused.
+          key: sdl2-static-${{ matrix.os }}-${{ env.SDL2_VERSION }}-sections
 
       - name: Build static SDL2 from source
         if: matrix.os != 'windows-latest' && steps.sdl2-cache.outputs.cache-hit != 'true'
@@ -117,9 +119,15 @@ jobs:
             "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz"
           tar xf sdl2.tar.gz
           cd SDL2-${SDL2_VERSION}
+          # -ffunction-sections + -fdata-sections so the engine link
+          # can drop individual unused SDL2 functions via
+          # --gc-sections / -dead_strip. Without these flags the
+          # linker can only drop whole .o files from the .a archive,
+          # which leaves a lot of slack.
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
                 -DSDL_SHARED=OFF -DSDL_STATIC=ON \
                 -DSDL_TEST=OFF \
+                -DCMAKE_C_FLAGS="-Os -ffunction-sections -fdata-sections" \
                 -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/sdl2-install"
           cmake --build build --parallel
           cmake --install build
@@ -188,6 +196,34 @@ jobs:
               echo "::error::dist/wacki.exe still imports SDL2.dll"
               exit 1
           fi
+
+      # ---- strip symbols + log final binary size -------------------
+      # The link already runs with -ffunction-sections + --gc-sections
+      # (Linux/mingw) / -dead_strip (macOS) + -flto + -Os, so most of
+      # the slimming happened during the link. `strip` shaves the
+      # remaining debug + symbol tables.
+      - name: Strip symbols (POSIX)
+        if: matrix.os != 'windows-latest'
+        run: |
+          bin=dist/wacki
+          before=$(wc -c < "$bin" | tr -d ' ')
+          if [ "${{ matrix.os }}" = "macos-latest" ] || [ "${{ matrix.os }}" = "macos-13" ]; then
+              strip "$bin"
+          else
+              strip --strip-all "$bin"
+          fi
+          after=$(wc -c < "$bin" | tr -d ' ')
+          printf '[size] dist/wacki: %s -> %s bytes\n' "$before" "$after"
+
+      - name: Strip symbols (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          bin=dist/wacki.exe
+          before=$(wc -c < "$bin" | tr -d ' ')
+          strip --strip-all "$bin"
+          after=$(wc -c < "$bin" | tr -d ' ')
+          printf '[size] dist/wacki.exe: %s -> %s bytes\n' "$before" "$after"
 
       # ---- package + upload ----------------------------------------
       - name: Package (POSIX)

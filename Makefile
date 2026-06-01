@@ -67,6 +67,33 @@ else
     LDFLAGS_STATIC :=
 endif
 
+# Size-optimisation knobs for the release artefact. -Os trades a few
+# % runtime perf for noticeably smaller code (fine for a 1997 point-
+# and-click). -ffunction-sections / -fdata-sections + the linker's
+# --gc-sections (Linux/mingw) or -dead_strip (macOS) drop unused
+# code paths inside statically-linked SDL2 — a big win since we
+# touch ~half of SDL2's API. -flto lets the linker see across TUs
+# for further dead-code elimination.
+#
+# Always on for STATIC_SDL2=1 (release path); never on for the
+# default dev build (faster compile, easier to debug).
+ifeq ($(STATIC_SDL2),1)
+    CFLAGS_SIZE := -Os -ffunction-sections -fdata-sections -flto
+    UNAME_S := $(shell uname -s 2>/dev/null)
+    ifeq ($(OS),Windows_NT)
+        LDFLAGS_SIZE := -flto -Wl,--gc-sections
+    else ifeq ($(UNAME_S),Linux)
+        LDFLAGS_SIZE := -flto -Wl,--gc-sections
+    else ifeq ($(UNAME_S),Darwin)
+        LDFLAGS_SIZE := -flto -Wl,-dead_strip
+    else
+        LDFLAGS_SIZE := -flto
+    endif
+else
+    CFLAGS_SIZE  :=
+    LDFLAGS_SIZE :=
+endif
+
 # T43 — debug build with AddressSanitizer + UBSan. Use `make debug` to
 # rebuild with sanitizers + frame pointer + no opt for actionable
 # backtraces. Crashes/leaks abort with a full stack.
@@ -206,7 +233,7 @@ all: engine tools
 
 engine: $(DIST)/wacki$(EXE)
 $(DIST)/wacki$(EXE): $(ENGINE_SRCS) | $(DIST)
-	$(CC) $(CFLAGS) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(SDL_LIB) $(LDFLAGS_STATIC)
+	$(CC) $(CFLAGS) $(CFLAGS_SIZE) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(SDL_LIB) $(LDFLAGS_STATIC) $(LDFLAGS_SIZE)
 
 # Debug build with sanitizers — separate binary so the release build
 # stays untouched. Run via $(DIST)/wacki-debug --headless for CI fuzz
