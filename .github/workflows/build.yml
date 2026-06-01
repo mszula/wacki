@@ -277,7 +277,12 @@ jobs:
           ls -la data/WACKI.EXE
 
       - name: Build engine (Docker / union-miyoomini-toolchain)
-        run: ./tools/build-miyoo.sh
+        run: |
+          ./tools/build-miyoo.sh
+          # Docker writes as root-in-container; on Linux runners that
+          # leaves the workspace root-owned and the next non-docker
+          # step can't create siblings under dist/. Reset ownership.
+          sudo chown -R "$USER:$USER" dist src/embedded_wacki_pe.c 2>/dev/null || true
 
       - name: Strip + log size
         run: |
@@ -290,6 +295,7 @@ jobs:
           docker run --rm --platform linux/amd64 \
             -v "$PWD:/root/workspace" -w /root/workspace "$IMG" \
             /opt/mmiyoo/bin/arm-linux-gnueabihf-strip --strip-all dist/wacki-miyoo
+          sudo chown -R "$USER:$USER" dist 2>/dev/null || true
           after=$(wc -c < dist/wacki-miyoo | tr -d ' ')
           printf '[size] dist/wacki-miyoo: %s -> %s bytes\n' "$before" "$after"
           ls -lh dist/wacki-miyoo
