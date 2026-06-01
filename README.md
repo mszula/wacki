@@ -1,284 +1,340 @@
-# wacki-src — reconstructed source of WACKI.EXE (Wacki, 1997)
+# Wacki
 
-Portable C reconstruction of the **Wacki** point-and-click adventure
-engine by Henryk Cygert (1997). Built from a full Ghidra reverse of the
-original `WACKI.EXE` (302 592 B, PE32).
+A portable C/SDL2 reconstruction of **Wacki** (1997) — a Polish
+point-and-click adventure written by Henryk Cygert. The game itself
+is entirely in Polish, set in Poland, and made in Poland; for that
+reason the rest of this README is in Polish too. The codebase, code
+comments, and architectural docs are in English so the engine stays
+hackable for anyone — but the user-facing material lives where its
+audience does.
 
-Each `.c` file carries the corresponding Ghidra address as a header
-comment so any line can be cross-referenced against the original
-decompilation. See `../WACKI_RE_REPORT.md` for the full RE write-up
-and `docs/architecture.md` for the module-level map.
+![Wacki](https://i.ytimg.com/vi/pVzsMB6r3hE/maxresdefault.jpg)
 
-**Status (round 31, 2026-05-29):** stage 1 grywalne end-to-end —
-intro AVI, menu, scene transitions, dialogue, save/load. PKv2 depack
-byte-perfect on all 1782 archive entries. Audio mixer 8 channels.
-Stages 2-5 not yet validated end-to-end (entry chain działa, ale
-brak interactive playthrough).
+---
 
-## Build & run
+## Co to w ogóle jest
 
-The engine builds + tests + runs on macOS, Linux, and Windows
-(MSYS2 / mingw-w64). Install SDL2 for your platform:
+**Wacki** to point-and-click adventure z 1997 roku — szukasz przedmiotów,
+gadasz z postaciami, łączysz rzeczy ze sobą, czasem ginie ci bohater i
+ładujesz save. Oryginał chodził na DirectDraw + WaveOut pod Win9x, na
+płycie CD-ROM, z autorską binarką `WACKI.EXE` (302 KB PE32).
 
-| Platform        | SDL2 install                                   |
-|-----------------|------------------------------------------------|
-| macOS (Homebrew)| `brew install sdl2`                            |
-| Debian / Ubuntu | `sudo apt install libsdl2-dev`                 |
-| Fedora          | `sudo dnf install SDL2-devel`                  |
-| Arch            | `sudo pacman -S sdl2`                          |
-| Windows (MSYS2) | `pacman -S mingw-w64-x86_64-{gcc,SDL2} make`   |
+To repo to **port silnika** zrekonstruowany z reverse-engineeringu tej
+binarki (Ghidra, 2026). Nie zawiera assetów gry — żeby zagrać,
+potrzebujesz własnej kopii płyty.
 
-Then:
+Co robi port, czego nie robi oryginał:
+
+- Chodzi na **macOS, Linux, Windows** i **Miyoo Mini Plus** (i kompatybilne
+  handheldy SigmaStar — Anbernic RG35XX, Powkiddy RGB30 itd.)
+- Statycznie linkowany — jedna binarka, zero zależności w runtime
+  (oprócz `WACKI.EXE` jako build-time dependency; szczegóły niżej)
+- 47 suit testów (458 case'ów), CI matrix dla 4 platform
+- Zachowuje binary-identyczny PKv2 depack i format save'a — możesz
+  wymieniać save'y z oryginałem
+
+---
+
+## Jak uruchomić
+
+### Co musisz mieć
+
+1. **Pliki gry** — `Dane_*.dta` z oryginalnej płyty + `WACKI.EXE`
+   (z tego embedujemy `.rdata`/`.data` w czasie buildu).
+2. **SDL2** — tylko na desktopie do buildu. Wersja release linkowana statycznie.
+
+| Platforma           | SDL2                                              |
+|---------------------|---------------------------------------------------|
+| macOS (Homebrew)    | `brew install sdl2`                               |
+| Debian / Ubuntu     | `sudo apt install libsdl2-dev`                    |
+| Fedora              | `sudo dnf install SDL2-devel`                     |
+| Arch                | `sudo pacman -S sdl2`                             |
+| Windows (MSYS2)     | `pacman -S mingw-w64-x86_64-{gcc,SDL2} make`      |
+
+### Build
+
+```bash
+mkdir -p data
+cp /Volumes/WACKI_1/*.DTA data/        # assety
+cp /Volumes/WACKI_1/WACKI.EXE data/    # tylko do buildu
+
+make all                               # → dist/wacki + tools
+./dist/wacki
+```
+
+Albo gotowe artefakty z GitHub Releases — statycznie linkowane, nic
+nie instalujesz.
+
+### Miyoo Mini Plus (i pin-kompatybilne handheldy)
+
+Build chodzi w kontenerze Docker z toolchainem buildroot.
+
+```bash
+make miyoo                             # → dist/wacki-miyoo (ARM ELF)
+./tools/pack-miyoo.sh                  # → dist/wacki-miyoo.zip (OnionOS .pak)
+```
+
+Zawartość `.zip` (`Wacki.pak/`) wrzuć na kartę SD pod `/Apps/` (OnionOS)
+lub `/App/` (stock firmware), do `data/` w środku dorzuć `.dta`-ki i
+gotowe.
+
+### Sterowanie
+
+| Platforma  | Ruch kursora     | Klik lewy   | Klik prawy   | Quit |
+|------------|------------------|-------------|--------------|------|
+| Desktop    | mysz             | LMB         | RMB          | ESC  |
+| Handheld   | D-pad (przyspiesza) | A (Space) | B (LCtrl)   | Menu |
+
+| Klawisz   | Co robi                                           |
+|-----------|---------------------------------------------------|
+| `ESC`     | wyjście                                           |
+| `SPACE`   | przełącz aktywną postać (Ebek ↔ Fjej)             |
+| `F5`      | quick-save (slot 0)                               |
+| `F9`      | quick-load (slot 0)                               |
+| `F12`     | menu pauzy                                        |
+| `Ctrl-C`  | graceful shutdown (jak ESC)                       |
+
+### Flagi runtime
+
+```bash
+./dist/wacki --headless                # bez okna (do CI / smoke)
+./dist/wacki --scale 2 --scaler linear # okno 1280×960, linear scaling
+./dist/wacki --seed 42                 # deterministyczny RNG
+```
+
+| Flaga / env                          | Efekt                                |
+|--------------------------------------|--------------------------------------|
+| `--headless` / `WACKI_HEADLESS=1`    | Brak okna i renderera                |
+| `--scale N` / `WACKI_SCALE=N`        | Okno N×640 × N×480, framebuffer zostaje 640×480 |
+| `--scaler MODE` / `WACKI_SCALER=...` | `nearest` / `linear` / `best`        |
+| `--seed N` / `WACKI_SEED=N`          | Seed dla `WackiRand`                 |
+| `WACKI_PATH=...`                     | Override ścieżki do `Dane_*.dta`     |
+
+Engine szuka assetów w kolejności: `$WACKI_PATH` → `./data/` →
+`<binary_dir>/data/` → `<binary_dir>/` → cwd. Case-fold działa, więc
+`DANE_02.DTA` z ISO9660 pod macOS znajdzie się tak samo jak
+`Dane_02.dta`.
+
+---
+
+## Architektura
+
+### Skąd ten kod
+
+Cały silnik jest **ręcznie zrekonstruowany** z dekompilacji
+`WACKI.EXE` w Ghidrze. Każdy plik `.c` ma adres oryginalnej funkcji w
+header-comment, żeby dało się ścigać każdą linijkę z powrotem do PE.
+Pełny raport RE: [`docs/architecture.md`](docs/architecture.md), opcody
+VM: [`docs/script-vm.md`](docs/script-vm.md), format binarny:
+[`docs/asset-format.md`](docs/asset-format.md).
+
+### Jak silnik widzi WACKI.EXE
+
+Cygertowy build trzymał tablice skryptów, palety, nazwy assetów i
+sztywne stringi w `.rdata` / `.data` PE. Port robi sztuczkę: w czasie
+buildu `tools/embed-pe-data` parsuje `WACKI.EXE`, wyciąga *tylko* te
+dwie sekcje danych i emituje je jako `const` tablicę slice'ów w
+`src/embedded_wacki_pe.c`. Loader PE w runtime rozwiązuje oryginalne
+VA-y (`0x40xxxx`) przeciw tej tablicy.
+
+Co to znaczy w praktyce:
+
+- Binarka jest **w pełni samodzielna w runtime** — `WACKI.EXE` jest
+  potrzebny tylko gdy się buduje
+- `.text` (x86 code), `.idata`, `.rsrc` są **pomijane** — engine ich
+  nie dotyka, więc port nie wykonuje x86 → port jest **w pełni
+  cross-platform na ARM** (stąd Miyoo działa)
+- Jednorazowa canary w `PeLoaderRead` zawyje w logu, jakby kiedykolwiek
+  spróbował odwołać się do pominiętej sekcji
+
+### Format danych
 
 ```
-make all                   # builds the engine + extractor tools into ./dist/
-mkdir -p data              # drop the .dta files + WACKI.EXE in:
-cp /Volumes/WACKI_1/*.DTA data/
-cp /Volumes/WACKI_1/WACKI.EXE data/   # build-time dep only — see note
-./dist/wacki               # runs the engine (release; quiet by default)
+Dane_XX.dta (BASE container)
+   └─ SPIS (directory entries — name + offset)
+   └─ PKv2 streams (LZ77 + Huffman-prefix, custom format)
+       └─ ANIM / MASK / FILD / PIC / PAL / .scr / .wav / FLIC
 ```
 
-> **Note on WACKI.EXE.** The runtime engine is self-contained — once
-> built, the resulting `dist/wacki` binary doesn't need WACKI.EXE
-> next to it. At build time, `tools/embed-pe-data` reads WACKI.EXE
-> once and emits the original `.rdata + .data` sections as a const
-> slice table baked straight into the binary. The PE loader resolves
-> every original-VA reference (verb tables, scripts, asset name
-> strings, komnata tables) against that slice table. .text / .idata
-> / .rsrc are skipped — the engine never touches them, and a
-> one-shot canary in `PeLoaderRead` would warn if that ever changed.
+PKv2 depack jest **byte-perfect** na wszystkich 1782 wpisach w
+`Dane_02.dta` (regresja: `tools/dta-validate.sh`).
 
-CI / release builds: pushes to `master` and tagged `v*` builds run
-the matrix in [`.github/workflows/build.yml`](.github/workflows/build.yml).
-Each runner pulls a copy of WACKI.EXE from a URL stored as the
-`WACKI_EXE_URL` GH Actions secret (the bytes never enter the repo
-or the published artifacts), builds the engine with **`STATIC_SDL2=1`**
-(SDL2 + every transitive system link baked in), runs the test suite,
-and uploads a per-platform archive. On tag push, the archives get
-attached to a GitHub Release automatically.
-
-Released artefacts are fully self-contained: macOS / Linux / Windows
-binaries that run on a fresh system without `brew install sdl2` /
-`apt install libsdl2`. Each CI leg fails if any SDL2 symbol remains
-dynamic in the binary (`otool -L` / `ldd` / `objdump -p` check). The
-local dev build defaults to dynamic SDL2 for faster iteration; pass
-`STATIC_SDL2=1` to `make` if you want to reproduce the released
-shape locally.
-
-The engine looks for the game data in this order:
-
-1. `$WACKI_PATH` if set
-2. `./data/`                        ← recommended default
-3. `<binary_dir>/data/`             ← when launched from elsewhere
-4. `<binary_dir>/` (next to ./wacki)
-5. the current working directory
-
-Case-folding is handled at archive-open time, so `DANE_02.DTA`
-(uppercase, as macOS reads them from an ISO 9660 disc) resolves the
-same as `Dane_02.dta`.
-
-## Build targets
-
-| Target            | Output                       | Notes                                  |
-|-------------------|------------------------------|----------------------------------------|
-| `make` / `make all` | `wacki` + tools            | Default release build (`-O2 -Wpedantic`) |
-| `make engine`     | `wacki`                      | Just the engine                        |
-| `make tools`      | `dta-extract`, `pkv2-depack` | Standalone asset tools                 |
-| `make debug`      | `wacki-debug`                | `-O0 -g -fsanitize=address,undefined`  |
-| `make test`       | `tests/run-tests`            | Unit tests (no SDL, 41 suites, 353 cases — production stubs.c linked) — see `tests/README.md` |
-| `make run`        | (runs `./wacki`)             | Quick launch                           |
-| `make clean`      | —                            | Removes binaries                       |
-
-## Runtime flags
-
-CLI flag or env var (env equivalents in parentheses):
-
-| Flag                 | Env var              | Effect                                         |
-|----------------------|----------------------|------------------------------------------------|
-| `--headless`         | `WACKI_HEADLESS=1`   | Skip Window/Renderer/Texture (CI/smoke runs)   |
-| `--seed N`           | `WACKI_SEED=N`       | Seed WackiRand for deterministic playback      |
-| `--scale N`          | `WACKI_SCALE=N`      | Window = N×640 × N×480 (framebuffer stays 640×480) |
-| `--scaler MODE`      | `WACKI_SCALER=MODE`  | `nearest` / `linear` / `best` — render quality hint |
-
-Interactive keys (in-game):
-
-| Key       | Action                                             |
-|-----------|----------------------------------------------------|
-| `ESC`     | quit                                               |
-| `SPACE`   | toggle active actor (Ebek / Fjej)                  |
-| `F5`      | quick-save to slot 0                               |
-| `F9`      | quick-load from slot 0                             |
-| Ctrl-C    | graceful shutdown (SIGINT handler, same as ESC)    |
-
-## Subsystem status
-
-| Subsystem                  | Status | Notes                                                                |
-|----------------------------|--------|----------------------------------------------------------------------|
-| Window / event pump        | ✅     | SDL2 — 640×480 8-bpp paletted backbuffer → SDL_Texture               |
-| CD detection               | ✅     | volume-label heuristics on Mac; original Win32 path under mingw      |
-| Archive container          | ✅     | BASE/SPIS layout fully parsed                                        |
-| PKv2 depack                | ✅     | byte-perfect on all 1782 entries (verified via `tools/dta-validate.sh`) |
-| Asset registry             | ✅     | ANIM/MASK/FILD/PIC/PAL headers + pointer table fixup                 |
-| Software blitter           | ✅     | color-key, opaque, translucent, scaled, alpha-plane (3 modes)        |
-| Palette install / present  | ✅     | shadow buffer → SDL_Texture via 8→32 LUT + RGB12 quantization LUT    |
-| Save / load                | ✅     | `Wacki.sav` r/w, slot restore, F5/F9 quick-save, atomic write        |
-| Font rasteriser            | ✅     | Futura.30 (BE format) — 1-bpp and colour-plane glyphs                |
-| Script VM (main)           | ✅     | 78 opcodes 0x00..0x57, line-by-line audit vs Ghidra (`docs/script-vm.md`) |
-| Script VM (per-entity)     | ✅     | opcodes 0x00..0x24 with verification                                 |
-| Walker / pathfinding       | ✅     | fixed-point line stepper + waypoint Dijkstra (`FUN_00404600`/`FUN_004046b0`) |
-| Audio mixer                | ✅     | single SDL_AudioDevice, 22050 Hz S16 stereo, 8 channels (1 music + 1 dialog + 6 SFX) |
-| Positional SFX stereo pan  | ✅     | `FUN_00410DA0` 1:1 + per-channel `gain_l`/`gain_r`                   |
-| Per-line dialog + lip-sync | ✅     | mixer ch 1 + `IsDialogLinePlaying` poll                              |
-| FLIC/AVI cutscenes         | ✅     | custom FLIC decoder (`src/flic.c`) — intro + death + stage-end AVIs  |
-| Inventory                  | ✅     | page-swap, AddItem/RemoveItem, op 0x1A-0x1F                          |
-| Dialog choices UI          | 🟡    | linear playback works; interactive choice picker (op 0x1A) deferred  |
-| Custom cursor animation    | 🟡    | OS cursor + held-item ghost; Krazek 10-state anim deferred           |
-| Health bar depletion       | 🟡    | renders, but depletion mechanism not RE'd (see `docs/health-bar-depletion.md`) |
-| Scene snapshot (op 0x2C)   | 🟡    | exit-reachability graph deferred — no consumer identified in port    |
-| Standalone runtime         | ❌     | `WACKI.EXE` still needed at runtime (Phase S embed planned)          |
-
-Legend: ✅ port 1:1 / ⚠️ approximation but functional / 🟡 partial /
-❌ not implemented.
-
-## Source tree
+### Per-frame tick
 
 ```
-include/wacki.h              types, magic numbers, module APIs (681 LOC)
+PlatformPumpEvents     drain SDL, virtual cursor, button latch
+  → ScriptVM.tick      78 main opcodes (script.c) +
+                       37 per-entity opcodes (actor/vm.c)
+  → walker step        16.16 fixed-point line stepper + Dijkstra waypoints
+  → render             Z-sorted entity list → 8-bpp shadow buffer
+  → PlatformPresent    palette LUT → ARGB8888 → SDL_Texture → SDL_RenderPresent
+  → audio mixer        callback on SDL_AudioDevice: 8 channels @22050 Hz
+```
+
+Wszystko jest jednowątkowe (poza callbackiem audio). Frame budget jest
+łaskawy — silnik z '97 nie zna pojęcia VSync, ale `SDL_RENDERER_PRESENTVSYNC`
+pinuje do odświeżania monitora.
+
+### Drzewko źródeł
+
+```
+include/wacki.h              typy, magic numbers, API modułów
+include/entity_offsets.h     byte offsets entity struct (EOFF_*)
 src/
-   main.c                    int main() + CheckCdRomDrive + arg parsing + SIGINT
-   game.c                    main game loop, stage loader, frame tick, scene I/O
-   graphics.c                portable 8-bpp blitter + alpha-plane scaled blit
+   main.c                    int main() + data-root + arg parsing + SIGINT
+   game.c                    main loop, stage loader, frame tick
+   graphics.c                portable 8-bpp blitter + alpha-plane
    audio.c                   SDL2 mixer (8 channels, 22050 Hz S16 stereo)
-   archive.c                 .dta (BASE/SPIS) container parser
+   archive.c                 BASE/SPIS container parser
    depack.c                  PKv2 LZ77 + Huffman-prefix decoder
    assets.c                  ANIM/MASK/FILD asset loaders
-   script.c                  .scr text-tagged loader + main bytecode VM (78 ops)
-   actor.c                   entity allocator + per-entity VM + walker + Z-sort
-   save.c                    Wacki.sav read/write + slot restore + atomic save
-   font.c                    Futura.30 parser + text rasteriser
-   flic.c                    FLIC/AVI cutscene decoder
    pe_loader.c               passive PE image map + xlat_binary_ptr
-   binary_data.c             embedded small blobs (palette etc.)
-   stubs.c                   plumbing: globals, LoadKomnata, ScriptCall*,
-                             Inventory, PanelHitTest, ClickHitTest,
-                             DialogStack*, SpeechBalloon
-   heap.c, cygio.c           shims around Cygert's Base_IO_CPP helpers
-   timer.c                   multimedia timer stub
-   platform_sdl.c            SDL2 window/event/present + audio device init
+   embedded_wacki_pe.c       (generated) .rdata + .data slice table
+   save.c                    Wacki.sav r/w + slot restore + atomic write
+   font.c                    Futura.30 parser + text rasteriser
+   flic.c, flic/             FLIC/AVI cutscene decoder
+   platform_sdl.c            SDL2 window/event/present + virtual cursor
+   log.c                     LOG_TRACE/DEBUG/INFO/WARN/ERROR macros
+   vm/                       main script VM (78 ops) + parser
+   actor/                    entity allocator + per-entity VM + walker
+   scene/                    stage lifecycle + per-frame tick + click queue
+   hud/                      panel + inventory + cursor
+   menu/                     main menu + chapter select + slot picker
+   audio/                    sound queue + cutscene audio + SFX
+   text/, anim/, script_bridge/   smaller utility layers
 tools/
+   embed-pe-data.c           PE → const slice table generator
    dta-extract.c             dump every file from a Dane_XX.dta
    pkv2-depack.c             decompress a standalone PKv2 blob
-   dta-validate.sh           regression harness (all 1782 SHA-256 checksums)
+   build-miyoo.sh            Docker wrapper for ARM cross-build
+   pack-miyoo.sh             produce OnionOS .pak
+   dta-validate.sh           PKv2 regression (1782 SHA-256 checksums)
    smoke-runner.sh           deterministic CI smoke (--seed × multiple)
-   dta-baseline.sha256       baseline checksums for dta-validate.sh
-docs/
-   architecture.md           module map + per-frame tick + scene lifecycle
-   script-vm.md              full opcode table (78 entries, 0x00..0x57)
-   asset-format.md           DTA / PKv2 / ANIM / MASK / FILD / PIC / PAL / font
-   health-bar-depletion.md   open research note (depletion mechanism TBD)
 ```
 
-## Quick demo
+---
 
-```
-$ ls data/
-Dane_02.dta  Dane_10.dta  …  WACKI.EXE
-$ ./wacki
-[wacki] data source: ./data
-[archive] ./data/Dane_02.dta mounted (1782 entries)
-[init] mounted archive Dane_02.dta
-[init] Futura.30 loaded (12608 bytes)
-[audio] 22050 Hz, stereo, 8 channels
-[avi] play ./data/Dane_10.dta (640x480, 100110 us/frame)
-[menu] entered: bg='(none)' mask='Tlo.wyc' atlas-frames=25 btns=5
-…
-```
+## Status podsystemów
 
-An SDL2 window opens at 640×480 showing the real WACKI title menu —
-the intro AVI plays first (Dane_10.dta, 5372 frames), then the menu
-loads from Dane_02.dta. Click "Maluch" to start stage 1.
+| Podsystem                  | Status | Uwagi                                                              |
+|----------------------------|--------|--------------------------------------------------------------------|
+| Standalone runtime         | ✅     | PE data sekcje embedded; runtime nie potrzebuje WACKI.EXE          |
+| Cross-platform (desktop)   | ✅     | macOS arm64, Linux x86_64, Windows x86_64 (MSYS2/mingw)            |
+| Handheld (armv7l)          | ✅     | Miyoo Mini Plus + SigmaStar SSD20x (Anbernic, Powkiddy, …)         |
+| Window / event pump        | ✅     | SDL2 — 640×480 8-bpp paletted backbuffer → SDL_Texture             |
+| Virtual cursor             | ✅     | D-pad → akcelerowany kursor; addytywnie z myszą                    |
+| Archive container          | ✅     | BASE/SPIS layout fully parsed                                      |
+| PKv2 depack                | ✅     | byte-perfect na wszystkich 1782 entries                            |
+| Asset registry             | ✅     | ANIM/MASK/FILD/PIC/PAL headers + pointer table fixup               |
+| Software blitter           | ✅     | color-key, opaque, translucent, scaled, alpha-plane                |
+| Palette install / present  | ✅     | shadow → SDL_Texture przez 8→32 LUT + RGB12 kwantyzator            |
+| Save / load                | ✅     | `Wacki.sav` r/w + atomic write (POSIX rename / MoveFileEx)         |
+| Font rasteriser            | ✅     | Futura.30 BE — 1-bpp i colour-plane glyphy                         |
+| Script VM (main)           | ✅     | 78 opcodes 0x00..0x57, line-by-line audit vs Ghidra                |
+| Script VM (per-entity)     | ✅     | opcodes 0x00..0x24                                                 |
+| Walker / pathfinding       | ✅     | 16.16 fixed-point + waypoint Dijkstra                              |
+| Audio mixer                | ✅     | 22050 Hz S16 stereo, 8 channels (music + dialog + 6 SFX)           |
+| Positional SFX stereo pan  | ✅     | per-channel `gain_l`/`gain_r`                                      |
+| Per-line dialog + lip-sync | ✅     | mixer ch 1 + `IsDialogLinePlaying` poll                            |
+| FLIC/AVI cutscenes         | ✅     | custom FLIC decoder — intro + death + stage-end AVI                |
+| Inventory                  | ✅     | page-swap, AddItem/RemoveItem, op 0x1A-0x1F                        |
+| Stage 1 end-to-end         | ✅     | intro → menu → gameplay → dialogue → save → load                   |
+| Dialog choice picker UI    | 🟡    | linear playback OK; interaktywny picker (op 0x1A) deferred         |
+| Custom cursor animation    | 🟡    | OS cursor + held-item ghost; Krazek 10-state anim deferred         |
+| Health bar depletion       | 🟡    | renderuje, ale mechanizm depletion nie został wyciągnięty z RE     |
+| Scene snapshot (op 0x2C)   | 🟡    | exit-reachability graph deferred — nie ma consumera w porcie       |
+| Stages 2-5 (gameplay loop) | 🟡    | entry chain działa, end-to-end nie zweryfikowane interactively     |
 
-Close the window, press ESC, or send SIGINT (Ctrl-C) to exit (exit code 0).
+Legenda: ✅ port 1:1 / 🟡 partial — wszystko co poza 🟡 albo działa
+identycznie z oryginałem, albo jest świadomym wyjściem poza scope.
 
-## CD-protection
+---
 
-Stripped out per project rule #7. The portable build just scans for
-`Dane_02.dta` next to the binary; the original's volume-label check
-(`GetVolumeInformationA("WACKI_1")`) has been replaced with a simple
-directory scan in `CheckCdRomDrive()` (kept under its old name for
-cross-reference convenience).
+## Asset tools
 
-## Asset extraction
-
-The two standalone tools build with any C compiler:
-
-```
-./dta-extract /Volumes/WACKI_1/Dane_10.dta out/
-./pkv2-depack out/EBEK.WYC ebek.raw
-```
-
-Regression-checking the depacker:
-
-```
+```bash
 make tools
+./dist/dta-extract /Volumes/WACKI_1/Dane_10.dta out/
+./dist/pkv2-depack out/EBEK.WYC ebek.raw
+```
+
+Regresja depack (porównanie SHA-256 ze złotymi):
+
+```bash
 ./tools/dta-validate.sh data/DANE_02.DTA
 # [validate] PASS — all 1782 files match baseline
 ```
 
-## Testing
+---
 
-- `make test` — 41 unit-test suites, 353 cases, zero SDL deps. Production `stubs.c` linked → Inventory state machine + sound queue stereo pan exercised end-to-end. Covers
-  PKv2 depack, DTA archive parse + ANIM/MASK/FILD asset loader, PE
-  loader + xlat_binary_ptr, Wacki.sav file I/O roundtrip + atomic write,
-  Futura.30 font parser + tagged-table walker, RNG determinism + golden
-  vector, struct layout invariants (compile-time), walker math (16.16
-  fixed-point characterization), RLE decoder + palette LUT, .scr text
-  parser (LoadScriptFile + FindScriptByStageAndRoom + tag lookup).
-  **VM coverage** is deep: production `RunScriptInterpreter` linked via
-  SDL stub, exercised with hand-crafted bytecode — arithmetic ops,
-  this/that remap, IF/ELSE/GOTO/LABEL/LOOP control flow including
-  round-31 regression for `skip_to_endif` 0x55 handling, ScriptCall*
-  dispatch with capture stubs (sound, pal, scene, walker, dialog).
-  See `tests/README.md` for coverage map + how to add a suite.
-- `tools/dta-validate.sh` — depack regression: extracts every file
-  from `DANE_02.DTA`, compares SHA-256 vs `tools/dta-baseline.sha256`.
-- `tools/smoke-runner.sh` — deterministic smoke runs over `--seed N`,
-  exercises menu → stage 1 entry path.
-- `make debug` — ASAN/UBSan build for fuzz / crash debugging.
-- Manual: launch interactively, click "Maluch" to reach gameplay.
-  Headless `./wacki --headless` reaches 0-13 komnaty (variance from
-  SDL macOS focus-event injection; ≠ port regression).
+## Testy
 
-## Documentation map
+```bash
+make test          # 47 suit, 458 case'ów, zero SDL deps, <1s
+make debug         # build z ASan + UBSan dla fuzz / crash debug
+```
 
-- `README.md` (this file) — overview, build, status
-- `CLAUDE.md` — project rules, workflow, round-by-round deltas,
-  lessons learned (tribal knowledge for port maintenance)
-- `REFACTOR.md` — code-hygiene plan (R0.* mostly shipped, R1+ proposals)
-- `REVIEW.md` — project-level review (docs gaps, structural debt)
-- `docs/architecture.md` — module map + frame tick + scene lifecycle
-- `docs/script-vm.md` — opcode reference (78 entries)
-- `docs/asset-format.md` — binary spec for every file format
-- `docs/health-bar-depletion.md` — open research note
-- `../WACKI_RE_REPORT.md` — full Ghidra RE write-up
+Co pokrywają testy:
 
-## Known limitations
+- **Format**: PKv2 depack, DTA archive parse, ANIM/MASK/FILD loader,
+  PE loader + `xlat_binary_ptr`
+- **Save**: `Wacki.sav` roundtrip + atomic write na wszystkich
+  platformach (Windows używa `MoveFileEx` zamiast `rename`, żeby
+  zachować atomicity przy istniejącym pliku)
+- **VM**: produkcyjne `RunScriptInterpreter` linkowane przez stub SDL,
+  egzekwowane hand-craftowanym bytekodem — arytmetyka, this/that
+  remap, IF/ELSE/GOTO/LABEL/LOOP, `ScriptCall*` dispatch
+- **Math**: walker fixed-point determinizm + golden vector,
+  RNG determinizm
+- **Layout**: compile-time invariants na strukturach (entity offsets,
+  WackiSaveFile size)
+- **Engine**: inventory state machine, sound queue z pannami stereo,
+  panel/click hit-test, click queue FIFO, update registration LIFO
 
-1. **Standalone runtime** — `WACKI.EXE` must be in the data dir at
-   runtime (PE loader reads bytecode + tables from it). Phase S
-   (embed PE as static buffer at build time) is planned in `REFACTOR.md`
-   but not yet shipped.
-2. **Stages 2-5** — entry chain works, but no interactive playthrough
-   validation. Stage 1 is the only stage with end-to-end test coverage.
-3. **Dialog choice picker** — op 0x1A in the main VM dispatches choices,
-   but the interactive picker UI (panel page-swap + result_key) is
-   deferred (stages 1-2 scripts don't use multi-choice dialogues).
-4. **Health bar depletion** — renders correctly, but the depletion
-   mechanism wasn't found in Ghidra (see open research note).
-5. **Custom cursor animation** — `FUN_004067C0` Krazek 10-state machine
-   not implemented; port uses OS cursor + held-item ghost overlay.
+Plus dwa zewnętrzne smoke-testy:
+
+- `tools/dta-validate.sh` — depack regression na 1782 plikach
+- `tools/smoke-runner.sh` — deterministyczne `--seed N` przejścia
+  menu → stage 1
+
+---
+
+## CI / release
+
+Push na `master` odpala matrix [4 legi]:
+
+- `macos-latest` (arm64)
+- `ubuntu-latest` (x86_64)
+- `windows-latest` (MSYS2 / mingw-w64)
+- Miyoo Mini Plus (armv7l, Docker / buildroot)
+
+Każdy leg buduje statycznie linkowaną binarkę (poza Miyoo, gdzie SDL2
+przychodzi z firmware OnionOS), odpala 458 testów i loguje zestripowany
+rozmiar artefaktu. Push tagu `v*` dokleja artefakty do GitHub Release
+automatycznie.
+
+`WACKI.EXE` przychodzi do CI przez sekret `WACKI_EXE_URL` (prywatny
+serwer z pobraniem na czas joba) — bytes nie trafiają nigdy do repo
+ani do publishowanych artefaktów.
+
+---
+
+## Limity i co dalej
+
+1. **Stages 2-5** — entry chain działa, brak interactive playthrough.
+   Stage 1 to jedyny z pełnym end-to-end coverage.
+2. **Dialog choice picker** — interaktywny UI deferred (skrypty stage 1-2
+   nie używają multi-choice dialogów).
+3. **Health bar depletion** — renderuje OK, ale mechanizm odejmowania
+   życia nie wyszedł z reverse'u. [`docs/health-bar-depletion.md`](docs/health-bar-depletion.md)
+   to open question.
+4. **Krazek 10-state cursor anim** — w porcie OS cursor + held-item
+   ghost. Krazek (`FUN_004067C0`) odłożony.
+
+---
 
 ## Credits
 
-* Original engine & game design — **Henryk Cygert** (1997).
-* This RE + reconstruction — Ghidra MCP session, May 2026.
+- **Henryk Cygert** — oryginalny silnik i game design (1997)
+- TopWare Interactive Polska — publisher oryginalny
+- Port + reverse engineering — Ghidra MCP, 2026
