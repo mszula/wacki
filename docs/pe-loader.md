@@ -19,7 +19,7 @@ sekcji kodu zapomniano.
 flowchart TB
     A[data/WACKI.EXE<br/>302 KB PE32] --> B[tools/embed-pe-data<br/>build-time]
     B --> C[Parse PE header<br/>find .rdata + .data sections]
-    C --> D[src/embedded_wacki_pe.c<br/>const uint8_t blob[] +<br/>const PeSlice slices[]]
+    C --> D["src/embedded_wacki_pe.c<br/>const uint8_t blob + const PeSlice slices"]
     D --> E[Linked into wacki binary]
 
     F[Runtime engine] --> G[xlat_binary_ptr 0x00428220]

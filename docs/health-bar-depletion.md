@@ -19,7 +19,7 @@ flowchart LR
     C --> D{Health change<br/>trigger?}
     D -- nie --> E[frame_idx stays]
     D -- tak --> F[Bytecode advance frame<br/>via SET_FRAME / ADVANCE_FRAME]
-    F --> G[hud_paint.c paint_health_bar<br/>re-blituje atlas frame[idx]]
+    F --> G["hud_paint.c paint_health_bar<br/>re-blituje atlas frame[idx]"]
     E --> G
 ```
 

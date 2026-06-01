@@ -16,7 +16,7 @@ z trzech mocno powiązanych mechanizmów.
 ```mermaid
 flowchart TB
     A[Wacky.scr] --> B[ParseSamplTagsForKomnata<br/>per komnata enter]
-    B --> C[(g_dynamic_sfx[]<br/>flat table)]
+    B --> C[("g_dynamic_sfx flat table")]
 
     D[Per-entity VM tick] --> E[Atlas frame_idx changes]
     E --> F[TriggerFrameSfx<br/>asset_name, frame]
@@ -73,8 +73,8 @@ Co tu się dzieje:
 flowchart LR
     A[komnata enter:<br/>load 'maluch.pic'] --> B[parse_komnata_sampl_tags]
     B --> C[ResetDynamicSfxTable]
-    C --> D[Pass 1: parse<br/>[etap N]/[komnata]init]
-    D --> E[Pass 2: parse<br/>[etap N]/[komnata]maluch.pic]
+    C --> D["Pass 1: parse [etap N] / [komnata] init"]
+    D --> E["Pass 2: parse [etap N] / [komnata] maluch.pic"]
     E --> F[(g_dynamic_sfx<br/>filled)]
 ```
 
