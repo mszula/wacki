@@ -104,7 +104,7 @@ void ActorWalkToBlocking(int idx, int16_t tx, int16_t ty)
         ProcessGameFrameTick();
         if (PlatformShouldQuit() || g_game_over_code) break;
         if (g_lmb_clicked) { interrupted = 1; break; }
-        SDL_Delay(WALK_FRAME_DELAY_MS);
+        EnginePaceFrame(WALK_FRAME_DELAY_MS);
     }
 
     walk_epilogue(interrupted);
@@ -130,7 +130,7 @@ static int run_stagger_phase(void)
                ? (int)g_frame_delta_ticks
                : WALK_STAGGER_FALLBACK_TICK_DELTA;
         stagger_left -= dt;
-        SDL_Delay(WALK_FRAME_DELAY_MS);
+        EnginePaceFrame(WALK_FRAME_DELAY_MS);
     }
     return 0;
 }
@@ -171,7 +171,7 @@ void ActorWalkBothBlocking(int16_t tx, int16_t ty, int mode)
         ProcessGameFrameTick();
         if (PlatformShouldQuit() || g_game_over_code) break;
         if (g_lmb_clicked) { interrupted = 1; break; }
-        SDL_Delay(WALK_FRAME_DELAY_MS);
+        EnginePaceFrame(WALK_FRAME_DELAY_MS);
     }
 
 done:

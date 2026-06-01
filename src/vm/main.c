@@ -319,7 +319,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
         case OP_GET_ACTIVE_ACTOR: g_return_reg = (uint16_t)(g_active_actor + 1); break;
 
         /* ---- wait / pacing ------------------------------------------- */
-        case OP_FRAME_TICK: ProcessGameFrameTick(); SDL_Delay(33); break;  /* T-anim-speed */
+        case OP_FRAME_TICK: ProcessGameFrameTick(); EnginePaceFrame(33); break;  /* T-anim-speed */
         case OP_WAIT_MS: {                            /* WAIT — a0 in 10 ms TICKS.
              *
              * g_frame_delta_ticks is in 10 ms units (the original
@@ -333,7 +333,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                 if (PlatformShouldQuit() || g_game_over_code) break;
                 uint32_t step = g_frame_delta_ticks ? g_frame_delta_ticks : 3;
                 left = (left > step) ? left - step : 0;
-                SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
+                EnginePaceFrame(33);
             }
             break;
         }
@@ -351,7 +351,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                        (*(uint32_t *)(eb + 0x4C) || *(uint32_t *)(eb + 0x50))) {
                     ProcessGameFrameTick();
                     if (PlatformShouldQuit() || g_game_over_code) break;
-                    SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
+                    EnginePaceFrame(33);
                 }
             }
             break;
@@ -371,7 +371,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                        *(uint16_t *)(eb + 0x30) != target) {
                     ProcessGameFrameTick();
                     if (PlatformShouldQuit() || g_game_over_code) break;
-                    SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
+                    EnginePaceFrame(33);
                 }
             }
             break;
@@ -390,7 +390,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                 while (safety-- > 0 && *(uint16_t *)(eb + 0x30) != target) {
                     ProcessGameFrameTick();
                     if (PlatformShouldQuit() || g_game_over_code) break;
-                    SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
+                    EnginePaceFrame(33);
                 }
             }
             break;
@@ -1270,7 +1270,7 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                                 g_lmb_clicked = 0;
                                 break;
                             }
-                            SDL_Delay(33);  /* T-anim-speed: match main loop pacing */
+                            EnginePaceFrame(33);
                             budget_ms -= 16;
                         }
                     }

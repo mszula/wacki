@@ -322,7 +322,7 @@ static void play_bomb_explosion(void)
                 played_bang = 1;
             }
             TickMenuMusic();
-            SDL_Delay(BOMB_FRAME_DELAY_MS);
+            EnginePaceFrame(BOMB_FRAME_DELAY_MS);
         }
         FreeAsset(a);
     }
@@ -386,7 +386,7 @@ static void play_fiacik_intro(void)
             paint_anim_button_at(a, f, 0, 0, 0);   /* honour atlas hot-spot */
             FlushFrameToPrimary();
             TickMenuMusic();
-            SDL_Delay(FIACIK_FRAME_DELAY_MS);
+            EnginePaceFrame(FIACIK_FRAME_DELAY_MS);
         }
         FreeAsset(a);
     }
@@ -414,7 +414,7 @@ static void play_loading_screen(void)
         FlipBuffersClearWith(0);
         paint_rawb_pic(bg_raw, bg_size, 0);
         FlushFrameToPrimary();
-        SDL_Delay(LOADING_SCREEN_FRAME_DELAY_MS);
+        EnginePaceFrame(LOADING_SCREEN_FRAME_DELAY_MS);
         if (HasPendingKey()) {
             uint16_t k = WaitForKey();
             if (k == VK_ESCAPE) break;

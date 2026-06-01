@@ -324,7 +324,7 @@ const char *play_demo_scene(const DemoScene *scene)
         }
         handle_pause_menu_request(&quit, &next_scene);
 
-        if (!g_no_pacing) SDL_Delay(TARGET_FRAME_DELAY_MS);
+        if (!g_no_pacing) EnginePaceFrame(TARGET_FRAME_DELAY_MS);
     }
 
     cleanup_scene_assets();

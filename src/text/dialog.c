@@ -317,7 +317,7 @@ static void dialog_play_line(uint16_t actor, const char *text,
             ProcessGameFrameTick();
             break;
         }
-        SDL_Delay(DIALOG_FRAME_DELAY_MS);
+        EnginePaceFrame(DIALOG_FRAME_DELAY_MS);
     }
     /* Flip atlas back to the speaker's original pose so they don't
      * stay frozen in talking-head form between lines. */

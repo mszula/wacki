@@ -304,7 +304,7 @@ int RunMenuScene(int transition_mode, SceneDef *scene)
         int quit_rc = poll_menu_keyboard_quit(scene);
         if (quit_rc != MENU_RC_NONE) rc = quit_rc;
 
-        SDL_Delay(MENU_FRAME_DELAY_MS);
+        EnginePaceFrame(MENU_FRAME_DELAY_MS);
     } while (rc == MENU_RC_NONE);
 
     if (buttons) FreeAsset(buttons);

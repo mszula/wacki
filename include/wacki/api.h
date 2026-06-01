@@ -45,6 +45,13 @@ void    PlatformPushTypedChar(uint8_t c);
 
 int  FindDataRoot(void);
 
+/* Deadline-aware frame pacer (src/timer.c). Caps the calling loop at
+ * 1000/target_ms FPS but never sleeps PAST the deadline. Replaces the
+ * old `SDL_Delay(target_ms)` pattern that added a fixed delay on top
+ * of frame work — on slow hardware (Miyoo Mini Plus Cortex-A7) that
+ * dropped sustained FPS roughly in half. */
+void EnginePaceFrame(uint32_t target_ms);
+
 /* ---- graphics.c -------------------------------------------------- */
 
 void BlitSpriteToBackbuffer(uint16_t dx, uint16_t dy,
