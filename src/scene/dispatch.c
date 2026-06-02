@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/dispatch.c — click-event → bytecode dispatch.
  *
  * DispatchClickEvent is the routing point between the scene-input

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_more_ops.c — VM opcodes not covered by earlier suites.
  *
  * Picks up the rest of the 78-opcode table:

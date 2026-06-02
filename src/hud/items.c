@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/hud/items.c — inventory item-name voice-overs.
  *
  * Hovering an inventory item in the bottom panel for ~2 seconds fires

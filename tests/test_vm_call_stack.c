@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_call_stack.c — CALL_SUB (0x25) / TAILCALL (0x24).
  *
  * Both opcodes resolve their target via `xlat_binary_ptr(VA)` — they

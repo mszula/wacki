@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/navigation.c — komnata (room) transitions from script.
  *
  * Script opcode 0x20 GO_EXIT calls ScriptGoToKomnata to switch the

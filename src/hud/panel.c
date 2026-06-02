@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/hud/panel.c — verb-panel cursor hit-test.
  *
  * The HUD verb panel sits across the bottom of the screen with six

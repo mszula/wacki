@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_binary_data.c — xlat_binary_ptr / xlat_asset_name.
  *
  * Both wrappers are trivial: they forward to PeLoaderRead(va). The

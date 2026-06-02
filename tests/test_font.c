@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_font.c — Futura.30 parser + tagged-table walker.
  *
  * Coverage:

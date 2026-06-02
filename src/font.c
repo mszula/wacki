@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/font.c — "Futura.30" bitmap font: parse + raster.
  *
  * .fut file format (all multi-byte values are BIG-ENDIAN):

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/assets.c — ANIM (.wyc), MASK (.msk), FILD (.fld) loaders.
  *
  * All assets share the same in-file layout:

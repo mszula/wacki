@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_panel_hit_test.c — verb-panel hit-test (production PanelHitTest).
  *
  * PanelHitTest maps mouse coords to a panel verb. The HUD verb-bar at the

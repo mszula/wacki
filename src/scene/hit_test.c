@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/hit_test.c — scene click resolver + verb_id reverse lookup.
  *
  * Two public helpers:

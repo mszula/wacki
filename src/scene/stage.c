@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/stage.c — stage descriptor table + per-stage actor anims.
  *
  * Wacki ships five stages, each with a PE-binary descriptor that lists

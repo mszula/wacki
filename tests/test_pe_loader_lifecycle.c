@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_pe_loader_lifecycle.c — Init/Free/Init cycle.
  *
  * The PE loader holds module-level state (g_pe_image / size / base).

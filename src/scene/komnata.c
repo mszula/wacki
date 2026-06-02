@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/komnata.c — room (komnata) loader.
  *
  * LoadKomnata is the engine's "switch to a different room" routine.

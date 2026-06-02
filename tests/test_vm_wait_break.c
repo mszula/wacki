@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_wait_break.c — wait-loop break conditions.
  *
  * src/script.c has 4 wait-loop opcodes:

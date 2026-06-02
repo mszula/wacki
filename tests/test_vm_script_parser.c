@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_script_parser.c — .scr text-tagged parser.
  *
  * Wacky.scr / Gadki.scr are text-tagged files with sections like:

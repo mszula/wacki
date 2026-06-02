@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/archive.c — Cygert "BASE_IO_CPP" archive (.dta) handling.
  *
  * .DTA archive layout:

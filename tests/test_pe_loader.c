@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_pe_loader.c — passive PE32 image map.
  *
  * The PE loader maps a PE32 image (WACKI.EXE) so that any original-VA

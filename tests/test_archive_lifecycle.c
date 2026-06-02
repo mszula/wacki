@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_archive_lifecycle.c — DTA re-mount + lifecycle.
  *
  * test_archive.c + test_archive_extended.c cover happy-path mount and

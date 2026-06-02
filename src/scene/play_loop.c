@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/play_loop.c — per-room gameplay loop (play_demo_scene).
  *
  * Drives one komnata's gameplay from entry to exit. Sets up the

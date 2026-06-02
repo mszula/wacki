@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/registration.c — (kind, id) → Entity dispatch table.
  *
  * The central look-up that lets the script VM go from a (kind, id) pair

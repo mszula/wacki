@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* include/wacki/globals.h — engine-wide extern globals + aliases.
  *
  * Pulled out of include/wacki.h. The umbrella header still includes

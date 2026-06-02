@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/flic/decoder.c — FLIC (FLI/FLC) frame decoder.
  *
  * FLIC frames are sequenced as a stream of chunks, each prefixed by a

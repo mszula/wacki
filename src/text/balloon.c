@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/text/balloon.c — speech balloon rendering + dialog text.
  *
  * The largest single domain extracted from stubs.c. Three concerns:

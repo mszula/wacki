@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/menu/menu_loop.c — RunMenuScene + the menu's per-frame helpers.
  *
  * RunMenuScene is the generic loop that drives every SceneDef-based

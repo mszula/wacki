@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_timer.c — multimedia timer stubs.
  *
  * src/timer.c is the SDL-build no-op wrapper for the original engine's

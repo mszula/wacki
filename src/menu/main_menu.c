@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/menu/main_menu.c — title screen, main menu, RunMainGameLoop.
  *
  * Entry point is RunMainGameLoop, called from main.c. It drives the

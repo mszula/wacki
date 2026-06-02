@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* audio.c — SDL audio mixer + music/sfx/dialog dispatch.
  *
  * The cutscene playback shim (PlaySceneCutsceneAvi + InitializeDirect

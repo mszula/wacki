@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/bg_mask.c — scene background mask setup (op 0x2C).
  *
  * BG mask setup is the engine's "destroy everything at id=0 and re-load

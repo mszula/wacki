@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_save_io_extended.c — all-slot + settings persistence.
  *
  * test_save_io.c covers default-init + single-slot roundtrip. This

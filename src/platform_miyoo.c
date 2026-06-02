@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* _GNU_SOURCE must be defined before any system header so glibc's
  * features.h locks in the GNU extension subset — needed for
  * RTLD_DEFAULT in dlfcn.h. */

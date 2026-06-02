@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/script_bridge/entity.c — script-side entity manipulation bridges.
  *
  * Opcode bridges that operate on an existing entity (asset, sprite, or

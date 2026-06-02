@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_safety.c — VM safety net + boundary conditions.
  *
  * Pins three load-bearing safety invariants in RunScriptInterpreter:

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* include/entity_offsets.h — shared Entity byte-offset constants.
  *
  * The script VMs (both main and per-entity) address Entity fields by

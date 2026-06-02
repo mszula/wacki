@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_archive_extended.c — multi-entry DTA + edge cases.
  *
  * test_archive.c covers the 2-entry happy path. This file extends:

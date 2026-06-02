@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_pe_loader_malformed.c — PE loader defensive checks.
  *
  * src/pe_loader.c has multiple safety bails for malformed PE files.

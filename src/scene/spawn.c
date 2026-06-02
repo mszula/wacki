@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/spawn.c — entity spawn (op 0x30) + actor pre-spawn.
  *
  * Two entry points:

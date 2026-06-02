@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/anim/resolver.c — animation script lookup + bind.
  *
  * Two helpers used by the walker bind path:

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/vm/script_obj.c — .scr file loading + tag-based section lookup.
  *
  * Wacki ships its scripts as text-tagged files (.scr extension). A

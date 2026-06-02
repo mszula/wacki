@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_sound_queue.c — REAL sound queue + stereo pan math.
  *
  * Now that stubs.c is linked, we exercise production

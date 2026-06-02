@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/text/dialog.c — op 0x52 DialogBegin / op 0x53 DialogEnd.
  *
  * Two main jobs:

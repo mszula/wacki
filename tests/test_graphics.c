@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_graphics.c — graphics primitives that don't need SDL.
  *
  * Covers the pure-function part of src/graphics.c:

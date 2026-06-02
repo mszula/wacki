@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_assets_rle.c — ANIM kind=3 (RLE-compressed frames) integration.
  *
  * test_assets.c covers ANIM/MASK/FILD header parsing with flat (kind=2)

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /*
  * binary_data.c — minimal `xlat_binary_ptr` helper, PE loader fallback.
  *

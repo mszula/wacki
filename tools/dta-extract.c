@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /*
  * dta-extract.c — standalone extractor for Cygert's .dta archives.
  *

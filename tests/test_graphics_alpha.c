@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_graphics_alpha.c — BlitAlphaScaled + RGB12 quantization.
  *
  * Alpha-plane scaled blit (FUN_00410960) has 3 modes:

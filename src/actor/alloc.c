@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/alloc.c — entity lifecycle (allocate, init bitmap, free).
  *
  * Used by the script VM (SPAWN), the walk-behind mask builder, and the

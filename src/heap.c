@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/heap.c — thin C wrappers over malloc / free / calloc-with-flag.
  *
  * In the original engine these are C++ method exports of Cygert's

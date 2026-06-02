@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/komnata_scene.c — LoadKomnataScene + scene-load helpers.
  *
  * Higher-level wrapper around LoadKomnata (the script-level load in

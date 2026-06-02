@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/vm/opcodes.h — main script VM opcode constants.
  *
  * The Wacki bytecode VM (RunScriptInterpreter) handles 78 opcodes in

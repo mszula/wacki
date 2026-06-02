@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/sdl_stub/SDL.h — minimal SDL.h replacement for the test build.
  *
  * Production source files that `#include <SDL.h>` and get linked into

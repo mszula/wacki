@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/internal.h — symbols shared between actor sub-modules.
  *
  * The actor subsystem is split across several .c files (intern.c,

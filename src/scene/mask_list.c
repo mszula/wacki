@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/mask_list.c — REG_VERB_MASK click-mask registration.
  *
  * Implements the back-end of opcodes 0x2E and 0x2F (mask list / verb

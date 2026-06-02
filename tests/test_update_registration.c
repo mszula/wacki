@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_update_registration.c — kind/id dispatch table.
  *
  * src/actor.c holds the central update-registration table — a 500-slot

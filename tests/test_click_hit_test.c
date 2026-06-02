@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_click_hit_test.c — scene click-hit dispatch.
  *
  * src/stubs.c ClickHitTest() (1:1 with FUN_00406BB0) is the per-frame

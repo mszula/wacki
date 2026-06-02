@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/walkability.c — per-pixel walkability lookup.
  *
  * is_walkable_at consults the current scene's FLD bitmap to determine

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/util/rng.c — WackiRand: the engine's pseudo-random number generator.
  *
  * The original engine uses a 32-bit state advanced by ROL3 + a fixed

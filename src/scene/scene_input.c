@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/scene_input.c — HandleSceneInput + click-dispatch helpers.
  *
  * Pulled out of game.c (was part of the RunGameStageLoop main-loop click

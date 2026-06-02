@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/hud/cursor.c — mouse cursor state + paint.
  *
  * The cursor is a 16x16 indexed sprite drawn directly into the

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_control_flow.c — IF / ELSE / GOTO / LABEL / LOOP.
  *
  * The control-flow ops have a thorny history (multiple round-31 bug

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* include/wacki/log.h — leveled logging façade.
  *
  * Every call site that used to write `fprintf(stderr, "[tag] …\n", …)`

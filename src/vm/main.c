@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/vm/main.c — Wacki bytecode VM and .scr loader.
  *
  * Bytecode format (instruction stream is a u16 array; pc is u16 *):

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/audio/sound_queue.c — positional sound queue + script bridges.
  *
  * Two concerns in one module:

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/preload.c — boot-time asset preloading.
  *
  * PreloadCommonAssets runs once at game start, just after

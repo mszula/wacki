@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_save.c — Wacki.sav wire format.
  *
  * The .sav format is on-disk wire format — any reorder / resize of

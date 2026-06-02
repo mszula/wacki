@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/render.c — entity z-sorted render walk + walk-behind mask.
  *
  * Once per frame, after the per-entity VM has updated every entity's

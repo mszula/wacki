@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_engine_stubs.c — engine externs the test binary needs.
  *
  * Linked production sources (TEST_ENGINE_SRCS in Makefile):

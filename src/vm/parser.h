@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/vm/parser.h — bytecode scanning helpers shared inside the VM.
  *
  * These helpers walk the main script's instruction stream looking for

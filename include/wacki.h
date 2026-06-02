@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* include/wacki.h — umbrella header for the reconstructed Wacki engine.
  *
  * The engine runs on the SDL2 platform layer (src/platform_sdl.c).

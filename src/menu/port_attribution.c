@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/menu/port_attribution.c — author credits for this C/SDL2 port.
  *
  * Two surfaces:

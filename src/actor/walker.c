@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/walker.c — actor motion + waypoint path-finding.
  *
  * Drives the two controllable actors (Ebek, Fjej):

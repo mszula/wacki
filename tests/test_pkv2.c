@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_pkv2.c — PKv2 depack roundtrip.
  *
  * PKv2 is the LZ77 + Huffman-prefix compression used inside DTA archives.

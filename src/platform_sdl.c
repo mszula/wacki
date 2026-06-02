@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/platform_sdl.c — portable platform layer (SDL2).
  *
  * Replaces the original DirectDraw / WndProc / WaitMessage stack. The

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_inventory.c — REAL Inventory state machine.
  *
  * Now that stubs.c is linked, we test the PRODUCTION

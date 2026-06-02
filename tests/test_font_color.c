@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_font_color.c — Futura.30 color font path (sub-magic 0x3EA).
  *
  * test_font.c covers the 1bpp path (sub-magic 0x3E9, raw[0x70] & 0x40 == 0).

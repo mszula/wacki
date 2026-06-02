@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/intern.c — pointer-slot intern table.
  *
  * Entity's pointer fields (atlas at +0x28, bytecode at +0x2C, pixels at

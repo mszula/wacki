@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/menu/options.c — in-game options menus.
  *
  *   opszyns.pic — top-level options dispatcher (OpszynsClick)

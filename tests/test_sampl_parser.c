@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_sampl_parser.c — Wacky.scr [sampl] tuple parser coverage.
  *
  * The parser in src/audio/sfx.c (ParseSamplTagsForKomnata) walks the

@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_real_vm.c — production RunScriptInterpreter.
  *
  * Unlike test_script_vm.c (mock interpreter for characterization),

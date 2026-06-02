@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_dialog.c — dialog op smoke tests (post stubs.c link).
  *
  * Most dispatch-counter checks were removed because production

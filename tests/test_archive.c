@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_archive.c — DTA archive directory parse + per-file lookup.
  *
  * Builds a tiny but valid .dta archive in /tmp:

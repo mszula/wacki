@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/cygio.c — Cygert "Base_IO_CPP" file-class shim.
  *
  * In the original WACKI.EXE these are methods of a small C++ file

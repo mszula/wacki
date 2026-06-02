@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_entity_layout.c — struct layout invariants.
  *
  * THE MOST CRITICAL TEST IN THE WHOLE SUITE.

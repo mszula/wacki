@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/graphics.c — portable 8-bpp software rasteriser.
  *
  * The original engine drove a DirectDraw primary surface; this port

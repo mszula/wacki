@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* include/wacki/embedded_exe.h — WACKI.EXE data sections baked in.
  *
  * The engine resolves original-VA references (verb tables, scripts,

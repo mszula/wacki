@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_assets.c — ANIM / MASK / FILD header parsing.
  *
  * src/assets.c LoadAssetFromDtaBase parses the three shared-format

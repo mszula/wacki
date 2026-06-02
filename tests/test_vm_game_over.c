@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_game_over.c — var[14] = g_game_over_code alias.
  *
  * CRITICAL REGRESSION TEST for Bug 2 fix (round 32).

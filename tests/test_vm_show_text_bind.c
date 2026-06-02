@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_show_text_bind.c — op 0x09 SHOW_TEXT speech-bind path.
  *
  * After op 0x19 QUEUE_DIALOG pushes (speaker, ptr, data) into the

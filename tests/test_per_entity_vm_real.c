@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_per_entity_vm_real.c — per-entity VM via PRODUCTION dispatch.
  *
  * src/actor.c ExecEntityScript (the per-entity VM, FUN_004012E0) is

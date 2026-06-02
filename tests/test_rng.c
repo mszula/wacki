@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_rng.c — WackiRand ROL3 PRNG (FUN_00410F50).
  *
  * The original engine uses a deterministic ROL3-based RNG seeded from

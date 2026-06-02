@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* tests/test_vm_corner_cases.c — VM edge values + chained ops.
  *
  * Production VM tests with non-typical operand values:

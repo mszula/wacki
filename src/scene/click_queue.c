@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/scene/click_queue.c — deferred click-event queue.
  *
  * Per-entity VM opcode 0x22 enqueues (obj, verb) pairs here instead of

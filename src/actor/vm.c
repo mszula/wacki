@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Mateusz Szuła
+ */
+
 /* src/actor/vm.c — per-entity script interpreter and walker tick.
  *
  * Every entity in the scene carries a small bytecode program that
