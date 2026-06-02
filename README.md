@@ -37,7 +37,7 @@ zapis i wczytanie stanu (sloty + quick save / quick load), pełna
 animacja postaci i obiektów, dźwięk (muzyka, SFX, kwestie mówione),
 intra i cutscenki AVI, panel z paskiem życia, menu opcji.
 
-🔧 Szczegóły techniczne — jak silnik działa pod maską, format danych,
+Szczegóły techniczne — jak silnik działa pod maską, format danych,
 maszyna wirtualna skryptów, dekoder animacji FLIC, pipeline audio
 itd. — znajdują się w katalogu [`docs/`](docs/). To dokumentacja
 **budowy gry**, nie roadmapa portu.
@@ -46,16 +46,16 @@ itd. — znajdują się w katalogu [`docs/`](docs/). To dokumentacja
 
 ## 🖥️ Wersja PC (macOS / Linux / Windows)
 
-### 📋 Wymagania
+### Wymagania
 
-- 📦 gotowa binarka portu z zakładki [Releases](../../releases) — dla
+- gotowa binarka portu z zakładki [Releases](../../releases) — dla
   docelowej platformy:
-  - 🍎 macOS (Apple Silicon)
-  - 🐧 Linux x86_64
-  - 🪟 Windows 10/11 x86_64
-- 💿 pliki danych z oryginalnej płyty: `Dane_*.dta`
+  - macOS (Apple Silicon)
+  - Linux x86_64
+  - Windows 10/11 x86_64
+- pliki danych z oryginalnej płyty: `Dane_*.dta`
 
-### ▶️ Uruchomienie
+### Uruchomienie
 
 1. Pobierz archiwum dla swojego systemu z zakładki
    [Releases](../../releases) i rozpakuj w dowolnym katalogu.
@@ -70,21 +70,21 @@ Gra szuka katalogu z danymi w kolejności: zmienna środowiskowa
 `WACKI_PATH`, następnie `./data/`, następnie katalog obok binarki.
 Wielkość liter w nazwach plików nie ma znaczenia.
 
-### 🎯 Sterowanie
+### Sterowanie
 
 | Czynność              | Wejście              |
 |-----------------------|----------------------|
-| 🖱️ Ruch kursora        | mysz                 |
+| Ruch kursora          | mysz                 |
 | Kliknięcie lewe       | LPM                  |
 | Kliknięcie prawe      | PPM                  |
 | Wyjście z gry         | `ESC`                |
-| 💾 Quick-save (slot 0) | `F5`                 |
-| 📂 Quick-load (slot 0) | `F9`                 |
-| ⏸️ Menu pauzy          | `F12`                |
-| 🔄 Przełącz postać     | `SPACE`              |
-| 🖥️ Pełny ekran         | `F11`                |
+| Quick-save (slot 0)   | `F5`                 |
+| Quick-load (slot 0)   | `F9`                 |
+| Menu pauzy            | `F12`                |
+| Przełącz postać       | `SPACE`              |
+| Pełny ekran           | `F11`                |
 
-### ⚙️ Opcje uruchomienia
+### Opcje uruchomienia
 
 Wybrane opcje można podać z linii poleceń lub przez zmienne
 środowiskowe:
@@ -109,7 +109,7 @@ Pełny ekran (zachowuje rozdzielczość pulpitu, letterbox 640×480) —
 ./wacki --fullscreen
 ```
 
-### 🔨 Budowanie ze źródeł
+### Budowanie ze źródeł
 
 Jeśli nie chcesz korzystać z gotowych binarek, projekt buduje się
 standardowym `make`.
@@ -149,23 +149,23 @@ Windowsie).
 
 ## 🎮 Wersja na handheld (Miyoo Mini Plus i pokrewne)
 
-### 📋 Wymagania
+### Wymagania
 
-- 📱 urządzenie z firmware'em **OnionOS 4.2** lub nowszym; stock
+- urządzenie z firmware'em **OnionOS 4.2** lub nowszym; stock
   firmware nie jest wspierane (różni się układ katalogów
   i mechanizm uruchamiania portów)
-- 📦 gotowe archiwum `wacki-miyoo.zip` z zakładki [Releases](../../releases)
-- 💿 pliki danych z oryginalnej płyty: `Dane_*.dta`
+- gotowe archiwum `wacki-miyoo.zip` z zakładki [Releases](../../releases)
+- pliki danych z oryginalnej płyty: `Dane_*.dta`
 
 Wspierane modele:
 
-- ⭐ **Miyoo Mini Plus** — referencyjna platforma, najlepsze wsparcie
+- **Miyoo Mini Plus** — referencyjna platforma, najlepsze wsparcie
 - **Miyoo Mini** — pin-kompatybilny, prawdopodobnie działa bez zmian
 - inne handheldy oparte na SoC SigmaStar SSD20x (Anbernic RG35XX,
   Powkiddy RGB30) — wymagana ręczna integracja z launcher'em
   używanego firmware'u
 
-### 📥 Instalacja
+### Instalacja
 
 Archiwum `wacki-miyoo.zip` jest zgodne ze standardem OnionOS Ports.
 
@@ -181,23 +181,23 @@ Archiwum `wacki-miyoo.zip` jest zgodne ze standardem OnionOS Ports.
 3. Włóż kartę, włącz urządzenie. W menu wybierz **Ports → Adventure
    → Wacki**.
 
-### 🎯 Sterowanie
+### Sterowanie
 
 | Czynność              | Przycisk             |
 |-----------------------|----------------------|
-| ➕ Ruch kursora        | krzyżak              |
+| Ruch kursora          | krzyżak              |
 | Kliknięcie lewe       | **A**                |
 | Kliknięcie prawe      | **B**                |
-| ⏸️ Menu pauzy          | **START**            |
-| 📂 Quick-load          | **L1** / **L2**      |
-| 💾 Quick-save          | **R1** / **R2**      |
-| 🚪 Wyjście z gry       | **MENU**             |
+| Menu pauzy            | **START**            |
+| Quick-load            | **L1** / **L2**      |
+| Quick-save            | **R1** / **R2**      |
+| Wyjście z gry         | **MENU**             |
 
 Krzyżak przyspiesza w miarę przytrzymania — krótkie naciśnięcia
 służą do precyzyjnego pozycjonowania kursora, dłuższe trzymanie
 do szybkiego przemieszczania go po ekranie.
 
-### 🔨 Budowanie ze źródeł
+### Budowanie ze źródeł
 
 Build cross-kompilowany dla Miyoo Mini Plus odbywa się w kontenerze
 Docker (wymagany Docker Desktop lub `docker.io`):
@@ -222,10 +222,10 @@ i `WACKI.EXE` w `data/`.
 
 Gra obsługuje:
 
-- 🗃️ **10 nazwanych slotów** dostępnych z menu Sejw / Load — każdemu
+- **10 nazwanych slotów** dostępnych z menu Sejw / Load — każdemu
   można nadać własną nazwę, slot trzyma rozdział i pozycję
   w rozgrywce
-- ⚡ **Quick-save / quick-load** — natychmiastowy zapis i wczytanie ze
+- **Quick-save / quick-load** — natychmiastowy zapis i wczytanie ze
   slotu 0 z poziomu gry (na PC: `F5` zapis, `F9` odczyt; na
   handheldzie: `R1` / `R2` zapis, `L1` / `L2` odczyt)
 
@@ -239,18 +239,18 @@ Wszystkie sloty trzymane są w jednym pliku `Wacki.sav` w katalogu
 roboczym gry — obok binarki na PC, w `Roms/PORTS/Games/Wacki/` na
 handheldzie. Zapis jest atomowy (tymczasowy plik + rename), więc
 zanik zasilania lub crash w trakcie save'a nie psuje istniejących
-slotów. 🛡️
+slotów.
 
 ---
 
-## 📜 Licencja i prawa
+## Licencja i prawa
 
 Port silnika jest dziełem niezależnym i nie zawiera materiałów
 chronionych prawem autorskim z oryginalnej gry. Pliki danych
 (`Dane_*.dta`, `WACKI.EXE`) pozostają własnością ich twórców i nie
 są dystrybuowane wraz z tym repozytorium.
 
-## 🙏 Podziękowania
+## Podziękowania
 
-- 🌟 **Seven Stars Multimedia** — twórcy oryginalnej gry (1998)
-- 📡 TopWare Interactive Polska — wydawca oryginalny
+- **Seven Stars Multimedia** — twórcy oryginalnej gry (1998)
+- TopWare Interactive Polska — wydawca oryginalny
