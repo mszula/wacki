@@ -30,14 +30,17 @@ kopia oryginalnej płyty.
 
 ## Status portu
 
-Projekt jest na etapie funkcjonalnego portu. Pierwszy rozdział gry
-jest grywalny od początku do końca, włącznie z intro, menu,
-dialogami, zapisem stanu i wczytaniem. Kolejne rozdziały mają
-poprawnie zaimplementowaną logikę wejścia, ale nie zostały
-zweryfikowane w pełnym przejściu interaktywnym.
+Port jest funkcjonalnie kompletny — gra przechodzi się od intro
+do napisów końcowych z większością mechanik i detali oryginału:
+sterowanie dwoma postaciami, system dialogów i dymków, ekwipunek,
+zapis i wczytanie stanu (sloty + quick save / quick load), pełna
+animacja postaci i obiektów, dźwięk (muzyka, SFX, kwestie mówione),
+intra i cutscenki AVI, panel z paskiem życia, menu opcji.
 
-Szczegółowy opis tego, co działa i co jest w trakcie, znajduje się
-w katalogu [`docs/`](docs/).
+Szczegóły techniczne — jak silnik działa pod maską, format danych,
+maszyna wirtualna skryptów, dekoder animacji FLIC, pipeline audio
+itd. — znajdują się w katalogu [`docs/`](docs/). To dokumentacja
+**budowy gry**, nie roadmapa portu.
 
 ---
 
