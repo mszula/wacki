@@ -25,6 +25,7 @@
 #include <SDL.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ---- constants ---------------------------------------------------- */
@@ -130,6 +131,13 @@ int PlatformInit(int w, int h, const char *title)
     }
     s_w = w;
     s_h = h;
+
+#ifdef WACKI_HANDHELD
+    /* Implemented in platform_miyoo.c — re-apply OnionOS-saved volume
+     * via MI_AO_SetVolume. Linked only when TARGET=miyoo. */
+    extern void platform_restore_system_volume(void);
+    platform_restore_system_volume();
+#endif
 
     if (g_headless) {
         /* T45: no window/renderer/texture. SDL stays initialised (dummy
@@ -279,7 +287,7 @@ void PlatformPresent(const uint8_t *shadow,
 /* Per-event-type handlers — each takes the SDL_Event and returns
  * nothing. PlatformPumpEvents dispatches on ev.type. */
 
-static int dpad_button_to_click(SDL_Keycode sym);
+static int input_debug_enabled(void);
 
 static void handle_keydown(const SDL_Event *ev)
 {
@@ -318,11 +326,27 @@ static void handle_keydown(const SDL_Event *ev)
     if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER)
         PlatformPushTypedChar(ASCII_ENTER);
 
-    /* Handheld face buttons (Space=A, LCtrl=B) latch as mouse clicks
-     * so the d-pad-driven virtual cursor is fully usable without a
-     * real mouse. On a desktop these keys aren't bound to anything
-     * else, so the additive behaviour is invisible. */
-    dpad_button_to_click(sym);
+    /* Handheld face buttons + START + L1/L2 + R1/R2 → engine latches.
+     * The full keysym table lives in platform_miyoo.c so the
+     * cross-platform code path here doesn't grow per-port branches.
+     * Returns 1 iff a face-button mouse-click latch fired (for the
+     * input-debug annotation below). Desktop builds skip this entirely. */
+#ifdef WACKI_HANDHELD
+    extern int platform_miyoo_handle_keydown(SDL_Keycode);
+    int handled = platform_miyoo_handle_keydown(sym);
+#else
+    int handled = 0;
+#endif
+
+    if (input_debug_enabled()) {
+        SDL_Keymod mod = SDL_GetModState();
+        LOG_INFO("input",
+                 "KEYDOWN sym=0x%X scancode=0x%X mod=0x%X name='%s' repeat=%d → %s",
+                 (unsigned)sym, (unsigned)ev->key.keysym.scancode,
+                 (unsigned)mod, SDL_GetKeyName(sym),
+                 ev->key.repeat,
+                 handled ? "fired mouse-click latch" : "no click latch");
+    }
 }
 
 static void handle_textinput(const SDL_Event *ev)
@@ -345,8 +369,29 @@ static void handle_mouse_motion(const SDL_Event *ev)
     s_mouse_y = (int16_t)ev->motion.y;
 }
 
+/* Env-gated diagnostic — WACKI_INPUT_DEBUG=1 dumps every keydown and
+ * mouse-button event so handheld port bugs ("button A fires both LMB
+ * and RMB") can be traced. Lazy-init the flag so we don't strcmp on
+ * every event. */
+static int input_debug_enabled(void)
+{
+    static int s_flag = -1;
+    if (s_flag < 0) {
+        const char *e = SDL_getenv("WACKI_INPUT_DEBUG");
+        s_flag = (e && *e && *e != '0') ? 1 : 0;
+    }
+    return s_flag;
+}
+
 static void handle_mouse_button_down(const SDL_Event *ev)
 {
+    if (input_debug_enabled()) {
+        LOG_INFO("input",
+                 "MOUSEDOWN button=%u state=0x%X clicks=%u x=%d y=%d which=%u",
+                 (unsigned)ev->button.button, (unsigned)ev->button.state,
+                 (unsigned)ev->button.clicks, ev->button.x, ev->button.y,
+                 (unsigned)ev->button.which);
+    }
     if (ev->button.button == SDL_BUTTON_LEFT)  g_lmb_clicked = 1;
     if (ev->button.button == SDL_BUTTON_RIGHT) g_rmb_clicked = 1;
 }
@@ -395,24 +440,6 @@ static void poll_virtual_cursor(void)
     s_mouse_x = (int16_t)s_vcur_x;
     s_mouse_y = (int16_t)s_vcur_y;
     ++s_vcur_hold_ticks;
-}
-
-/* Map face-button keysym → mouse button latch. Returns 1 if handled,
- * 0 if the keysym wasn't a recognised button. Called from
- * handle_keydown so a regular keyboard with Space/LCtrl also drives
- * the click latches, not just the handheld face buttons. */
-static int dpad_button_to_click(SDL_Keycode sym)
-{
-    switch (sym) {
-    case SDLK_SPACE:      /* Miyoo A button → LMB */
-        g_lmb_clicked = 1;
-        return 1;
-    case SDLK_LCTRL:      /* Miyoo B button → RMB */
-        g_rmb_clicked = 1;
-        return 1;
-    default:
-        return 0;
-    }
 }
 
 void PlatformPumpEvents(void)

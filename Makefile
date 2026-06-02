@@ -119,7 +119,11 @@ endif
 # to mis-emit thumb thunks under -flto.
 ifeq ($(TARGET),miyoo)
     CFLAGS_SIZE  := -Os -ffunction-sections -fdata-sections
-    LDFLAGS_SIZE := -Wl,--gc-sections
+    # -ldl: platform_sdl.c uses dlsym(RTLD_DEFAULT, "MI_AO_SetVolume") to
+    # bind directly to the MStar audio API for OnionOS volume restore
+    # (alsa-style tinymix controls don't exist on MMP — kernel exposes
+    # MI_AO instead, which the mmiyoo SDL2 backend has already loaded).
+    LDFLAGS_SIZE := -Wl,--gc-sections -ldl
 else ifeq ($(STATIC_SDL2),1)
     CFLAGS_SIZE := -Os -ffunction-sections -fdata-sections -flto
     UNAME_S := $(shell uname -s 2>/dev/null)
@@ -204,6 +208,14 @@ ENGINE_SRCS = \
 	src/menu/chapter_select.c src/menu/slot_picker.c                 \
 	src/menu/options.c        src/menu/menu_loop.c                   \
 	src/menu/main_menu.c
+
+# Platform-specific glue is appended only for the matching TARGET.
+# src/platform_miyoo.c carries the OnionOS/MStar bits (MI_AO volume
+# restore) and pulls in libdl — kept out of desktop builds because
+# desktop linkers wouldn't find dlsym + libmi_ao.so doesn't exist.
+ifeq ($(TARGET),miyoo)
+    ENGINE_SRCS += src/platform_miyoo.c
+endif
 
 TOOL_SRCS_EXTRACT = tools/dta-extract.c src/depack.c src/archive.c \
                     src/cygio.c src/heap.c src/log.c

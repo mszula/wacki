@@ -188,6 +188,14 @@ int mixer_ensure_open(void)
     LOG_INFO("mixer", "opened: %d Hz, %d ch, %d-bit, %d samples",
              s_mix_spec.freq, s_mix_spec.channels,
              SDL_AUDIO_BITSIZE(s_mix_spec.format), s_mix_spec.samples);
+#ifdef WACKI_HANDHELD
+    /* mmiyoo SDL2 backend resets the kernel mixer to driver-default
+     * (max) on every SDL_OpenAudioDevice — re-apply the user's saved
+     * OnionOS volume now so SFX/music doesn't blast at full volume
+     * until the user mashes Vol+/- to wake the firmware handler. */
+    extern void platform_restore_system_volume(void);
+    platform_restore_system_volume();
+#endif
     return 1;
 }
 

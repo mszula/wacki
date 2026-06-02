@@ -97,6 +97,12 @@ static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
     LOG_INFO("audio", "AVI audio: %d Hz, %d ch, %d samples",
              s_audio_spec_cur.freq, s_audio_spec_cur.channels,
              s_audio_spec_cur.samples);
+#ifdef WACKI_HANDHELD
+    /* mmiyoo resets kernel mixer on each SDL_OpenAudioDevice — re-apply
+     * the OnionOS-saved volume so the AVI doesn't blast at max. */
+    extern void platform_restore_system_volume(void);
+    platform_restore_system_volume();
+#endif
 }
 
 /* Release the AVI audio device. Called at end of playback so the
