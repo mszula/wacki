@@ -28,30 +28,34 @@ zdekompilowanej oryginalnej binarki `WACKI.EXE`. Repozytorium
 **nie zawiera materiałów z gry**; aby zagrać, potrzebna jest własna
 kopia oryginalnej płyty.
 
-## Wymagania
+## Status portu
 
-Do uruchomienia gry potrzebne są:
+Projekt jest na etapie funkcjonalnego portu. Pierwszy rozdział gry
+jest grywalny od początku do końca, włącznie z intro, menu,
+dialogami, zapisem stanu i wczytaniem. Kolejne rozdziały mają
+poprawnie zaimplementowaną logikę wejścia, ale nie zostały
+zweryfikowane w pełnym przejściu interaktywnym.
 
-- gotowa binarka portu (sekcja niżej) — dla docelowej platformy
+Szczegółowy opis tego, co działa i co jest w trakcie, znajduje się
+w katalogu [`docs/`](docs/).
+
+---
+
+## Wersja PC (macOS / Linux / Windows)
+
+### Wymagania
+
+- gotowa binarka portu z zakładki [Releases](../../releases) — dla
+  docelowej platformy:
+  - macOS (Apple Silicon)
+  - Linux x86_64
+  - Windows 10/11 x86_64
 - pliki danych z oryginalnej płyty: `Dane_*.dta`
 
-Wspierane platformy:
+### Uruchomienie
 
-- macOS (Apple Silicon)
-- Linux x86_64
-- Windows 10/11 x86_64
-- Miyoo Mini / Miyoo Mini Plus z OnionOS (gotowe archiwum
-  instalacyjne w sekcji Releases)
-- Inne handheldy oparte na SoC SigmaStar SSD20x (Anbernic RG35XX,
-  Powkiddy RGB30) — wymagana ręczna integracja z launcher'em
-  używanego firmware'u
-
-## Uruchomienie
-
-Pobierz gotową binarkę dla swojego systemu z zakładki
-[Releases](../../releases). Następnie:
-
-1. Rozpakuj archiwum w dowolnym katalogu.
+1. Pobierz archiwum dla swojego systemu z zakładki
+   [Releases](../../releases) i rozpakuj w dowolnym katalogu.
 2. Utwórz obok binarki podkatalog `data/` i skopiuj do niego pliki
    `Dane_*.dta` z oryginalnej płyty.
 3. Uruchom binarkę:
@@ -63,44 +67,21 @@ Gra szuka katalogu z danymi w kolejności: zmienna środowiskowa
 `WACKI_PATH`, następnie `./data/`, następnie katalog obok binarki.
 Wielkość liter w nazwach plików nie ma znaczenia.
 
-### Miyoo Mini Plus i pokrewne handheldy
+### Sterowanie
 
-Wersja dla urządzeń handheld jest zgodna ze standardem OnionOS Ports.
-Pobierz archiwum `wacki-miyoo.zip` z sekcji Releases, a następnie:
+| Czynność              | Wejście              |
+|-----------------------|----------------------|
+| Ruch kursora          | mysz                 |
+| Kliknięcie lewe       | LPM                  |
+| Kliknięcie prawe      | PPM                  |
+| Wyjście z gry         | `ESC`                |
+| Quick-save (slot 0)   | `F5`                 |
+| Quick-load (slot 0)   | `F9`                 |
+| Menu pauzy            | `F12`                |
+| Przełącz postać       | `SPACE`              |
+| Pełny ekran           | `F11`                |
 
-1. Rozpakuj zawartość archiwum bezpośrednio w katalogu głównym karty
-   pamięci urządzenia. Folder `Roms/` z archiwum scali się
-   z istniejącym `Roms/` na karcie.
-2. Skopiuj pliki `Dane_*.dta` z oryginalnej płyty do katalogu:
-
-   ```
-   Roms/PORTS/Games/Wacki/data/
-   ```
-
-3. Włóż kartę, włącz urządzenie. W menu wybierz **Ports → Adventure
-   → Wacki**.
-
-Wymagane jest OnionOS 4.2 lub nowsze. Stock firmware nie jest
-wspierane (różni się układ katalogów i mechanizm uruchamiania portów).
-
-## Sterowanie
-
-| Czynność              | Komputer (mysz + klawiatura) | Handheld (Miyoo)     |
-|-----------------------|------------------------------|----------------------|
-| Ruch kursora          | mysz                         | krzyżak              |
-| Kliknięcie lewe       | LPM                          | przycisk **A**       |
-| Kliknięcie prawe      | PPM                          | przycisk **B**       |
-| Wyjście z gry         | `ESC`                        | przycisk **Menu**    |
-| Quick-save (slot 0)   | `F5`                         | —                    |
-| Quick-load (slot 0)   | `F9`                         | —                    |
-| Menu pauzy            | `F12`                        | —                    |
-| Przełącz postać       | `SPACE`                      | —                    |
-
-Na handheldzie krzyżak przyspiesza w miarę przytrzymania — krótkie
-naciśnięcia służą do precyzyjnego pozycjonowania kursora, dłuższe
-trzymanie do szybkiego przemieszczania go po ekranie.
-
-## Opcje uruchomienia
+### Opcje uruchomienia
 
 Wybrane opcje można podać z linii poleceń lub przez zmienne
 środowiskowe:
@@ -125,7 +106,7 @@ Pełny ekran (zachowuje rozdzielczość pulpitu, letterbox 640×480) —
 ./wacki --fullscreen
 ```
 
-## Budowanie ze źródeł
+### Budowanie ze źródeł
 
 Jeśli nie chcesz korzystać z gotowych binarek, projekt buduje się
 standardowym `make`.
@@ -161,29 +142,82 @@ make all
 Wynikowa binarka trafia do `dist/wacki` (lub `dist\wacki.exe` na
 Windowsie).
 
-### Wersja dla handheldów
+---
+
+## Wersja na handheld (Miyoo Mini Plus i pokrewne)
+
+### Wymagania
+
+- urządzenie z firmware'em **OnionOS 4.2** lub nowszym; stock
+  firmware nie jest wspierane (różni się układ katalogów
+  i mechanizm uruchamiania portów)
+- gotowe archiwum `wacki-miyoo.zip` z zakładki [Releases](../../releases)
+- pliki danych z oryginalnej płyty: `Dane_*.dta`
+
+Wspierane modele:
+
+- **Miyoo Mini Plus** — referencyjna platforma, najlepsze wsparcie
+- **Miyoo Mini** — pin-kompatybilny, prawdopodobnie działa bez zmian
+- inne handheldy oparte na SoC SigmaStar SSD20x (Anbernic RG35XX,
+  Powkiddy RGB30) — wymagana ręczna integracja z launcher'em
+  używanego firmware'u
+
+### Instalacja
+
+Archiwum `wacki-miyoo.zip` jest zgodne ze standardem OnionOS Ports.
+
+1. Rozpakuj zawartość archiwum bezpośrednio w katalogu głównym karty
+   pamięci urządzenia. Folder `Roms/` z archiwum scali się
+   z istniejącym `Roms/` na karcie.
+2. Skopiuj pliki `Dane_*.dta` z oryginalnej płyty do katalogu:
+
+   ```
+   Roms/PORTS/Games/Wacki/data/
+   ```
+
+3. Włóż kartę, włącz urządzenie. W menu wybierz **Ports → Adventure
+   → Wacki**.
+
+### Sterowanie
+
+| Czynność              | Przycisk             |
+|-----------------------|----------------------|
+| Ruch kursora          | krzyżak              |
+| Kliknięcie lewe       | **A**                |
+| Kliknięcie prawe      | **B**                |
+| Menu pauzy            | **START**            |
+| Quick-load            | **L1** / **L2**      |
+| Quick-save            | **R1** / **R2**      |
+| Wyjście z gry         | **MENU**             |
+
+Krzyżak przyspiesza w miarę przytrzymania — krótkie naciśnięcia
+służą do precyzyjnego pozycjonowania kursora, dłuższe trzymanie
+do szybkiego przemieszczania go po ekranie.
+
+Głośnością systemową (klawisze Vol+ / Vol-) zarządza OnionOS — port
+sam odczytuje aktualnie ustawiony poziom z `system.json` przy
+każdym otwarciu urządzenia audio.
+
+### Budowanie ze źródeł
 
 Build cross-kompilowany dla Miyoo Mini Plus odbywa się w kontenerze
 Docker (wymagany Docker Desktop lub `docker.io`):
 
 ```bash
+cp /sciezka/do/plyty/WACKI.EXE data/
+
 make miyoo
 ./tools/pack-miyoo.sh
 ```
 
-Wynik: `dist/wacki-miyoo.zip` zawierający gotową strukturę `Wacki.pak/`
-do przeniesienia na kartę pamięci urządzenia.
+Wynik: `dist/wacki-miyoo.zip` zawierający gotową strukturę OnionOS
+Ports do przeniesienia na kartę pamięci urządzenia.
 
-## Status portu
+Toolchain pobiera się automatycznie jako obraz Docker
+(`bqcuongas/sdl2-miyoo`); na hoście wystarczy `make`, `docker`
+i `WACKI.EXE` w `data/`.
 
-Projekt jest na etapie funkcjonalnego portu. Pierwszy rozdział gry
-jest grywalny od początku do końca, włącznie z intro, menu,
-dialogami, zapisem stanu i wczytaniem. Kolejne rozdziały mają poprawnie
-zaimplementowaną logikę wejścia, ale nie zostały zweryfikowane
-w pełnym przejściu interaktywnym.
-
-Szczegółowy opis tego, co działa i co jest w trakcie, znajduje się
-w katalogu [`docs/`](docs/).
+---
 
 ## Licencja i prawa
 
