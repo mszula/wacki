@@ -60,17 +60,9 @@
  * synthetic ESC press. */
 #define VK_ESCAPE_KEYCODE                   0x1B
 
-/* Path buffer size for the data-root + helper file-search snprintf. */
-#define ARCHIVE_PROBE_PATH_BYTES            1024
-#define UPPERCASE_NAME_BYTES                64
-
 /* Tick is the multimedia timer at ~1 kHz on the original; SDL_GetTicks
  * matches that cadence so 1000 ticks ≈ 1 wall-clock second. */
 #define TICKS_PER_SECOND                    1000
-
-/* Probe filename used to recognise a data directory — every install
- * ships at least Dane_02.dta. */
-#define DATA_PROBE_FILENAME                 "Dane_02.dta"
 
 /* ---- module-owned globals ---------------------------------------- */
 
@@ -125,73 +117,11 @@ void StatsDump(void)
 
 /* ---- data-root discovery ---------------------------------------- *
  *
- * The original FindDataRoot scanned A:..Z: for a drive whose
- * volume label was WACKI_1. The portable variant searches a small
- * list of likely roots for a directory that holds Dane_02.dta. */
-
-static int try_open_path(const char *path)
-{
-    FILE *fp = fopen(path, "rb");
-    if (!fp) return 0;
-    fclose(fp);
-    return 1;
-}
-
-/* Probe `root/needle`, then `root/NEEDLE` (uppercased basename) for
- * case-sensitive filesystems where the installer wrote DANE_02.DTA. */
-static int directory_has_archive(const char *root, const char *needle)
-{
-    char buf[ARCHIVE_PROBE_PATH_BYTES];
-
-    snprintf(buf, sizeof buf, "%s/%s", root, needle);
-    if (try_open_path(buf)) return 1;
-
-    char   upper[UPPERCASE_NAME_BYTES];
-    size_t i;
-    for (i = 0; needle[i] && i < sizeof upper - 1; ++i) {
-        char c = needle[i];
-        upper[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
-    }
-    upper[i] = 0;
-    snprintf(buf, sizeof buf, "%s/%s", root, upper);
-    return try_open_path(buf);
-}
-
-/* Accept `root` as the data directory if it contains the probe file.
- * On success commits the path to g_data_root. */
-static int try_root(const char *root)
-{
-    if (!root || !*root) return 0;
-    if (!directory_has_archive(root, DATA_PROBE_FILENAME)) return 0;
-    snprintf(g_data_root, sizeof g_data_root, "%s", root);
-    return 1;
-}
-
-int FindDataRoot(void)
-{
-    /* Search order: explicit env override → ./data → ./<bin>/data →
-     * ./<bin> → cwd. First match wins. */
-    if (try_root(getenv("WACKI_PATH"))) return DATA_ROOT_FOUND;
-    if (try_root("./data"))             return DATA_ROOT_FOUND;
-    if (try_root("data"))               return DATA_ROOT_FOUND;
-
-    char *base = SDL_GetBasePath();
-    if (base) {
-        /* SDL_GetBasePath returns a trailing slash; strip it so the
-         * snprintf doesn't double it. */
-        size_t blen = strlen(base);
-        while (blen > 1 && base[blen - 1] == '/') base[--blen] = 0;
-
-        char buf[ARCHIVE_PROBE_PATH_BYTES];
-        snprintf(buf, sizeof buf, "%s/data", base);
-        if (try_root(buf))  { SDL_free(base); return DATA_ROOT_FOUND; }
-        if (try_root(base)) { SDL_free(base); return DATA_ROOT_FOUND; }
-        SDL_free(base);
-    }
-
-    if (try_root(".")) return DATA_ROOT_FOUND;
-    return 0;
-}
+ * Implementation lives in src/data_root.c. The original FindDataRoot
+ * scanned A:..Z: for a drive whose volume label was WACKI_1; the
+ * portable variant searches env → cwd → ./data → adjacent to the
+ * binary → external media → handheld card paths → native folder
+ * picker as a GUI fallback. See data_root.c for the full ladder. */
 
 /* ---- SIGINT handler --------------------------------------------- */
 
@@ -410,11 +340,24 @@ int WackiMain(int argc, char **argv)
     apply_early_cli_effects(&args);
 
     if (FindDataRoot() != DATA_ROOT_FOUND) {
-        LOG_INFO("log", "Nie znalaz\xC5\x82""em plik\xC3\xB3w Dane_*.dta.\n"
-            "U\xC5\xBC""yj jednego z:\n"
-            "  • umie\xC5\x9B\xC4\x87 .dta w katalogu  ./data/\n"
-            "  • umie\xC5\x9B\xC4\x87 .dta obok binarki ./wacki\n"
-            "  • ustaw WACKI_PATH=/sciezka/do/danych");
+        /* All search ladders + the GUI folder picker exhausted. Tell
+         * the user what we tried and bail. SDL_ShowSimpleMessageBox
+         * pops a native dialog on every host (NSAlert on macOS,
+         * MessageBox() on Windows, GTK/Xlib message on Linux) so a
+         * Finder/Explorer double-click without data files still
+         * leaves the user with a clear "what now" message instead of
+         * a silent exit. */
+        const char *msg =
+            "Nie znalazłem plików Dane_*.dta. Szukałem w:\n\n"
+            "  • katalogu uruchomienia + ./data/\n"
+            "  • obok binarki (lub w pakiecie .app)\n"
+            "  • na napędach CD / podłączonych dyskach\n"
+            "  • zmiennej WACKI_PATH\n\n"
+            "Skopiuj pliki z oryginalnej płyty do dowolnego z tych "
+            "miejsc i uruchom grę ponownie.";
+        LOG_INFO("log", "%s", msg);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+                                 "Wacki — brak danych", msg, NULL);
         return 1;
     }
 #ifndef WACKI_VERSION

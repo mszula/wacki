@@ -236,7 +236,8 @@ $(EMBEDDED_ICON_SRC): $(EMBEDDED_ICON_BIN)
 ENGINE_SRCS = \
 	$(EMBEDDED_PE_SRC) \
 	$(EMBEDDED_ICON_SRC) \
-	src/main.c     src/game.c    src/graphics.c  src/audio.c     \
+	src/main.c     src/data_root.c \
+	src/game.c    src/graphics.c  src/audio.c     \
 	src/archive.c  src/depack.c  src/assets.c    src/vm/main.c   \
 	src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
