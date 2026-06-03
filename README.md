@@ -94,7 +94,6 @@ Wybrane opcje można podać z linii poleceń lub przez zmienne
 | `--scale N`            | `WACKI_SCALE=N`          | okno powiększone N-krotnie (gra wewnętrznie 640×480) |
 | `--scaler MODE`        | `WACKI_SCALER=MODE`      | jakość skalowania: `nearest`, `linear`, `best`   |
 | `--fullscreen` / `-f`  | `WACKI_FULLSCREEN=1`     | start w trybie pełnoekranowym (F11 przełącza w grze) |
-| `--seed N`             | `WACKI_SEED=N`           | ustalony seed losowości (do speedrunów / debugu) |
 | —                      | `WACKI_PATH=...`         | ścieżka do katalogu z `Dane_*.dta`               |
 
 Przykład: uruchomienie w oknie 1280×960 ze skalowaniem liniowym —
