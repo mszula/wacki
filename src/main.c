@@ -373,8 +373,34 @@ static int run_cutscene_test_mode(const CliArgs *args)
 
 /* ---- WackiMain + main ------------------------------------------- */
 
+#ifdef _WIN32
+#include <windows.h>
+/* On a Windows GUI-subsystem build (Makefile -mwindows) there's no
+ * console attached when Explorer double-clicks wacki.exe — printf
+ * goes nowhere. Pipe stderr (and stdout, for completeness) into
+ * wacki.log so users can attach it to bug reports.
+ *
+ * Only do this when GetConsoleWindow() == NULL (no console). For
+ * CI smoke runs and dev launches from cmd.exe with the
+ * WACKI_WINDOWED=0 build, a console exists and we leave the
+ * standard streams alone so the user / CI sees output in real
+ * time. */
+static void redirect_streams_to_logfile_if_no_console(void)
+{
+    if (GetConsoleWindow()) return;
+    FILE *f = freopen("wacki.log", "w", stderr);
+    if (f) {
+        setvbuf(stderr, NULL, _IOLBF, 0);   /* line-buffered → flush per LOG */
+        freopen("wacki.log", "a", stdout);
+    }
+}
+#endif
+
 int WackiMain(int argc, char **argv)
 {
+#ifdef _WIN32
+    redirect_streams_to_logfile_if_no_console();
+#endif
     /* SIGINT first so it covers init failures too. */
     signal(SIGINT, sigint_handler);
 

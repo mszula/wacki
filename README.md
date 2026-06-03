@@ -289,8 +289,13 @@ W zgłoszeniu pomogą:
 - **wersja portu** — pierwsza linia logu uruchomieniowego (`[info/wacki] Wacki port vX.Y.Z…`)
 - **platforma** — macOS / Linux / Windows / Miyoo + wersja systemu
 - **kroki reprodukcji** — co robiłeś bezpośrednio przed crashem
-- **`wacki.log`** — silnik loguje na stderr; na Miyoo trafia do
-  `Roms/PORTS/Games/Wacki/wacki.log` (przez wrapper `wacki.sh`)
+- **`wacki.log`** — silnik loguje na stderr; gdzie szukać:
+  - **Windows**: plik `wacki.log` automatycznie obok `wacki.exe`
+    (binarka jest GUI-subsystem więc stderr leci do pliku)
+  - **macOS / Linux**: stderr w terminalu albo `Console.app`
+    (uruchom z terminala `Wacki.app/Contents/MacOS/Wacki` żeby zobaczyć logi)
+  - **Miyoo**: `Roms/PORTS/Games/Wacki/wacki.log`
+    (zapisywany przez wrapper `wacki.sh`)
 - **screenshot** — jeśli problem jest wizualny (popsuta paleta,
   brakujący sprite, glitch animacji)
 

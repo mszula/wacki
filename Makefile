@@ -122,6 +122,27 @@ else
     LDFLAGS_STATIC :=
 endif
 
+# Windows subsystem: -mwindows marks the .exe as IMAGE_SUBSYSTEM_
+# WINDOWS_GUI so Explorer launches it WITHOUT spawning a console
+# window — players double-click wacki.exe and only see the game.
+# Without this, the default mingw build emits a CUI (console)
+# subsystem binary and Windows pops up a cmd.exe-style black box
+# every launch.
+#
+# Entry point doesn't need a rewrite: SDL2 ships libSDL2main.a with
+# a WinMain that calls our int main() — sdl2-config --libs adds it
+# to the link line.
+#
+# We intentionally lose stderr/stdout output as a side-effect (no
+# attached console). For dev / CI runs that need the log, build
+# WACKI_WINDOWED=0 to skip -mwindows and keep the console.
+ifeq ($(OS),Windows_NT)
+WACKI_WINDOWED ?= 1
+ifeq ($(WACKI_WINDOWED),1)
+    LDFLAGS_STATIC += -mwindows
+endif
+endif
+
 # Size-optimisation knobs for the release artefact. -Os trades a few
 # % runtime perf for noticeably smaller code (fine for a 1997 point-
 # and-click). -ffunction-sections / -fdata-sections + the linker's
