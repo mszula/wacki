@@ -59,12 +59,18 @@ itd. — znajdują się w katalogu [`docs/`](docs/). To dokumentacja
 
 1. Pobierz archiwum dla swojego systemu z zakładki
    [Releases](../../releases) i rozpakuj w dowolnym katalogu.
-2. Utwórz obok binarki podkatalog `data/` i skopiuj do niego pliki
-   `Dane_*.dta` z oryginalnej płyty.
-3. Uruchom binarkę:
+2. Skopiuj pliki `Dane_*.dta` z oryginalnej płyty do podkatalogu
+   `data/`. Gdzie dokładnie zależy od systemu:
 
-   - macOS / Linux: `./wacki`
-   - Windows: dwukrotne kliknięcie `wacki.exe`
+   - **macOS**: prawy klik na `Wacki.app` → **Show Package Contents**
+     → otwórz `Contents/Resources/data/` i wrzuć tam pliki
+   - **Linux / Windows**: podkatalog `data/` obok binarki
+
+3. Uruchom grę:
+
+   - **macOS**: dwukrotne kliknięcie `Wacki.app`
+   - **Linux**: `./wacki`
+   - **Windows**: dwukrotne kliknięcie `wacki.exe`
 
 Gra szuka katalogu z danymi w kolejności: zmienna środowiskowa
 `WACKI_PATH`, następnie `./data/`, następnie katalog obok binarki.

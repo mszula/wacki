@@ -260,15 +260,19 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           mkdir -p staging
-          cp dist/wacki staging/
-          cp README.md  staging/ 2>/dev/null || true
-          # macOS: ship the .icns so power users can right-click → Get Info →
-          # drag the icon into the file's icon slot to overwrite the generic
-          # binary icon Finder defaults to. Not bundling as .app yet —
-          # SDL_SetWindowIcon already paints the Dock icon at runtime.
           if [ "${{ matrix.os }}" = "macos-latest" ] || [ "${{ matrix.os }}" = "macos-13" ]; then
-              cp assets/icons/wacki.icns staging/ 2>/dev/null || true
+              # macOS: ship a proper .app bundle so the user double-clicks
+              # Wacki.app from Finder without seeing a Terminal window.
+              # tools/pack-macos-app.sh produces the full
+              # Wacki.app/Contents/{Info.plist,MacOS,Resources} tree with
+              # the icon, launcher script, and an empty data/ folder for
+              # the user's Dane_*.dta files (Resources/data/README.txt
+              # explains where to drop them).
+              ./tools/pack-macos-app.sh dist/wacki staging/Wacki.app
+          else
+              cp dist/wacki staging/
           fi
+          cp README.md  staging/ 2>/dev/null || true
           tar czf "${{ matrix.artifact }}.tar.gz" -C staging .
 
       - name: Package (Windows)
