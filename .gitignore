@@ -29,6 +29,9 @@ Wacki.sav
 
 # Debug screenshots / dumps
 *.bmp
+# Whitelist the window-icon BMP — it's the actual source asset for
+# src/embedded_icon.c, not a debug dump.
+!assets/icons/wacki-window.bmp
 
 # Reverse-engineering analysis notes (kept locally, not pushed)
 ANALYSIS.md
