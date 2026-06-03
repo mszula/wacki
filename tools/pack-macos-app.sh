@@ -124,5 +124,45 @@ EOF
 # or other xattrs picked up during git clone / curl etc.
 xattr -cr "$APP" 2>/dev/null || true
 
-echo "[macos-app] built $APP"
+# ---- Ad-hoc code signature ----------------------------------------------
+# We're not in the Apple Developer Program, so we can't notarize — the
+# Gatekeeper "unidentified developer" prompt is unavoidable (see the
+# Odblokuj-Wacki.command helper below + the README note). But an ad-hoc
+# signature still matters:
+#   - arm64 Mach-O binaries MUST carry at least an ad-hoc signature or
+#     the kernel refuses to exec them ("killed: 9" / "is damaged");
+#     the linker applies one but `strip` (CI) can invalidate it.
+#   - keeps the whole bundle's hashes internally consistent so the
+#     one-time right-click-Open / xattr bypass sticks.
+# --deep covers the Mach-O in Resources/; --force overwrites the
+# linker-applied signature. -s - is the ad-hoc identity.
+if command -v codesign >/dev/null 2>&1; then
+    codesign --force --deep -s - "$APP" 2>/dev/null \
+        && echo "[macos-app] ad-hoc signed" \
+        || echo "[macos-app] codesign failed (non-fatal)"
+fi
+
+# ---- Quarantine-removal helper ------------------------------------------
+# Ship a double-clickable script next to the .app that strips the
+# com.apple.quarantine xattr Gatekeeper hangs on. Lands in the same
+# directory as the bundle so it's right there in the release tarball.
+APP_DIR="$(cd "$(dirname "$APP")" && pwd)"
+cat > "$APP_DIR/Odblokuj-Wacki.command" <<'HELPER'
+#!/bin/sh
+# Dwuklik usuwa flagę "quarantine" z Wacki.app w tym samym folderze,
+# żeby macOS Gatekeeper przestał blokować grę. Wystarczy raz po
+# rozpakowaniu archiwum.
+cd "$(dirname "$0")"
+if [ ! -d Wacki.app ]; then
+    echo "Nie znalazłem Wacki.app obok tego skryptu."
+    echo "Umieść Odblokuj-Wacki.command w tym samym folderze co Wacki.app."
+    exit 1
+fi
+xattr -dr com.apple.quarantine Wacki.app 2>/dev/null
+echo "Gotowe — Wacki.app odblokowany. Uruchom grę dwuklikiem."
+echo "To okno Terminala możesz zamknąć."
+HELPER
+chmod +x "$APP_DIR/Odblokuj-Wacki.command"
+
+echo "[macos-app] built $APP (+ Odblokuj-Wacki.command)"
 du -sh "$APP"

@@ -59,22 +59,47 @@ itd. — znajdują się w katalogu [`docs/`](docs/). To dokumentacja
 
 1. Pobierz archiwum dla swojego systemu z zakładki
    [Releases](../../releases) i rozpakuj w dowolnym katalogu.
-2. Skopiuj pliki `Dane_*.dta` z oryginalnej płyty do podkatalogu
-   `data/`. Gdzie dokładnie zależy od systemu:
+2. Skopiuj pliki `Dane_*.dta` z oryginalnej płyty w jedno z miejsc
+   które gra przeszukuje (patrz niżej). Najprościej:
 
-   - **macOS**: prawy klik na `Wacki.app` → **Show Package Contents**
-     → otwórz `Contents/Resources/data/` i wrzuć tam pliki
+   - **macOS**: folder `data/` **obok** `Wacki.app` (po prostu wrzuć
+     tam pliki), albo prawy klik na `Wacki.app` → **Show Package
+     Contents** → `Contents/Resources/data/`
    - **Linux / Windows**: podkatalog `data/` obok binarki
 
 3. Uruchom grę:
 
-   - **macOS**: dwukrotne kliknięcie `Wacki.app`
+   - **macOS**: dwukrotne kliknięcie `Wacki.app` (przy pierwszym
+     uruchomieniu zobacz „Pierwsze uruchomienie na macOS" niżej)
    - **Linux**: `./wacki`
    - **Windows**: dwukrotne kliknięcie `wacki.exe`
 
-Gra szuka katalogu z danymi w kolejności: zmienna środowiskowa
-`WACKI_PATH`, następnie `./data/`, następnie katalog obok binarki.
-Wielkość liter w nazwach plików nie ma znaczenia.
+Gra przeszukuje (pierwszy trafiony wygrywa): `WACKI_PATH` →
+katalog uruchomienia → `./data/` → katalog binarki (lub folder
+obok `Wacki.app`) → napędy CD / podłączone dyski. Jeśli nic nie
+znajdzie, pokaże okno wyboru folderu. Wielkość liter w nazwach
+plików nie ma znaczenia.
+
+#### Pierwsze uruchomienie na macOS
+
+Binarki nie są podpisane certyfikatem Apple (port jest darmowy, a
+Apple Developer Program kosztuje 99 $/rok), więc Gatekeeper przy
+pierwszym uruchomieniu zablokuje `Wacki.app` komunikatem typu
+*„Apple nie może sprawdzić, czy nie zawiera złośliwego
+oprogramowania"*. To jednorazowe — wybierz **jeden** sposób:
+
+- **Najprościej**: dwuklik na dołączony `Odblokuj-Wacki.command`.
+  Zdejmie flagę kwarantanny z `Wacki.app` leżącego obok i tyle.
+- **Z Terminala**: w katalogu z grą wpisz
+  ```bash
+  xattr -dr com.apple.quarantine Wacki.app
+  ```
+- **Z GUI** (macOS 15 Sequoia): spróbuj uruchomić `Wacki.app`,
+  potem **System Settings → Privacy & Security** → przewiń na dół →
+  przy „Wacki.app was blocked" kliknij **Open Anyway**.
+
+Po jednym z tych kroków `Wacki.app` uruchamia się normalnie
+dwuklikiem.
 
 ### Sterowanie
 
