@@ -272,6 +272,27 @@ slotów.
 
 ---
 
+## Zgłaszanie błędów
+
+Coś się sypie? Otwórz issue:
+
+[**github.com/mszula/wacki/issues**](https://github.com/mszula/wacki/issues/new)
+
+W zgłoszeniu pomogą:
+
+- **wersja portu** — pierwsza linia logu uruchomieniowego (`[info/wacki] Wacki port vX.Y.Z…`)
+- **platforma** — macOS / Linux / Windows / Miyoo + wersja systemu
+- **kroki reprodukcji** — co robiłeś bezpośrednio przed crashem
+- **`wacki.log`** — silnik loguje na stderr; na Miyoo trafia do
+  `Roms/PORTS/Games/Wacki/wacki.log` (przez wrapper `wacki.sh`)
+- **screenshot** — jeśli problem jest wizualny (popsuta paleta,
+  brakujący sprite, glitch animacji)
+
+Jeśli to feature request lub pytanie o przyszłe platformy / mody —
+też smiało, ale w issue zaznacz `[feature]` lub `[question]` w tytule.
+
+---
+
 ## Licencja i prawa
 
 Kod portu silnika udostępniony jest na licencji **GNU General
