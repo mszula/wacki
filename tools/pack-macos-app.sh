@@ -10,21 +10,24 @@
 #   └── Contents/
 #       ├── Info.plist            — bundle metadata (icon, name, id)
 #       ├── MacOS/
-#       │   └── Wacki              — launcher shell script (entry point)
+#       │   └── Wacki              — the real Mach-O binary (entry point)
 #       └── Resources/
-#           ├── wacki              — the real Mach-O binary
 #           ├── data/              — user drops Dane_*.dta here
 #           │   └── README.txt
 #           └── wacki.icns         — Finder + Dock icon
 #
-# Note the binary lives under Resources/ rather than MacOS/ to dodge
-# the case-insensitivity gotcha: the launcher script in MacOS/ has to
-# match CFBundleExecutable ("Wacki", capital W) and APFS would treat
-# MacOS/Wacki + MacOS/wacki as the same path.
+# The Mach-O lives directly in MacOS/ as CFBundleExecutable. That's
+# what makes [NSBundle mainBundle] resolve to the bundle, so SDL reads
+# CFBundleName ("Wacki") for the menu-bar title — an earlier layout
+# that exec'd the binary from Resources/ via a launcher script left
+# mainBundle unresolved, and the menu fell back to the lowercase
+# process name. No launcher is needed: the engine's FindDataRoot probes
+# SDL_GetBasePath() (= Contents/Resources for a bundled app) and finds
+# Resources/data/ there, so the old cwd-pivot hack is gone.
 #
-# Launcher cd's into Resources/ before exec'ing the binary so the
-# engine's `./data/` lookup finds the user's Dane_*.dta. Finder
-# launches CFBundleExecutable directly, no shell visible.
+# There's only one file named "Wacki" in MacOS/, so the APFS
+# case-insensitivity concern (MacOS/Wacki vs a second MacOS/wacki) does
+# not arise.
 #
 # Usage:
 #   ./tools/pack-macos-app.sh dist/wacki Wacki.app
@@ -49,21 +52,11 @@ fi
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/data"
 
-# ---- Binary + launcher ---------------------------------------------------
-cp "$BIN" "$APP/Contents/Resources/wacki"
-chmod +x "$APP/Contents/Resources/wacki"
-
-cat > "$APP/Contents/MacOS/Wacki" <<'LAUNCHER'
-#!/bin/sh
-# Wacki.app launcher — pivots cwd into Resources/ so the engine's
-# stock ./data/ lookup finds the user-provided Dane_*.dta archives,
-# then execs the bundled Mach-O sitting next to data/. Finder runs
-# this script via CFBundleExecutable; the user never sees a Terminal
-# window.
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$HERE/Resources"
-exec ./wacki "$@"
-LAUNCHER
+# ---- Binary --------------------------------------------------------------
+# The Mach-O is the bundle's CFBundleExecutable. Naming it "Wacki"
+# (capital W) to match the plist is what lets NSBundle/SDL pick up
+# CFBundleName for the menu-bar title.
+cp "$BIN" "$APP/Contents/MacOS/Wacki"
 chmod +x "$APP/Contents/MacOS/Wacki"
 
 # ---- Icon ----------------------------------------------------------------
@@ -134,7 +127,7 @@ xattr -cr "$APP" 2>/dev/null || true
 #     the linker applies one but `strip` (CI) can invalidate it.
 #   - keeps the whole bundle's hashes internally consistent so the
 #     one-time right-click-Open / xattr bypass sticks.
-# --deep covers the Mach-O in Resources/; --force overwrites the
+# --deep covers the bundle's Mach-O in MacOS/; --force overwrites the
 # linker-applied signature. -s - is the ad-hoc identity.
 if command -v codesign >/dev/null 2>&1; then
     codesign --force --deep -s - "$APP" 2>/dev/null \

@@ -375,6 +375,15 @@ int WackiMain(int argc, char **argv)
 #ifdef _WIN32
     redirect_streams_to_logfile_if_no_console();
 #endif
+#ifdef __APPLE__
+    /* A Finder-launched .app runs with cwd="/" (read-only). Move to
+     * ~/Library/Application Support/Wacki/ so Wacki.sav, wacki.cfg and
+     * screenshots have a writable home. Must precede ConfigLoad and the
+     * cwd-relative FindDataRoot probes below. No-op for a bare binary. */
+    extern int PlatformMacUseAppSupportDir(void);
+    if (PlatformMacUseAppSupportDir())
+        LOG_INFO("platform", "user dir: ~/Library/Application Support/Wacki");
+#endif
     /* SIGINT first so it covers init failures too. */
     signal(SIGINT, sigint_handler);
 

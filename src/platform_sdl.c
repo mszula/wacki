@@ -128,6 +128,14 @@ void PlatformSetTextInput(int on)
 
 int PlatformInit(int w, int h, const char *title)
 {
+    /* App identity for SDL subsystems that surface a name — audio
+     * device label, screensaver-inhibit reason, and (when running as a
+     * bare binary outside the .app) the macOS menu-bar title. Inside
+     * the bundle the menu name comes from CFBundleName; this is the
+     * fallback so a terminal-launched build still says "Wacki" rather
+     * than the lowercase process name. Must precede SDL_Init. */
+    SDL_SetHint(SDL_HINT_APP_NAME, "Wacki");
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0) {
         LOG_INFO("log", "SDL_Init: %s", SDL_GetError());
         return 0;
@@ -264,6 +272,16 @@ int PlatformInit(int w, int h, const char *title)
         }
     }
 
+#ifdef __APPLE__
+    /* Polish-localise SDL's stock menu bar AND add a "Gra" menu with
+     * Szybki zapis / odczyt, Zrzut ekranu, Pełny ekran, Pauza — wired
+     * to the PlatformMenu* bridges above. Defined in
+     * src/platform_macos.m, linked on Darwin desktop builds only; the
+     * menu exists by the time SDL_CreateWindow has returned. */
+    extern void PlatformSetupMacMenu(void);
+    PlatformSetupMacMenu();
+#endif
+
     /* T31 v2 — hide the OS cursor; PaintCursor blits the olowek /
      * kaseta / magnes / drzwi sprite at mouse pos every frame
      * (matches the original DirectDraw build where the GDI cursor was
@@ -359,6 +377,42 @@ void PlatformPresent(const uint8_t *shadow,
 
 static int input_debug_enabled(void);
 
+#ifndef WACKI_HANDHELD
+/* Flip between windowed and desktop-fullscreen at runtime and persist
+ * the choice. Shared by the F11 key handler and (on macOS) the "Gra"
+ * menu's "Pełny ekran" item. SDL_WINDOW_FULLSCREEN_DESKTOP keeps the
+ * desktop resolution and just covers the active display. */
+static void toggle_fullscreen_runtime(void)
+{
+    if (!s_win) return;
+    g_fullscreen = !g_fullscreen;
+    SDL_SetWindowFullscreen(s_win,
+        g_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    LOG_INFO("platform", "fullscreen=%d", g_fullscreen);
+    extern void ConfigSave(void);
+    ConfigSave();
+}
+#endif
+
+#ifdef __APPLE__
+/* C bridges for the macOS "Gra" menu (src/platform_macos.m). Each maps
+ * a menu item to the exact in-engine action its keyboard shortcut
+ * triggers: the quicksave / quickload / pause "request" latches the
+ * game loop consumes once per frame, a direct screenshot dump, and the
+ * shared fullscreen toggle. Cocoa menu actions fire on the main thread
+ * during SDL event pumping — the same thread the game loop reads these
+ * on — so they're plain writes/calls with no locking. */
+void PlatformMenuQuickSave(void)  { g_quicksave_request  = 1; }
+void PlatformMenuQuickLoad(void)  { g_quickload_request  = 1; }
+void PlatformMenuPause(void)      { g_pause_menu_request = 1; }
+void PlatformMenuToggleFull(void) { toggle_fullscreen_runtime(); }
+void PlatformMenuScreenshot(void)
+{
+    extern void ScreenshotToBmpAutoIncrement(void);
+    ScreenshotToBmpAutoIncrement();
+}
+#endif
+
 static void handle_keydown(const SDL_Event *ev)
 {
     SDL_Keycode sym = ev->key.keysym.sym;
@@ -377,18 +431,9 @@ static void handle_keydown(const SDL_Event *ev)
 
 #ifndef WACKI_HANDHELD
     /* F11 toggles fullscreen at runtime — common convention across
-     * desktop apps. SDL_WINDOW_FULLSCREEN_DESKTOP keeps the desktop
-     * resolution, just covers the active display. Skipped on handheld
-     * builds (Miyoo has no concept of windowed mode). */
-    if (sym == SDLK_F11 && s_win) {
-        g_fullscreen = !g_fullscreen;
-        SDL_SetWindowFullscreen(s_win,
-            g_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
-        LOG_INFO("platform", "fullscreen=%d (F11)", g_fullscreen);
-        /* Persist so the next launch opens in the chosen mode. */
-        extern void ConfigSave(void);
-        ConfigSave();
-    }
+     * desktop apps. Skipped on handheld builds (Miyoo has no concept
+     * of windowed mode). */
+    if (sym == SDLK_F11) toggle_fullscreen_runtime();
 #endif
 
     /* Inline-edit (save-slot rename): queue Backspace / Enter as

@@ -274,6 +274,20 @@ ifeq ($(TARGET),miyoo)
     ENGINE_SRCS += src/platform_miyoo.c
 endif
 
+# macOS desktop gets a small Objective-C helper that re-titles SDL's
+# default English menu bar (App / Window / View) into Polish. clang
+# compiles the .m as Objective-C from its extension even inside the
+# single mixed C/.m link command; AppKit is pulled in via -framework
+# Cocoa. Darwin-only and never for the (Linux/ARM) Miyoo target.
+ifneq ($(TARGET),miyoo)
+ifneq ($(OS),Windows_NT)
+ifeq ($(shell uname -s 2>/dev/null),Darwin)
+    ENGINE_SRCS      += src/platform_macos.m
+    MACOS_FRAMEWORKS := -framework Cocoa
+endif
+endif
+endif
+
 TOOL_SRCS_EXTRACT = tools/dta-extract.c src/depack.c src/archive.c \
                     src/cygio.c src/heap.c src/log.c
 TOOL_SRCS_PKV2    = tools/pkv2-depack.c src/depack.c src/log.c
@@ -349,7 +363,7 @@ all: engine tools
 
 engine: $(DIST)/$(BIN_NAME)$(EXE)
 $(DIST)/$(BIN_NAME)$(EXE): $(ENGINE_SRCS) $(WACKI_RES) | $(DIST)
-	$(CC) $(CFLAGS) $(CFLAGS_SIZE) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(WACKI_RES) $(SDL_LIB) $(LDFLAGS_STATIC) $(LDFLAGS_SIZE)
+	$(CC) $(CFLAGS) $(CFLAGS_SIZE) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(WACKI_RES) $(SDL_LIB) $(LDFLAGS_STATIC) $(LDFLAGS_SIZE) $(MACOS_FRAMEWORKS)
 
 ifeq ($(OS),Windows_NT)
 $(WACKI_RES): assets/icons/wacki.rc assets/icons/wacki.ico | $(DIST)
@@ -369,7 +383,7 @@ miyoo:
 # always uses the dynamic SDL2.
 debug: $(DIST)/wacki-debug$(EXE)
 $(DIST)/wacki-debug$(EXE): $(ENGINE_SRCS) | $(DIST)
-	$(CC) $(DEBUG_CFLAGS) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(SDL_LIB_DYN) $(DEBUG_LDFLAGS)
+	$(CC) $(DEBUG_CFLAGS) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(SDL_LIB_DYN) $(DEBUG_LDFLAGS) $(MACOS_FRAMEWORKS)
 
 tools: $(DIST)/dta-extract$(EXE) $(DIST)/pkv2-depack$(EXE)
 
