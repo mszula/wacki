@@ -34,6 +34,15 @@ out="${1:-dist/wacki-miyoo.zip}"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
+# Display name shown in the OnionOS Ports menu. OnionOS labels a port by
+# its Shortcut filename stem and matches the box-art icon by that same
+# stem, so the shortcut file, the Imgs/ PNG and GameName all share it.
+# The full title is "Wacki: Kosmiczna rozgrywka", but ':' is illegal in a
+# FAT32/exFAT filename (and the label IS the filename here), so the menu
+# drops the colon. GameDir / GameExecutable stay "Wacki" / "wacki" —
+# those are real on-card paths and must not change.
+disp="Wacki Kosmiczna rozgrywka"
+
 # ---- layout under stage/ -------------------------------------------------
 games_dir="$stage/Roms/PORTS/Games/Wacki"
 imgs_dir="$stage/Roms/PORTS/Imgs"
@@ -83,18 +92,18 @@ EOF
 # Optional launcher icon. Drop a 250×250 PNG at assets/icons/wacki-miyoo.png
 # to embed it; otherwise the entry shows OnionOS' default port icon.
 if [ -f assets/icons/wacki-miyoo.png ]; then
-    cp assets/icons/wacki-miyoo.png "$imgs_dir/Wacki.png"
+    cp assets/icons/wacki-miyoo.png "$imgs_dir/$disp.png"
 fi
 
 # Shortcut script — sits under Shortcuts/<Category>/<Name>.notfound and
 # delegates to OnionOS' shared launch_standalone.sh. Filename starts as
 # .notfound; first time GameDataFile is detected the system renames it
 # to .port. Category folder controls grouping in the Ports menu.
-cat > "$shortcuts_dir/Wacki.notfound" <<'SHORTCUT'
+cat > "$shortcuts_dir/$disp.notfound" <<'SHORTCUT'
 #!/bin/sh
 # Standalone port shortcut — calls OnionOS' shared launcher.
 
-GameName="Wacki"
+GameName="Wacki Kosmiczna rozgrywka"
 GameDir="Wacki"
 GameExecutable="wacki"
 
@@ -118,7 +127,7 @@ Arguments=""
     "$Arguments" "$GameDataFile" \
     "$KillAudioserver" "$PerformanceMode"
 SHORTCUT
-chmod +x "$shortcuts_dir/Wacki.notfound"
+chmod +x "$shortcuts_dir/$disp.notfound"
 
 # Short install README at the archive root so the user knows what to
 # do with the zip even without reaching the project README.
@@ -131,7 +140,7 @@ Instalacja (OnionOS):
      Roms/ na karcie.
   2. Skopiuj pliki Dane_*.dta z oryginalnej plyty do:
         Roms/PORTS/Games/Wacki/data/
-  3. Wlacz konsole. W menu Ports → Adventure → Wacki.
+  3. Wlacz konsole. W menu Ports → Adventure → Wacki Kosmiczna rozgrywka.
 
 Wymaga OnionOS 4.2 lub nowszego.
 README

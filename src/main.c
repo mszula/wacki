@@ -433,7 +433,7 @@ int WackiMain(int argc, char **argv)
      * (see include/wacki/embedded_exe.h); PeLoaderRead resolves
      * against them with no runtime init. */
 
-    if (!PlatformInit(WACKI_SCREEN_W, WACKI_SCREEN_H, "Wacki"))
+    if (!PlatformInit(WACKI_SCREEN_W, WACKI_SCREEN_H, WACKI_WINDOW_TITLE))
         return 1;
 
     if (!InitializeGameSubsystems())

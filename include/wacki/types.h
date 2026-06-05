@@ -38,6 +38,12 @@
 
 #define WACKI_SAVE_MAGIC 0x45564153u /* "SAVE" */
 #define WACKI_SAVE_FILE "Wacki.sav"
+
+/* Full game title for the OS window title bar / taskbar / Alt-Tab. The
+ * short "Wacki" stays the macOS menu-bar app name + dialog titles; the
+ * window itself carries the complete name. ASCII only — no Polish
+ * diacritics in the subtitle, so it needs no special encoding. */
+#define WACKI_WINDOW_TITLE "Wacki: Kosmiczna rozgrywka"
 #define WACKI_SAVE_SLOTS 10
 #define WACKI_SLOT_SIZE 0x3012
 #define WACKI_SAVE_SIZE 0x1E0C0
