@@ -417,13 +417,87 @@ jobs:
           path: dist/wacki-miyoo.zip
           if-no-files-found: error
 
+  # ---- Anbernic & other PortMaster handhelds ----------------------
+  # Cross-builds the aarch64 + armhf engines inside Debian bullseye
+  # containers (broad glibc compatibility) and assembles the PortMaster
+  # .zip. Docker-driven like the miyoo job; SDL2 is linked dynamically
+  # so the binaries pick up PortMaster's per-device libSDL2 at runtime.
+  portmaster:
+    name: PortMaster (aarch64 + armhf)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # Register binfmt handlers so the x86_64 runner can run the
+      # linux/arm64 + linux/arm/v7 build containers under emulation.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Fetch WACKI.EXE
+        env:
+          WACKI_EXE_URL: ${{ secrets.WACKI_EXE_URL }}
+        run: |
+          if [ -z "${WACKI_EXE_URL:-}" ]; then
+            echo "::error::WACKI_EXE_URL secret is empty"
+            exit 1
+          fi
+          mkdir -p data
+          curl -fsSL --retry 3 --retry-delay 2 \
+               "$WACKI_EXE_URL" -o data/_wacki_dl
+          # The secret URL serves a ZIP containing WACKI.EXE — sniff the
+          # "PK" magic and extract; tolerate a raw EXE too.
+          if [ "$(head -c 2 data/_wacki_dl)" = "PK" ]; then
+            echo "[fetch] archive detected — extracting WACKI.EXE"
+            mkdir -p data/_unzip
+            if command -v unzip >/dev/null 2>&1; then
+              unzip -o -q data/_wacki_dl -d data/_unzip
+            elif command -v 7z >/dev/null 2>&1; then
+              7z x -y -odata/_unzip data/_wacki_dl >/dev/null
+            else
+              echo "::error::no unzip / 7z available to extract the archive"
+              exit 1
+            fi
+            exe=$(find data/_unzip -iname 'WACKI.EXE' | head -1)
+            [ -n "$exe" ] || exe=$(find data/_unzip -iname '*.exe' | head -1)
+            if [ -z "$exe" ]; then
+              echo "::error::no .exe found inside the downloaded archive"
+              find data/_unzip -type f
+              exit 1
+            fi
+            cp "$exe" data/WACKI.EXE
+            rm -rf data/_unzip data/_wacki_dl
+          else
+            mv data/_wacki_dl data/WACKI.EXE
+          fi
+          ls -la data/WACKI.EXE
+
+      - name: Build engines (Docker / Debian bullseye, aarch64 + armhf)
+        run: |
+          ./tools/build-portmaster.sh all
+          # Docker writes as root-in-container; reset ownership so the
+          # packaging step (non-docker) can read/write under dist/.
+          sudo chown -R "$USER:$USER" dist src/embedded_wacki_pe.c 2>/dev/null || true
+
+      - name: Package PortMaster .zip
+        run: ./tools/pack-portmaster.sh dist/wacki-portmaster.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wacki-portmaster
+          path: dist/wacki-portmaster.zip
+          if-no-files-found: error
+
   # ---- release -----------------------------------------------------
   # Only fires on tag push (`v*`). Pulls the per-platform archives
-  # from the matrix build + the Miyoo job and attaches them to a
-  # GitHub Release named after the tag.
+  # from the matrix build + the Miyoo and PortMaster jobs and attaches
+  # them to a GitHub Release named after the tag.
   release:
     name: GitHub Release
-    needs: [build, miyoo]
+    needs: [build, miyoo, portmaster]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
