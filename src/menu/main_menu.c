@@ -20,7 +20,7 @@
  * flipbook ticks, and the click-to-rc dispatch.
  *
  * Cinematics: play_bomb_explosion (Quit→TAK), play_fiacik_intro +
- * play_loading_screen (Maluch→Prologue). */
+ * play_loading_screen (Maluch→Prologue), play_film_intro (New→film). */
 
 #include "wacki.h"
 #include "wacki/log.h"
@@ -109,6 +109,13 @@
 #define FIACIK_FRAME_DELAY_MS           80    /* ~12 fps */
 #define FIACIK_TAIL_DELAY_MS            200
 #define FIACIK_BUTTONS_TO_PAINT         5     /* def_anim frames 0..4 */
+/* play_film_intro — film.wyc is a 20-frame raw projector animation at
+ * (260,326), the same slot as the static film icon (Tlo.wyc frame 1), so
+ * it animates the "film" button. Sound markers from Wacky.scr [animacja]
+ * film.wyc: Proj1.wav (0,15) then Proj2.wav (14,). */
+#define FILM_FRAME_DELAY_MS             80
+#define FILM_PROJ2_FRAME                14
+#define FILM_TAIL_DELAY_MS              200
 #define LOADING_SCREEN_HOLD_MS          1500
 #define LOADING_SCREEN_FRAME_DELAY_MS   33
 
@@ -434,6 +441,75 @@ static void play_fiacik_intro(void)
     StopMenuMusic();
 }
 
+/* play_film_intro — the projector cutscene fired when the player clicks
+ * the film-strip icon (New, 0x13). 1:1 with the original's New click
+ * script (RunScriptInterpreter @ DAT_00427b40), which loads film.wyc,
+ * spawns it and plays it once to its last frame. film.wyc is a 20-frame
+ * raw atlas anchored at (260,326) — the exact slot of the static film
+ * icon (Tlo.wyc frame 1) — so it animates that button in place. After it
+ * finishes, RunMainGameLoop's outer loop replays the title intro AVI
+ * (same as the original's case-6 break). */
+static void play_film_intro(void)
+{
+    StopMenuMusic();
+    PlayMenuMusic("Proj1.wav", 0);
+
+    /* RunMenuScene's cleanup already freed the mask atlas and NULL'd
+     * g_menu_asset_10 — re-load Tlo.wyc locally for the clean backdrop
+     * (current lava frame + the 5 button rest sprites, no hover). */
+    AnimAsset *bg = LoadAssetFromDtaBase("Tlo.wyc");
+    if (bg && bg->pixel_ptrs) {
+        int bgf = s_anim_frame;
+        if (bgf < MAIN_MENU_ANIM_FIRST_FRAME) bgf = MAIN_MENU_ANIM_FIRST_FRAME;
+        if (bgf >= bg->frame_count) bgf = bg->frame_count - 1;
+        if (bg->pixel_ptrs[bgf]) {
+            BlitSpriteToBackbuffer(
+                bg->off_drawX[bgf], bg->off_drawY[bgf], 0, 0,
+                bg->off_widths[bgf], bg->off_heights[bgf],
+                bg->off_widths[bgf], bg->off_heights[bgf],
+                bg->pixel_ptrs[bgf], 1);                  /* opaque wipe */
+        }
+        for (uint16_t i = 0; i < FIACIK_BUTTONS_TO_PAINT; ++i) {
+            paint_anim_button_at(bg, i, 0, 0, 0);
+        }
+    }
+
+    /* Snapshot the clean menu shadow so we can restore it under each
+     * film frame — film.wyc is colour-keyed (index 0 transparent), so
+     * without the restore the projector's transparent pixels would let
+     * the previous frame bleed through. */
+    size_t shadow_bytes = (size_t)WACKI_SCREEN_W * WACKI_SCREEN_H;
+    uint8_t *snapshot = (uint8_t *)malloc(shadow_bytes);
+    if (snapshot && g_back_shadow) memcpy(snapshot, g_back_shadow, shadow_bytes);
+
+    AnimAsset *a = LoadAssetFromDtaBase("film.wyc");
+    int played_proj2 = 0;
+    if (a && a->frame_count > 0) {
+        for (uint16_t f = 0; f < a->frame_count; ++f) {
+            if (PlatformShouldQuit()) break;
+            PumpEvents();
+            if (snapshot && g_back_shadow) {
+                memcpy(g_back_shadow, snapshot, shadow_bytes);
+            }
+            paint_anim_button_at(a, f, 0, 0, 0);   /* honour atlas hot-spot */
+            FlushFrameToPrimary();
+            /* Proj1.wav rolls from frame 0; Proj2.wav takes over at
+             * FILM_PROJ2_FRAME (PlayMenuMusic stops the previous clip). */
+            if (!played_proj2 && f >= FILM_PROJ2_FRAME) {
+                PlayMenuMusic("Proj2.wav", 0);
+                played_proj2 = 1;
+            }
+            TickMenuMusic();
+            EnginePaceFrame(FILM_FRAME_DELAY_MS);
+        }
+        FreeAsset(a);
+    }
+    if (bg) FreeAsset(bg);
+    free(snapshot);
+    SDL_Delay(FILM_TAIL_DELAY_MS);
+    StopMenuMusic();
+}
+
 /* play_loading_screen — the "LOLDING" screen between Maluch and the
  * first gameplay scene. krazek.pic is a 203×220 RAWB of a vinyl-CD
  * shape with the text "LOLDING" baked in; paint_rawb_pic centres it
@@ -665,10 +741,11 @@ static int dispatch_main_menu_rc(int rc, int *should_return)
         return 1;
 
     case MAIN_MENU_RC_NEW_GAME:
-        /* Film-reel button — the original runs an intro script which
-         * plays the credits/film cutscene. The VM isn't wired to
-         * assets here, so break the inner loop and let the outer
-         * replay the title intro AVI. */
+        /* Film-reel button (0x13). The original's click script
+         * (RunScriptInterpreter @ DAT_00427b40) plays film.wyc once,
+         * then case 6 breaks the inner loop so the title intro AVI
+         * replays. Mirror that: projector cutscene, then return 0. */
+        play_film_intro();
         return 0;
 
     case MAIN_MENU_RC_PROLOGUE:
