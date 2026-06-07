@@ -39,8 +39,8 @@ trap 'rm -rf "$stage"' EXIT
 # stem, so the shortcut file, the Imgs/ PNG and GameName all share it.
 # The full title is "Wacki: Kosmiczna rozgrywka", but ':' is illegal in a
 # FAT32/exFAT filename (and the label IS the filename here), so the menu
-# drops the colon. GameDir / GameExecutable stay "Wacki" / "wacki" —
-# those are real on-card paths and must not change.
+# drops the colon. GameDir stays "Wacki" and GameExecutable is the
+# wacki.sh wrapper — both real on-card paths, independent of the label.
 disp="Wacki Kosmiczna rozgrywka"
 
 # ---- layout under stage/ -------------------------------------------------
@@ -50,11 +50,32 @@ shortcuts_dir="$stage/Roms/PORTS/Shortcuts/Adventure"
 
 mkdir -p "$games_dir/data" "$imgs_dir" "$shortcuts_dir"
 
-# Binary lands at <GameDir>/<GameExecutable> — OnionOS' launch_standalone.sh
-# does `cd "$GameDir"; HOME="$GameDir"` before invoking it, so the engine
-# finds ./data/ adjacent to argv[0] via SDL_GetBasePath fallback.
+# The engine binary lands at <GameDir>/wacki. OnionOS launches the port
+# via a wrapper script (wacki.sh, below) rather than the binary directly:
+# the engine MUST run under SDL's mmiyoo video+audio backend, and the
+# mmiyoo SDL2 fork only selects it when SDL_VIDEODRIVER/SDL_AUDIODRIVER
+# are set to "mmiyoo" — left unset, SDL picks the wrong/no driver and the
+# screen stays black. launch_standalone.sh does `cd "$GameDir"; HOME=...`
+# before invoking GameExecutable, so the wrapper finds ./wacki + ./data/.
 cp "$bin" "$games_dir/wacki"
 chmod +x "$games_dir/wacki"
+
+# ---- launch wrapper: select the mmiyoo SDL backend ----
+# The engine MUST run under SDL's mmiyoo video+audio driver; the mmiyoo
+# SDL2 fork only picks it when these env vars are set — unset, the screen
+# stays black. The 0.5 s pause lets OnionOS finish killing audioserver
+# (KillAudioserver=1 in the shortcut) so the engine gets /dev/dsp. Engine
+# output is captured to wacki.log next to the binary for bug reports.
+# (Volume restore is done inside the engine via MI_AO — not here.)
+cat > "$games_dir/wacki.sh" <<'WRAPPER'
+#!/bin/sh
+cd "$(dirname "$0")"
+export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-mmiyoo}"
+export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-mmiyoo}"
+sleep 0.5
+exec ./wacki "$@" > wacki.log 2>&1
+WRAPPER
+chmod +x "$games_dir/wacki.sh"
 
 # Tell the user which files they have to provide. OnionOS' Package
 # Manager surfaces this list in the "required files" UI.
@@ -105,7 +126,9 @@ cat > "$shortcuts_dir/$disp.notfound" <<'SHORTCUT'
 
 GameName="Wacki Kosmiczna rozgrywka"
 GameDir="Wacki"
-GameExecutable="wacki"
+# Launch via the wrapper (sets SDL_VIDEODRIVER/SDL_AUDIODRIVER=mmiyoo +
+# restores volume), NOT the bare binary — see wacki.sh in the game dir.
+GameExecutable="wacki.sh"
 
 # Probe file the launcher checks under <GameDir>/ (max-depth 2) before
 # starting; if absent OnionOS shows a "missing data" toast instead of
