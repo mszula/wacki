@@ -119,6 +119,17 @@ typedef struct ActorWaypoints {
 static ActorWaypoints s_wp[2];
 static int            s_wp_path_len[2] = { 0, 0 };
 
+/* Per-actor "hold the perspective scale" latch. Set when a script binds
+ * an action/climb anim to an actor (op 0x0E un-hide path): the original
+ * keeps the actor hidden during such sequences, which freezes its
+ * scale_pct; the port keeps the actor visible (so it doesn't vanish),
+ * so we instead freeze the scale here. Without this the actor would
+ * shrink as the climb anim drives its anchor UP the rope — perspective
+ * reads the rising anchor as "going deeper" and scales it down, which
+ * doesn't match the natural-size climb the original shows. Cleared when
+ * the actor starts a normal walk (BindActorWalker). */
+int g_actor_scale_frozen[2] = { 0, 0 };
+
 /* =================================================================== *
  * UpdateActorMovement.
  *
@@ -158,6 +169,10 @@ void UpdateActorMovement(int16_t target_x, int16_t target_y)
         int is_partner = ((int)(g_active_actor & 1u)) != i;
         if (is_partner && persp_script_modified) {
             continue;                       /* keep partner's scale frozen */
+        }
+
+        if (g_actor_scale_frozen[i]) {
+            continue;                       /* action/climb holds its start scale */
         }
 
         int anchor_y = EOFF(a, ENT_OFF_ANCHOR_Y, int16_t);
@@ -579,6 +594,9 @@ int BindActorWalker(int actor_idx, int target_x, int target_y)
     if (actor_idx < 0 || actor_idx > 1) return 0;
     Entity *a = g_actor[actor_idx];
     if (!a) return 0;
+
+    /* A normal walk ends any held action/climb scale — resume perspective. */
+    g_actor_scale_frozen[actor_idx] = 0;
 
     int sx = (int)EOFF(a, ENT_OFF_ANCHOR_X, int16_t);
     int sy = (int)EOFF(a, ENT_OFF_ANCHOR_Y, int16_t);

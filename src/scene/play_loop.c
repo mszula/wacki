@@ -196,8 +196,10 @@ static void publish_scene_walk_bounds(const DemoScene *scene)
  * The walker itself doesn't write +0x58. */
 static void update_actor_perspective_scale(void)
 {
+    extern int g_actor_scale_frozen[2];
     for (int i = 0; i < 2; ++i) {
         if (!g_actor[i]) continue;
+        if (g_actor_scale_frozen[i]) continue;   /* action/climb holds its scale */
         uint8_t *eb = (uint8_t *)g_actor[i];
         int16_t anchor_y = EOFF(eb, ENT_OFF_ANCHOR_Y, int16_t);
         int     scale_pct =

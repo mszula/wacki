@@ -664,8 +664,18 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                  * phase the script parks the actor off-screen (x≈1000 →
                  * culled), so this can't double-render the climb. */
                 extern Entity *g_actor[2];
-                if (e == g_actor[0] || e == g_actor[1])
+                if (e == g_actor[0] || e == g_actor[1]) {
+                    int aidx = (e == g_actor[1]) ? 1 : 0;
                     *(uint16_t *)(eb + 8) &= (uint16_t)~0x0080u;   /* clear EFLAG_HIDDEN */
+                    /* Hold the perspective scale for the action: the climb
+                     * anim drives the anchor UP the rope, which would
+                     * otherwise shrink the actor (perspective reads rising
+                     * Y as "deeper"). The original keeps a constant,
+                     * natural-size climb; freezing the scale matches it.
+                     * Cleared when the actor next walks (BindActorWalker). */
+                    extern int g_actor_scale_frozen[2];
+                    g_actor_scale_frozen[aidx] = 1;
+                }
             }
             break;
         }
