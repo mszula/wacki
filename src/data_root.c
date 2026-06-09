@@ -248,6 +248,20 @@ static int scan_linux_mounts(void)
 static int scan_handheld_card(void)
 {
     const char *paths[] = {
+#ifdef WACKI_PS2
+        /* PlayStation 2. mass: is the USB mass-storage mount (the
+         * practical home for ~370 MB of Dane_*.dta — memory cards are
+         * 8 MB). cdrom0: is a burned disc; host: is PCSX2's host-fs
+         * mapping (handy for emulator testing). Backslash paths mirror
+         * the DOS-style layout the original CD shipped. */
+        "mass:/wacki/data",
+        "mass:/wacki",
+        "mass:/DATA",
+        "host:wacki/data",
+        "host:data",
+        "cdrom0:\\DATA",
+        "cdrom0:\\WACKI\\DATA",
+#endif
         /* Miyoo / OnionOS */
         "/mnt/SDCARD",
         "/mnt/SDCARD/data",

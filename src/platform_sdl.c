@@ -31,6 +31,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Builds that drive the cursor from a real SDL_GameController — a
+ * physical pad + analog stick — rather than (or alongside) a mouse:
+ * Anbernic/PortMaster, the PS Vita, and the PlayStation 2 (DualShock 2).
+ * All share the controller glue in src/platform_portmaster.c, so the pad
+ * hooks below gate on this one symbol instead of repeating the list. */
+#if defined(WACKI_PORTMASTER) || defined(WACKI_VITA) || defined(WACKI_PS2)
+#define WACKI_HAS_SDL_GAMEPAD       1
+#endif
+
 /* ---- constants ---------------------------------------------------- */
 
 /* Typed-char ring buffer for inline-edit (save-slot rename). Populated
@@ -153,8 +162,9 @@ int PlatformInit(int w, int h, const char *title)
     platform_restore_system_volume();
 #endif
 
-#ifdef WACKI_PORTMASTER
-    /* Open the handheld's game controller — see src/platform_portmaster.c. */
+#ifdef WACKI_HAS_SDL_GAMEPAD
+    /* Open the device's game controller — see src/platform_portmaster.c
+     * (shared by PortMaster handhelds, the Vita, and the PS2). */
     if (!g_headless) {
         extern void platform_pad_open(void);
         platform_pad_open();
@@ -577,7 +587,7 @@ static void poll_virtual_cursor(void)
      * the deadzone. The d-pad folds into the discrete dx/dy. Filled by
      * src/platform_portmaster.c on Anbernic; a no-op extern elsewhere. */
     float ax = 0.0f, ay = 0.0f;
-#ifdef WACKI_PORTMASTER
+#ifdef WACKI_HAS_SDL_GAMEPAD
     {
         extern void platform_pad_read_motion(int *, int *, float *, float *);
         platform_pad_read_motion(&dx, &dy, &ax, &ay);
@@ -682,7 +692,7 @@ void PlatformPumpEvents(void)
         case SDL_MOUSEBUTTONDOWN:
             handle_mouse_button_down(&ev);
             break;
-#ifdef WACKI_PORTMASTER
+#ifdef WACKI_HAS_SDL_GAMEPAD
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:

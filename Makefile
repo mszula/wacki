@@ -64,6 +64,15 @@ ifeq ($(TARGET),miyoo)
 else ifeq ($(TARGET),portmaster)
     CFLAGS  += -DWACKI_HANDHELD -DWACKI_PORTMASTER
     BIN_NAME := wacki
+else ifeq ($(TARGET),ps2)
+    # PlayStation 2 via the ps2dev toolchain (mips64r5900el-ps2-elf-gcc,
+    # run inside the ps2dev Docker image). WACKI_HANDHELD: fullscreen, no
+    # display-mode picker, no GUI folder-picker. WACKI_PS2: device
+    # specifics. The SDL2-PS2 include/lib flags (ports + gsKit + ee lib
+    # paths and the SDL2 dependency chain) are supplied by
+    # tools/build-ps2.sh as SDL_CFG / SDL_LIB overrides.
+    CFLAGS  += -DWACKI_HANDHELD -DWACKI_PS2
+    BIN_NAME := wacki-ps2.elf
 else
     BIN_NAME := wacki
 endif
@@ -178,6 +187,13 @@ ifeq ($(TARGET),miyoo)
     # (alsa-style tinymix controls don't exist on MMP — kernel exposes
     # MI_AO instead, which the mmiyoo SDL2 backend has already loaded).
     LDFLAGS_SIZE := -Wl,--gc-sections -ldl
+else ifeq ($(TARGET),ps2)
+    # Keep the base -O2 — the 294 MHz Emotion Engine writes every blit
+    # pixel, so favour speed over size (assets ship on USB/DVD, not a
+    # tight cart). The ps2dev toolchain specs handle crt0/linkfile, so no
+    # extra LD glue is needed.
+    CFLAGS_SIZE  :=
+    LDFLAGS_SIZE :=
 else ifeq ($(STATIC_SDL2),1)
     CFLAGS_SIZE := -Os -ffunction-sections -fdata-sections -flto
     UNAME_S := $(shell uname -s 2>/dev/null)
@@ -289,17 +305,23 @@ ifeq ($(TARGET),miyoo)
     ENGINE_SRCS += src/platform_miyoo.c
 else ifeq ($(TARGET),portmaster)
     ENGINE_SRCS += src/platform_portmaster.c
+else ifeq ($(TARGET),ps2)
+    # Shared SDL_GameController glue: the DualShock 2 reaches the cursor
+    # through the same pad path as PortMaster/Vita.
+    ENGINE_SRCS += src/platform_portmaster.c
 endif
 
 # macOS desktop gets a small Objective-C helper that re-titles SDL's
 # default English menu bar (App / Window / View) into Polish. clang
 # compiles the .m as Objective-C from its extension even inside the
 # single mixed C/.m link command; AppKit is pulled in via -framework
-# Cocoa. -framework Security pulls in the SecTranslocate SPI used to
-# undo Gatekeeper App Translocation (see PlatformMacUntranslocatePath),
-# so "drop data/ next to Wacki.app" works for downloaded bundles.
-# Darwin-only and never for the (Linux/ARM) Miyoo target.
-ifneq ($(TARGET),miyoo)
+# Cocoa. -framework Security pulls in the SecTranslocate SPI used to undo
+# Gatekeeper App Translocation (see PlatformMacUntranslocatePath), so "drop
+# data/ next to Wacki.app" works for downloaded bundles. Desktop-only: gated
+# on an EMPTY TARGET so a cross-build hosted on a Mac (the Miyoo/PortMaster
+# toolchains, or a native ps2/vita build) doesn't drag the Cocoa helper +
+# frameworks into an ARM/MIPS link that can't use them.
+ifeq ($(TARGET),)
 ifneq ($(OS),Windows_NT)
 ifeq ($(shell uname -s 2>/dev/null),Darwin)
     ENGINE_SRCS      += src/platform_macos.m
@@ -379,7 +401,7 @@ TEST_CFLAGS = -O2 -Wall -Wextra -Wpedantic \
               -std=gnu11 -I tests/sdl_stub -I include -I tests
 
 # ---- targets ----------------------------------------------------------------
-.PHONY: all engine tools clean run debug test miyoo
+.PHONY: all engine tools clean run debug test miyoo ps2
 all: engine tools
 
 engine: $(DIST)/$(BIN_NAME)$(EXE)
@@ -397,6 +419,12 @@ endif
 # built static SDL2 the toolchain ships with.
 miyoo:
 	./tools/build-miyoo.sh
+
+# Build the PS2 ELF through the ps2dev Docker image (mips64r5900el-ps2-
+# elf-gcc + SDL2-PS2). Produces dist/wacki-ps2.elf. Experiment: drop it
+# on a USB stick and launch via uLaunchELF, or run it in PCSX2.
+ps2:
+	./tools/build-ps2.sh
 
 # Debug build with sanitizers — separate binary so the release build
 # stays untouched. Run via $(DIST)/wacki-debug --headless for CI fuzz
