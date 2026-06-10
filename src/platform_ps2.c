@@ -31,6 +31,8 @@
 #include <iopcontrol.h>
 #include <sbv_patches.h>
 #include <libcdvd.h>
+#include <gsKit.h>
+#include <dmaKit.h>
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
@@ -90,6 +92,86 @@ void platform_ps2_io_init(void)
 
     sceCdInit(SCECdINIT);
     SifExecModuleBuffer(cdfs_irx, size_cdfs_irx, 0, NULL, &ret);
+}
+
+/* ---- native gsKit video (hardware palette) ----------------------- *
+ *
+ * The engine renders into a 640×480 8-bpp shadow + a 256-entry palette.
+ * SDL2-PS2's renderer can only take RGB textures, forcing a per-pixel
+ * 8→ARGB expansion on the EE — profiled at ~135 ms/frame (6 fps). Here we
+ * own the GS via gsKit instead: upload the raw 8-bpp shadow as a PSMT8
+ * texture + the palette as a CLUT and let the GS do the lookup in
+ * hardware during rasterisation. No EE expansion, 307 KB upload instead
+ * of 1.2 MB. SDL is kept only for input (SDL_GameController) + timing. */
+
+static GSGLOBAL *s_gs = 0;
+static GSTEXTURE s_fbtex;
+static u32       s_clut[256] __attribute__((aligned(64)));
+
+int platform_ps2_video_init(int w, int h)
+{
+    /* Auto-detects the mode (NTSC/PAL) and sets Width/Height/MagV/DH for
+     * it. DON'T override the geometry — doing so left MagV = -1 and showed
+     * only the top half of the screen. Only the pixel format / buffering
+     * are tweaked (they don't affect display alignment). */
+    s_gs = gsKit_init_global();
+    s_gs->PSM            = GS_PSM_CT24;
+    s_gs->PSMZ           = GS_PSMZ_16S;
+    s_gs->ZBuffering     = GS_SETTING_OFF;
+    s_gs->DoubleBuffering = GS_SETTING_ON;
+    s_gs->PrimAlphaEnable = GS_SETTING_OFF;
+
+    dmaKit_init(D_CTRL_RELE_OFF, D_CTRL_MFD_OFF, D_CTRL_STS_UNSPEC,
+                D_CTRL_STD_OFF, D_CTRL_RCYC_8, 1 << DMA_CHANNEL_GIF);
+    dmaKit_chan_init(DMA_CHANNEL_GIF);
+    gsKit_init_screen(s_gs);
+    gsKit_mode_switch(s_gs, GS_ONESHOT);
+    gsKit_TexManager_init(s_gs);
+
+    s_fbtex.Width           = (u32)w;
+    s_fbtex.Height          = (u32)h;
+    s_fbtex.PSM             = GS_PSM_T8;
+    s_fbtex.ClutPSM         = GS_PSM_CT32;
+    s_fbtex.Filter          = GS_FILTER_LINEAR;   /* smooth the 480→448 scale */
+    s_fbtex.ClutStorageMode = GS_CLUT_STORAGE_CSM1;
+    s_fbtex.Clut            = s_clut;
+    s_fbtex.Mem             = 0;                    /* points at the shadow per frame */
+    s_fbtex.Delayed         = 0;
+    gsKit_setup_tbw(&s_fbtex);
+    return 1;
+}
+
+void platform_ps2_present(const uint8_t *shadow, const uint8_t *palette,
+                          int w, int h)
+{
+    if (!s_gs) return;
+
+    /* Palette → GS CLUT. CT32 = R,G,B,A in ascending bytes (GS treats
+     * alpha 0x80 as 1.0). 8-bit textures read the CLUT in CSM1 storage
+     * order, which swaps entries within each 32-block (8↔16) — gsKit does
+     * NOT do this, so apply the swizzle here or the colours scramble. */
+    for (int i = 0; i < 256; ++i) {
+        const uint8_t *e = palette + i * 3;
+        u32 c = (u32)e[0] | ((u32)e[1] << 8) | ((u32)e[2] << 16) | (0x80u << 24);
+        int j = i;
+        if      ((i & 0x18) == 0x08) j = i + 8;
+        else if ((i & 0x18) == 0x10) j = i - 8;
+        s_clut[j] = c;
+    }
+
+    s_fbtex.Mem = (u32 *)shadow;
+    gsKit_clear(s_gs, 0);
+    gsKit_TexManager_invalidate(s_gs, &s_fbtex);   /* shadow changed → re-upload */
+    gsKit_TexManager_bind(s_gs, &s_fbtex);
+    gsKit_prim_sprite_texture_3d(s_gs, &s_fbtex,
+        0.0f,            0.0f,            1, 0.0f,     0.0f,
+        (float)s_gs->Width, (float)s_gs->Height, 1, (float)w, (float)h,
+        0x80808080);
+    gsKit_queue_exec(s_gs);
+    gsKit_sync_flip(s_gs);
+    gsKit_TexManager_nextFrame(s_gs);
+
+    g_ps2_present_n++;   /* frame counter — read over PINE to measure fps */
 }
 
 #endif /* WACKI_PS2 */

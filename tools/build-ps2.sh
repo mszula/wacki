@@ -63,7 +63,7 @@ PORTS="$PS2DEV/ps2sdk/ports"
 # ps2sdk EE/common includes + -D_EE: platform_ps2.c now pulls in sifrpc.h,
 # loadfile.h, libcdvd.h etc. (and ps2sdk's tamtypes.h needs _EE defined).
 SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \
--I$PS2DEV/ps2sdk/ee/include -I$PS2DEV/ps2sdk/common/include -D_EE"
+-I$PS2DEV/ps2sdk/ee/include -I$PS2DEV/ps2sdk/common/include -I$PS2DEV/gsKit/include -D_EE"
 SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
 -lSDL2 -lfileXio -lcdvd -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lps2_drivers -lm"
 

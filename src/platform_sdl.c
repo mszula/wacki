@@ -149,13 +149,11 @@ int PlatformInit(int w, int h, const char *title)
 #endif
 
 #ifdef WACKI_PS2
-    /* SDL2-PS2's audio backend (audsrv) wedges / reboots the IOP during
-     * audio-subsystem init, taking the whole engine down before the
-     * first frame ever draws. Until a native audsrv path exists, the PS2
-     * build runs SILENT: never bring up SDL_INIT_AUDIO. Video + input are
-     * enough to render and play; the mixer + cutscene audio paths are
-     * gated off to match (audio.c, flic.c). */
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+    /* PS2: NO SDL video — gsKit owns the GS directly (hardware-palette
+     * present in platform_ps2.c), so SDL must not init its own gsKit. And
+     * NO audio — SDL2-PS2's audsrv backend wedges the IOP. SDL is used
+     * only for input (SDL_GameController) + timing (SDL_GetTicks). */
+    if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0) {
 #else
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0) {
 #endif
@@ -190,6 +188,20 @@ int PlatformInit(int w, int h, const char *title)
         LOG_INFO("platform", "SDL ready (headless): %dx%d, video=%s", w, h, drv ? drv : "?");
         return 1;
     }
+
+#ifdef WACKI_PS2
+    /* PS2 video is native gsKit (no SDL window/renderer/texture): a PSMT8
+     * texture + CLUT so the GS does the palette lookup in hardware. */
+    {
+        extern int platform_ps2_video_init(int w, int h);
+        if (!platform_ps2_video_init(w, h)) {
+            LOG_INFO("platform", "gsKit video init failed");
+            return 0;
+        }
+        LOG_INFO("platform", "PS2 gsKit video up (640x448 NTSC, PSMT8+CLUT)");
+        return 1;
+    }
+#endif
 
 #ifndef WACKI_HANDHELD
     /* First launch (no wacki.cfg yet) and the player didn't force a
@@ -366,15 +378,13 @@ void PlatformPresent(const uint8_t *shadow,
                      const uint8_t *palette_rgb, int w, int h)
 {
     if (g_headless) return;
-    if (!s_tex || !shadow || !palette_rgb) return;
-
 #ifdef WACKI_PS2
-    extern volatile uint32_t g_ps2_exp_ms, g_ps2_draw_ms, g_ps2_frame_ms, g_ps2_present_n;
-    static uint32_t s_ps2_prev_present = 0;
-    uint32_t s_ps2_te = SDL_GetTicks();
-    if (s_ps2_prev_present) g_ps2_frame_ms += s_ps2_te - s_ps2_prev_present;
-    s_ps2_prev_present = s_ps2_te;
+    /* Native gsKit present — GS hardware palette (see platform_ps2.c). */
+    extern void platform_ps2_present(const uint8_t *, const uint8_t *, int, int);
+    platform_ps2_present(shadow, palette_rgb, w, h);
+    return;
 #endif
+    if (!s_tex || !shadow || !palette_rgb) return;
 
     /* SDL_LockTexture maps the GPU/streaming texture into our address
      * space so we expand the 8-bpp shadow + palette LUT straight into
@@ -413,17 +423,9 @@ void PlatformPresent(const uint8_t *shadow,
         }
         SDL_UpdateTexture(s_tex, NULL, s_pixels32, w * ARGB_BYTES_PER_PIXEL);
     }
-#ifdef WACKI_PS2
-    uint32_t s_ps2_td = SDL_GetTicks();
-    g_ps2_exp_ms += s_ps2_td - s_ps2_te;
-#endif
     SDL_RenderClear(s_ren);
     SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
     SDL_RenderPresent(s_ren);
-#ifdef WACKI_PS2
-    g_ps2_draw_ms += SDL_GetTicks() - s_ps2_td;
-    g_ps2_present_n++;
-#endif
 }
 
 /* ---- event pump -------------------------------------------------- */
