@@ -148,7 +148,17 @@ int PlatformInit(int w, int h, const char *title)
     SDL_SetHint(SDL_HINT_APP_NAME, "Wacki");
 #endif
 
+#ifdef WACKI_PS2
+    /* SDL2-PS2's audio backend (audsrv) wedges / reboots the IOP during
+     * audio-subsystem init, taking the whole engine down before the
+     * first frame ever draws. Until a native audsrv path exists, the PS2
+     * build runs SILENT: never bring up SDL_INIT_AUDIO. Video + input are
+     * enough to render and play; the mixer + cutscene audio paths are
+     * gated off to match (audio.c, flic.c). */
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+#else
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0) {
+#endif
         LOG_INFO("log", "SDL_Init: %s", SDL_GetError());
         return 0;
     }

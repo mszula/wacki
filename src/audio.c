@@ -151,6 +151,13 @@ static void mixer_callback(void *userdata, Uint8 *stream, int len)
 int mixer_ensure_open(void)
 {
     if (s_mix_dev) return 1;
+#ifdef WACKI_PS2
+    /* PS2 runs silent — opening an SDL audio device wedges audsrv and
+     * hangs the IOP (see platform_sdl.c). The mixer + every PlaySfx /
+     * dialog path already tolerates "no device open", so just report it
+     * unavailable and never touch SDL audio. */
+    return 0;
+#endif
     SDL_AudioSpec want;
     SDL_memset(&want, 0, sizeof want);
     want.freq     = MIX_OUT_FREQ;

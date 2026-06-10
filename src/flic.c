@@ -146,6 +146,13 @@ static void audio_cvt_free(void)
 
 static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
 {
+#ifdef WACKI_PS2
+    /* PS2 plays cutscenes silently — SDL audio (audsrv) wedges the IOP
+     * (see platform_sdl.c). Skip the device entirely; the player checks
+     * s_audio_open before queuing, so video keeps running. */
+    (void)sample_rate; (void)channels; (void)bits;
+    return;
+#endif
     SDL_AudioFormat src_fmt = (bits == 8) ? AUDIO_U8 : AUDIO_S16LSB;
 
     /* Reuse the open device when the SOURCE spec is unchanged. */
