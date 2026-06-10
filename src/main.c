@@ -382,6 +382,15 @@ static void redirect_streams_to_logfile_if_no_console(void)
 
 int WackiMain(int argc, char **argv)
 {
+#ifdef WACKI_PS2
+    /* Bring up the IOP fileio stack (reset IOP, load iomanX/fileXio/cdfs,
+     * fileXioInit, sceCdInit) BEFORE any file access — ps2sdk's newlib
+     * fopen reaches no device, so cygio.c reads everything through
+     * fileXio. Defined in src/platform_ps2.c. */
+    extern void platform_ps2_io_init(void);
+    platform_ps2_io_init();
+    WK_PS2_MARK(0x0001u);
+#endif
 #ifdef _WIN32
     redirect_streams_to_logfile_if_no_console();
 #endif
