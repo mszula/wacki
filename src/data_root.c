@@ -249,16 +249,26 @@ static int scan_handheld_card(void)
 {
     const char *paths[] = {
 #ifdef WACKI_PS2
-        /* PlayStation 2. mass: is the USB mass-storage mount (the
-         * practical home for ~370 MB of Dane_*.dta — memory cards are
-         * 8 MB). cdrom0: is a burned disc; host: is PCSX2's host-fs
-         * mapping (handy for emulator testing). Backslash paths mirror
-         * the DOS-style layout the original CD shipped. */
+        /* PlayStation 2. Realistic homes for the ~370 MB of Dane_*.dta
+         * (memory cards are only 8 MB):
+         *   host: / host0:  — PCSX2's HostFS, rooted at the folder that
+         *                     holds the booted ELF. PS2 HostFS is fussy
+         *                     about the exact spelling, so try the common
+         *                     forms: a ./data or ./wacki/data subfolder,
+         *                     and the files sitting right next to the ELF
+         *                     (the bare host: root → host:/Dane_02.dta).
+         *   mass:           — USB mass storage on real hardware.
+         *   cdrom0:         — a burned disc (DOS-style upper-case layout).
+         */
+        "host:data",
+        "host:wacki/data",
+        "host:",
+        "host0:data",
+        "host0:wacki/data",
+        "host0:",
         "mass:/wacki/data",
         "mass:/wacki",
         "mass:/DATA",
-        "host:wacki/data",
-        "host:data",
         "cdrom0:\\DATA",
         "cdrom0:\\WACKI\\DATA",
 #endif
