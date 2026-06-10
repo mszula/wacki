@@ -33,6 +33,7 @@
 #include <libcdvd.h>
 #include <gsKit.h>
 #include <dmaKit.h>
+#include <stdio.h>          /* SEEK_SET/CUR/END for the cygio fseek shim */
 #include <kernel.h>
 #include <audsrv.h>
 #include <libmc.h>
@@ -461,6 +462,142 @@ void platform_ps2_avi_audio_push(const void *buf, int len)
 void platform_ps2_avi_audio_end(void)
 {
     s_avi_audio_on = 0;
+}
+
+/* ---- async read-ahead for streamed cutscenes -------------------- *
+ *
+ * A blocking disc read pauses the FLIC decoder, so off a disc the 52 MB
+ * cutscene AVI stutters on every refill. A background thread reads the
+ * file sequentially into a big ring; flic.c pulls from RAM and only ever
+ * waits if the disc can't keep up (the emulated/real drive is several×
+ * faster than the AVI bitrate, so it stays ahead). Single instance — one
+ * cutscene plays at a time. SPSC ring: the thread is the sole producer
+ * (wpos), the decoder the sole consumer (rpos). Seeks are forward-within-
+ * buffer (just advance rpos) except the one-time header seeks at open,
+ * which reposition the thread via s_aread_seekreq. */
+typedef struct CygFile CygFile;
+extern CygFile *fopen_cyg(const char *name, const char *mode);
+extern void     fclose_cyg(CygFile *f);
+extern uint32_t fread_cyg(void *dst, uint32_t sz, uint32_t n, CygFile *f);
+extern void     fseek_cyg(CygFile *f, int32_t off, int whence);
+extern int32_t  ftell_cyg(CygFile *f);
+
+#define AREAD_RING (2 * 1024 * 1024)          /* ~2.4 s at the AVI bitrate */
+static uint8_t  s_aread_ring[AREAD_RING] __attribute__((aligned(64)));
+static char     s_aread_stack[16 * 1024]  __attribute__((aligned(16)));
+static CygFile *s_aread_cf       = NULL;
+static int32_t  s_aread_filesize = 0;
+static volatile uint32_t s_aread_wpos = 0, s_aread_rpos = 0;
+static volatile int32_t  s_aread_rfilepos = 0, s_aread_wfilepos = 0;
+static volatile int32_t  s_aread_seekreq = -1;
+static volatile int      s_aread_run = 0, s_aread_eof = 0, s_aread_alive = 0;
+static int               s_aread_tid = -1;
+
+static void aread_thread(void *arg)
+{
+    (void)arg;
+    s_aread_alive = 1;
+    while (s_aread_run) {
+        if (s_aread_seekreq >= 0) {                  /* consumer asked to reposition */
+            int32_t t = s_aread_seekreq;
+            fseek_cyg(s_aread_cf, t, SEEK_SET);
+            s_aread_rpos = s_aread_wpos = 0;
+            s_aread_rfilepos = s_aread_wfilepos = t;
+            s_aread_eof = (t >= s_aread_filesize);
+            s_aread_seekreq = -1;
+            continue;
+        }
+        if (s_aread_wfilepos >= s_aread_filesize) { s_aread_eof = 1; SDL_Delay(2); continue; }
+        uint32_t used  = (s_aread_wpos - s_aread_rpos + AREAD_RING) % AREAD_RING;
+        uint32_t freeb = AREAD_RING - used - 1;
+        if (freeb < 4096) { SDL_Delay(1); continue; }     /* ring full → wait */
+        uint32_t to_end = AREAD_RING - s_aread_wpos;
+        uint32_t n = freeb;
+        if (n > to_end) n = to_end;
+        if (n > 65536)  n = 65536;
+        uint32_t favail = (uint32_t)(s_aread_filesize - s_aread_wfilepos);
+        if (n > favail) n = favail;
+        uint32_t got = fread_cyg(s_aread_ring + s_aread_wpos, 1, n, s_aread_cf);
+        if (got == 0) { s_aread_eof = 1; SDL_Delay(2); continue; }
+        SyncDCache(s_aread_ring + s_aread_wpos, s_aread_ring + s_aread_wpos + got);
+        s_aread_wpos = (s_aread_wpos + got) % AREAD_RING;
+        s_aread_wfilepos += (int32_t)got;
+    }
+    s_aread_alive = 0;
+    ExitThread();
+}
+
+int platform_ps2_aread_open(const char *path)
+{
+    s_aread_cf = fopen_cyg(path, "rb");
+    if (!s_aread_cf) return 0;
+    fseek_cyg(s_aread_cf, 0, SEEK_END);
+    s_aread_filesize = ftell_cyg(s_aread_cf);
+    fseek_cyg(s_aread_cf, 0, SEEK_SET);
+    if (s_aread_filesize <= 0) { fclose_cyg(s_aread_cf); s_aread_cf = NULL; return 0; }
+    s_aread_wpos = s_aread_rpos = 0;
+    s_aread_rfilepos = s_aread_wfilepos = 0;
+    s_aread_seekreq = -1;
+    s_aread_eof = 0;
+    s_aread_run = 1;
+    ee_thread_t th;
+    th.func = (void *)aread_thread; th.stack = s_aread_stack;
+    th.stack_size = sizeof s_aread_stack; th.gp_reg = GetGP();
+    th.initial_priority = 36;            /* below audio (32), above game (40) */
+    th.attr = 0; th.option = 0;
+    s_aread_tid = CreateThread(&th);
+    if (s_aread_tid >= 0) StartThread(s_aread_tid, NULL);
+    return 1;
+}
+
+uint32_t platform_ps2_aread_read(void *dst, uint32_t n)
+{
+    uint8_t *d = (uint8_t *)dst;
+    uint32_t got = 0;
+    while (got < n) {
+        uint32_t avail = (s_aread_wpos - s_aread_rpos + AREAD_RING) % AREAD_RING;
+        if (avail == 0) {
+            if (s_aread_eof && s_aread_rfilepos >= s_aread_filesize) break;
+            SDL_Delay(1);                /* underrun — wait for the reader */
+            continue;
+        }
+        uint32_t to_end = AREAD_RING - s_aread_rpos;
+        uint32_t take = n - got;
+        if (take > avail)  take = avail;
+        if (take > to_end) take = to_end;
+        memcpy(d + got, s_aread_ring + s_aread_rpos, take);
+        s_aread_rpos = (s_aread_rpos + take) % AREAD_RING;
+        s_aread_rfilepos += (int32_t)take;
+        got += take;
+    }
+    return got;
+}
+
+void platform_ps2_aread_seek(int32_t off, int whence)
+{
+    int32_t target;
+    if      (whence == SEEK_SET) target = off;
+    else if (whence == SEEK_CUR) target = s_aread_rfilepos + off;
+    else                         target = s_aread_filesize + off;
+    uint32_t avail = (s_aread_wpos - s_aread_rpos + AREAD_RING) % AREAD_RING;
+    if (target >= s_aread_rfilepos &&
+        target <= s_aread_rfilepos + (int32_t)avail) {
+        s_aread_rpos = (s_aread_rpos + (uint32_t)(target - s_aread_rfilepos)) % AREAD_RING;
+        s_aread_rfilepos = target;       /* forward skip within the ring */
+    } else {
+        s_aread_seekreq = target;        /* reposition the reader, wait for ack */
+        for (int i = 0; i < 1000 && s_aread_seekreq >= 0; ++i) SDL_Delay(1);
+    }
+}
+
+int32_t platform_ps2_aread_tell(void) { return s_aread_rfilepos; }
+
+void platform_ps2_aread_close(void)
+{
+    s_aread_run = 0;
+    for (int i = 0; i < 1000 && s_aread_alive; ++i) SDL_Delay(1);  /* let it exit */
+    if (s_aread_tid >= 0) { DeleteThread(s_aread_tid); s_aread_tid = -1; }
+    if (s_aread_cf) { fclose_cyg(s_aread_cf); s_aread_cf = NULL; }
 }
 
 void platform_ps2_audio_init(void)

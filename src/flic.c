@@ -91,77 +91,22 @@ static inline uint16_t rd_u16(const uint8_t *p) {
  * shim and each fileXio call is a SIF RPC, so wrap it in an equivalent
  * read-ahead buffer (a flood of tiny RPCs would also starve audsrv). */
 #ifdef WACKI_PS2
-typedef struct CygFile CygFile;
-extern CygFile *fopen_cyg(const char *name, const char *mode);
-extern void     fclose_cyg(CygFile *f);
-extern uint32_t fread_cyg(void *dst, uint32_t sz, uint32_t n, CygFile *f);
-extern void     fseek_cyg(CygFile *f, int32_t off, int whence);
-extern int32_t  ftell_cyg(CygFile *f);
+/* A background thread reads the AVI into a big ring (platform_ps2.c); the
+ * decoder pulls from RAM so disc latency never pauses playback. One
+ * cutscene at a time → a single global reader; FlicFp is just an open
+ * flag. */
+extern int      platform_ps2_aread_open(const char *path);
+extern uint32_t platform_ps2_aread_read(void *dst, uint32_t n);
+extern void     platform_ps2_aread_seek(int32_t off, int whence);
+extern int32_t  platform_ps2_aread_tell(void);
+extern void     platform_ps2_aread_close(void);
 
-#define FLIC_READ_BUF_BYTES   (256u * 1024)
-
-typedef struct {
-    CygFile *cf;
-    uint8_t *buf;
-    uint32_t len;        /* valid bytes in buf */
-    uint32_t bufpos;     /* next byte to serve from buf */
-    int32_t  filepos;    /* logical offset of the next byte to serve */
-} FlicReader;
-
-static FlicReader *flic_open(const char *path)
-{
-    CygFile *cf = fopen_cyg(path, "rb");
-    if (!cf) return NULL;
-    FlicReader *r = (FlicReader *)calloc(1, sizeof *r);
-    uint8_t    *b = (uint8_t *)malloc(FLIC_READ_BUF_BYTES);
-    if (!r || !b) { fclose_cyg(cf); free(r); free(b); return NULL; }
-    r->cf = cf; r->buf = b;
-    return r;
-}
-static uint32_t flic_read(void *dst, uint32_t n, FlicReader *r)
-{
-    uint8_t *d = (uint8_t *)dst;
-    uint32_t done = 0;
-    while (done < n) {
-        if (r->bufpos >= r->len) {
-            r->len = fread_cyg(r->buf, 1, FLIC_READ_BUF_BYTES, r->cf);
-            r->bufpos = 0;
-            if (r->len == 0) break;          /* EOF / error */
-        }
-        uint32_t avail = r->len - r->bufpos;
-        uint32_t take  = n - done;
-        if (take > avail) take = avail;
-        memcpy(d + done, r->buf + r->bufpos, take);
-        r->bufpos  += take;
-        done       += take;
-        r->filepos += (int32_t)take;
-    }
-    return done;
-}
-static void flic_seek(FlicReader *r, int32_t off, int whence)
-{
-    int32_t target;
-    if      (whence == SEEK_SET) target = off;
-    else if (whence == SEEK_CUR) target = r->filepos + off;
-    else { fseek_cyg(r->cf, off, SEEK_END); target = ftell_cyg(r->cf); }
-    int32_t bufstart = r->filepos - (int32_t)r->bufpos;   /* offset of buf[0] */
-    if (r->len && target >= bufstart && target <= bufstart + (int32_t)r->len) {
-        r->bufpos = (uint32_t)(target - bufstart);        /* stay in buffer */
-    } else {
-        fseek_cyg(r->cf, target, SEEK_SET);               /* drop buffer */
-        r->len = r->bufpos = 0;
-    }
-    r->filepos = target;
-}
-static int32_t flic_tell(FlicReader *r) { return r->filepos; }
-static void flic_close(FlicReader *r)
-{
-    if (!r) return;
-    if (r->cf) fclose_cyg(r->cf);
-    free(r->buf);
-    free(r);
-}
-typedef FlicReader *FlicFp;
+typedef void *FlicFp;                     /* non-NULL = open (state is global) */
+static FlicFp   flic_open(const char *path) { return platform_ps2_aread_open(path) ? (void *)1 : NULL; }
+static uint32_t flic_read(void *dst, uint32_t n, FlicFp f) { (void)f; return platform_ps2_aread_read(dst, n); }
+static void     flic_seek(FlicFp f, int32_t off, int whence) { (void)f; platform_ps2_aread_seek(off, whence); }
+static int32_t  flic_tell(FlicFp f) { (void)f; return platform_ps2_aread_tell(); }
+static void     flic_close(FlicFp f) { (void)f; platform_ps2_aread_close(); }
 #else
 typedef FILE *FlicFp;
 static FlicFp   flic_open(const char *path)
