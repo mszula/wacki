@@ -73,6 +73,14 @@ extern char g_data_root[260];
 
 static int try_open_path(const char *path)
 {
+#ifdef WACKI_PS2
+    /* Match the cdrom0: path rewrite the archive reader uses (cygio.c),
+     * so the probe and the real reads agree on the DOS-style form. */
+    extern void ps2_normalize_path(const char *, char *, size_t);
+    char fixed[ARCHIVE_PROBE_PATH_BYTES];
+    ps2_normalize_path(path, fixed, sizeof fixed);
+    path = fixed;
+#endif
     FILE *fp = fopen(path, "rb");
     if (!fp) return 0;
     fclose(fp);
