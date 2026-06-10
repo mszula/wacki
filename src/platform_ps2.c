@@ -110,11 +110,23 @@ static u32       s_clut[256] __attribute__((aligned(64)));
 
 int platform_ps2_video_init(int w, int h)
 {
-    /* Auto-detects the mode (NTSC/PAL) and sets Width/Height/MagV/DH for
-     * it. DON'T override the geometry — doing so left MagV = -1 and showed
-     * only the top half of the screen. Only the pixel format / buffering
-     * are tweaked (they don't affect display alignment). */
     s_gs = gsKit_init_global();
+#ifdef WACKI_PS2_PROGRESSIVE
+    /* Progressive 640×480 (VGA 60 Hz) — full height, no interlace flicker,
+     * 1:1 with the engine framebuffer. Geometry is correct (PINE-confirmed
+     * 640×480, MagV=0, non-interlaced), but PCSX2's VGA display window sits
+     * a little high (top clipped, black bar at the bottom) — the StartY
+     * placement needs interactive tuning. Off by default until a startup
+     * mode picker lands; also needs a VGA/component display on real HW. */
+    s_gs->Mode           = GS_MODE_VGA_640_60;
+    s_gs->Interlace      = GS_NONINTERLACED;
+    s_gs->Field          = GS_FRAME;
+    s_gs->Width          = 640;
+    s_gs->Height         = 480;
+#endif
+    /* Default: gsKit's auto-detected mode (NTSC 640×448 interlaced) — full
+     * screen, correct MagV. Do NOT override its geometry (overriding left
+     * MagV=-1 = top-half). Only the pixel format / buffering are tweaked. */
     s_gs->PSM            = GS_PSM_CT24;
     s_gs->PSMZ           = GS_PSMZ_16S;
     s_gs->ZBuffering     = GS_SETTING_OFF;
