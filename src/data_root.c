@@ -74,17 +74,24 @@ extern char g_data_root[260];
 static int try_open_path(const char *path)
 {
 #ifdef WACKI_PS2
-    /* Match the cdrom0: path rewrite the archive reader uses (cygio.c),
-     * so the probe and the real reads agree on the DOS-style form. */
+    /* PS2 reads through fileXio, not newlib fopen (which reaches no
+     * device) — so the probe must use the same path so it and the real
+     * archive reads (cygio.c) agree. */
     extern void ps2_normalize_path(const char *, char *, size_t);
+    extern int  fileXioOpen(const char *, int);
+    extern int  fileXioClose(int);
     char fixed[ARCHIVE_PROBE_PATH_BYTES];
     ps2_normalize_path(path, fixed, sizeof fixed);
-    path = fixed;
-#endif
+    int fd = fileXioOpen(fixed, 0x0001 /* O_RDONLY */);
+    if (fd < 0) return 0;
+    fileXioClose(fd);
+    return 1;
+#else
     FILE *fp = fopen(path, "rb");
     if (!fp) return 0;
     fclose(fp);
     return 1;
+#endif
 }
 
 static int directory_has_archive(const char *root, const char *needle)
@@ -257,28 +264,17 @@ static int scan_handheld_card(void)
 {
     const char *paths[] = {
 #ifdef WACKI_PS2
-        /* PlayStation 2. Realistic homes for the ~370 MB of Dane_*.dta
-         * (memory cards are only 8 MB):
-         *   host: / host0:  — PCSX2's HostFS, rooted at the folder that
-         *                     holds the booted ELF. PS2 HostFS is fussy
-         *                     about the exact spelling, so try the common
-         *                     forms: a ./data or ./wacki/data subfolder,
-         *                     and the files sitting right next to the ELF
-         *                     (the bare host: root → host:/Dane_02.dta).
-         *   mass:           — USB mass storage on real hardware.
-         *   cdrom0:         — a burned disc (DOS-style upper-case layout).
-         */
+        /* PS2 — opened via fileXio (see try_open_path / cygio.c), both
+         * confirmed on PCSX2:
+         *   host: — PCSX2's HostFS, rooted at the booted ELF's folder
+         *           (dev: a bare ELF next to ./data).
+         *   cdfs: — the ISO9660 disc; DATA/ holds the archives. cdfs is
+         *           upper-case and forward-slash (the normalizer upper-
+         *           cases the path; no ';1' suffix). */
         "host:data",
-        "host:wacki/data",
         "host:",
-        "host0:data",
-        "host0:wacki/data",
-        "host0:",
-        "mass:/wacki/data",
-        "mass:/wacki",
-        "mass:/DATA",
-        "cdrom0:\\DATA",
-        "cdrom0:\\WACKI\\DATA",
+        "cdfs:/DATA",
+        "cdfs:",
 #endif
         /* Miyoo / OnionOS */
         "/mnt/SDCARD",

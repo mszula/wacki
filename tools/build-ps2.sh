@@ -56,9 +56,16 @@ fi
 #   ee/lib     → libaudsrv, libpadx, libmtap, libpatches (ps2sdk core)
 PS2DEV=/usr/local/ps2dev
 PORTS="$PS2DEV/ps2sdk/ports"
-SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2"
+# -I/tmp/embed: platform_ps2.c #includes the bin2c-generated IRX blobs
+# (iomanX/fileXio/cdfs) generated in the container below.
+# -lfileXio -lcdvd: the engine's PS2 file I/O (cygio.c + platform_ps2.c)
+# reads through fileXio + CDVD, brought up after an IOP reset.
+# ps2sdk EE/common includes + -D_EE: platform_ps2.c now pulls in sifrpc.h,
+# loadfile.h, libcdvd.h etc. (and ps2sdk's tamtypes.h needs _EE defined).
+SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \
+-I$PS2DEV/ps2sdk/ee/include -I$PS2DEV/ps2sdk/common/include -D_EE"
 SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
--lSDL2 -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lps2_drivers -lm"
+-lSDL2 -lfileXio -lcdvd -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lps2_drivers -lm"
 
 # Run the unchanged Makefile inside the container. The ps2dev image is
 # Alpine and has no host C compiler / make, so add them first (HOSTCC
@@ -70,6 +77,11 @@ docker run --rm --platform linux/amd64 \
     sh -c "
         set -e
         apk add --quiet --no-progress make gcc musl-dev
+        # Embed the IOP fileio modules platform_ps2.c loads at boot.
+        mkdir -p /tmp/embed
+        bin2c $PS2DEV/ps2sdk/iop/irx/iomanX.irx  /tmp/embed/iomanX_irx.c  iomanX_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/fileXio.irx /tmp/embed/fileXio_irx.c fileXio_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/cdfs.irx    /tmp/embed/cdfs_irx.c    cdfs_irx
         # Wipe host-built artefacts so the cross-build doesn't link against
         # leftover x86_64 .o files or a stale generated PE source.
         rm -rf dist src/embedded_wacki_pe.c
