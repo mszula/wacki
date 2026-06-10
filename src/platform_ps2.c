@@ -158,11 +158,110 @@ static int ps2_mc_ensure(void)
     return 1;
 }
 
+/* ---- BIOS browser presentation: icon.sys + a minimal 3D icon ----- *
+ *
+ * Without these the memory-card browser flags the save "Corrupted Data"
+ * and draws a default cube. icon.sys (the mcIcon struct) carries the
+ * title + names the model; icon.ico is a two-sided flat quad with a solid
+ * texture — minimal, but a valid model the browser renders cleanly. */
+
+#define ICON_HALF  0x1400                 /* quad half-size (~1.25 in /4096) */
+#define ICON_NRM   0x1000                 /* normal magnitude = 1.0 (/4096) */
+#define ICON_UVMAX 0x1000                 /* texcoord = 1.0 (/4096) */
+#define ICON_VTX   12                     /* 2 faces × 2 tris × 3 verts */
+
+static int16_t s_icon_tex[128 * 128] __attribute__((aligned(16)));   /* BGR555 */
+
+/* Pack one .ico vertex (24 bytes): vtx s16[3]+pad, normal s16[3]+pad,
+ * texcoord s16[2], rgba u8[4]. Returns p advanced past it. */
+static uint8_t *icon_vtx(uint8_t *p, int x, int y, int z, int nz, int u, int v)
+{
+    int16_t *s = (int16_t *)p;
+    s[0]=(int16_t)x; s[1]=(int16_t)y; s[2]=(int16_t)z; s[3]=0;
+    s[4]=0; s[5]=0; s[6]=(int16_t)nz; s[7]=0;
+    s[8]=(int16_t)u; s[9]=(int16_t)v;
+    p[20]=0x80; p[21]=0x80; p[22]=0x80; p[23]=0x80;
+    return p + 24;
+}
+
+static void ps2_write_one(const char *path, const void *a, int alen,
+                          const void *b, int blen)
+{
+    mcOpen(0, 0, path, MC_O_WRONLY | MC_O_CREAT | MC_O_TRUNC);
+    int fd = mc_block();
+    if (fd < 0) return;
+    if (alen > 0) { mcWrite(fd, a, alen); mc_block(); }
+    if (blen > 0) { mcWrite(fd, b, blen); mc_block(); }
+    mcClose(fd); mc_block();
+}
+
+static void ps2_write_icons(void)
+{
+    /* --- icon.sys --- rewritten every save so title tweaks take effect */
+    mcIcon sys;
+    memset(&sys, 0, sizeof sys);
+    memcpy(sys.head, "PS2D", 4);
+    sys.type     = MCICON_TYPE_SAVED_DATA;
+    sys.nlOffset = 6;                          /* "Wacki " | "Kosmiczna Rozgrywka" */
+    sys.trans    = 0x60;
+    static const int bg[4][4] = {
+        {0x12,0x12,0x48,0x80}, {0x12,0x12,0x48,0x80},
+        {0x06,0x06,0x20,0x80}, {0x06,0x06,0x20,0x80},
+    };
+    for (int i=0;i<4;i++) for (int j=0;j<4;j++) sys.bgCol[i][j]=bg[i][j];
+    sys.lightDir[0][0]= 0.5f; sys.lightDir[0][1]= 0.5f; sys.lightDir[0][2]= 0.5f;
+    sys.lightDir[1][0]=-0.5f; sys.lightDir[1][1]= 0.5f; sys.lightDir[1][2]= 0.5f;
+    sys.lightDir[2][2]= 1.0f;
+    for (int i=0;i<3;i++) sys.lightCol[i][0]=sys.lightCol[i][1]=sys.lightCol[i][2]=0.4f;
+    sys.lightAmbient[0]=sys.lightAmbient[1]=sys.lightAmbient[2]=0.5f;
+    memcpy((char *)sys.title, "Wacki Kosmiczna Rozgrywka", 25); /* SJIS==ASCII */
+    memcpy(sys.view, "icon.ico", 8);
+    memcpy(sys.copy, "icon.ico", 8);
+    memcpy(sys.del,  "icon.ico", 8);
+    ps2_write_one(MC_SAVE_DIR "/icon.sys", &sys, (int)sizeof sys, NULL, 0);
+
+    /* --- icon.ico --- write once; the model never changes */
+    mcOpen(0, 0, MC_SAVE_DIR "/icon.ico", MC_O_RDONLY);
+    int ico_fd = mc_block();
+    if (ico_fd >= 0) { mcClose(ico_fd); mc_block(); return; }
+
+    /* solid warm-yellow 128×128 BGR555 texture */
+    int16_t px = (int16_t)((0 << 10) | (24 << 5) | 31);
+    for (int i = 0; i < 128*128; ++i) s_icon_tex[i] = px;
+
+    uint8_t ico[20 + ICON_VTX*24 + 44];
+    memset(ico, 0, sizeof ico);
+    uint32_t *h = (uint32_t *)ico;
+    h[0]=0x00010000; h[1]=1; h[2]=0x04; h[3]=0x3F800000; h[4]=ICON_VTX;
+    uint8_t *p = ico + 20;
+    const int S=ICON_HALF, U=ICON_UVMAX, N=ICON_NRM;
+    /* front face (+z) */
+    p=icon_vtx(p,-S, S,0, N,0,0); p=icon_vtx(p, S, S,0, N,U,0); p=icon_vtx(p,-S,-S,0, N,0,U);
+    p=icon_vtx(p, S, S,0, N,U,0); p=icon_vtx(p, S,-S,0, N,U,U); p=icon_vtx(p,-S,-S,0, N,0,U);
+    /* back face (−z, reversed winding) */
+    p=icon_vtx(p, S, S,0,-N,U,0); p=icon_vtx(p,-S, S,0,-N,0,0); p=icon_vtx(p, S,-S,0,-N,U,U);
+    p=icon_vtx(p,-S, S,0,-N,0,0); p=icon_vtx(p,-S,-S,0,-N,0,U); p=icon_vtx(p, S,-S,0,-N,U,U);
+    /* animation: one static frame on shape 0 */
+    uint32_t *a = (uint32_t *)p;
+    a[0]=1;          /* magic */
+    a[1]=1;          /* frame_length */
+    a[2]=0x3F800000; /* anim_speed 1.0 */
+    a[3]=0;          /* play_offset */
+    a[4]=1;          /* frame_count */
+    a[5]=0;          /* frame: shape_id */
+    a[6]=1;          /* frame: key_count */
+    a[7]=0; a[8]=0;  /* frame: unknown */
+    a[9]=0; a[10]=0; /* key: time 0.0, value 0.0 */
+    ps2_write_one(MC_SAVE_DIR "/icon.ico", ico, (int)sizeof ico,
+                  s_icon_tex, (int)sizeof s_icon_tex);
+}
+
 /* Write `size` bytes to the card save. Returns 1 on full success. */
 int platform_ps2_save_write(const void *buf, int size)
 {
     if (!ps2_mc_ensure()) return 0;
     mcMkDir(0, 0, MC_SAVE_DIR); mc_block();           /* ok if it exists */
+    ps2_write_icons();   /* refresh icon.sys (title); writes icon.ico if absent */
     mcOpen(0, 0, MC_SAVE_PATH, MC_O_WRONLY | MC_O_CREAT | MC_O_TRUNC);
     int fd = mc_block();
     if (fd < 0) return 0;
