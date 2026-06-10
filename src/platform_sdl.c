@@ -368,6 +368,14 @@ void PlatformPresent(const uint8_t *shadow,
     if (g_headless) return;
     if (!s_tex || !shadow || !palette_rgb) return;
 
+#ifdef WACKI_PS2
+    extern volatile uint32_t g_ps2_exp_ms, g_ps2_draw_ms, g_ps2_frame_ms, g_ps2_present_n;
+    static uint32_t s_ps2_prev_present = 0;
+    uint32_t s_ps2_te = SDL_GetTicks();
+    if (s_ps2_prev_present) g_ps2_frame_ms += s_ps2_te - s_ps2_prev_present;
+    s_ps2_prev_present = s_ps2_te;
+#endif
+
     /* SDL_LockTexture maps the GPU/streaming texture into our address
      * space so we expand the 8-bpp shadow + palette LUT straight into
      * its backing memory — one fewer 1.2 MB memcpy per frame than the
@@ -405,9 +413,17 @@ void PlatformPresent(const uint8_t *shadow,
         }
         SDL_UpdateTexture(s_tex, NULL, s_pixels32, w * ARGB_BYTES_PER_PIXEL);
     }
+#ifdef WACKI_PS2
+    uint32_t s_ps2_td = SDL_GetTicks();
+    g_ps2_exp_ms += s_ps2_td - s_ps2_te;
+#endif
     SDL_RenderClear(s_ren);
     SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
     SDL_RenderPresent(s_ren);
+#ifdef WACKI_PS2
+    g_ps2_draw_ms += SDL_GetTicks() - s_ps2_td;
+    g_ps2_present_n++;
+#endif
 }
 
 /* ---- event pump -------------------------------------------------- */

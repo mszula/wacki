@@ -46,6 +46,14 @@ extern int fileXioInit(void);
 volatile uint32_t g_ps2_trace[32];
 volatile uint32_t g_ps2_trace_n = 0;
 
+/* Frame profiling (read over PINE). exp = 8bpp->ARGB expansion + texture
+ * update; draw = RenderClear/Copy/Present (GS + vsync); frame = full
+ * present-to-present. "engine software blit" ≈ frame - exp - draw. */
+volatile uint32_t g_ps2_exp_ms   = 0;
+volatile uint32_t g_ps2_draw_ms  = 0;
+volatile uint32_t g_ps2_frame_ms = 0;
+volatile uint32_t g_ps2_present_n = 0;
+
 void ps2_mark(uint32_t code)
 {
     uint32_t i = g_ps2_trace_n;
