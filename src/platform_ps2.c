@@ -100,6 +100,11 @@ void platform_ps2_io_init(void)
      * mixer→audsrv thread in platform_ps2_audio_init(). */
     SifLoadModule("rom0:LIBSD", 0, NULL);
     SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, &ret);
+
+    /* NOTE: do NOT call init_joystick_driver() here — SDL2-PS2's
+     * SDL_InitSubSystem(GAMECONTROLLER) brings the pad up itself (loads
+     * padman), and loading it a second time here conflicts and kills pad
+     * input entirely. The pad already works via SDL. */
 }
 
 /* ---- native audsrv audio ----------------------------------------- *

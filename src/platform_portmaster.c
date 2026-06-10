@@ -28,6 +28,22 @@
 
 #include <stdint.h>
 
+#ifdef WACKI_PS2
+/* SDL2-PS2's joystick backend only padRead()s the pad — it never puts the
+ * DualShock into analog (DUALSHOCK) mode, so padRead returns no stick bytes
+ * and the SDL axes read 0. Request analog mode ourselves via libpad once the
+ * pad is stable. (-lpadx, already linked.) */
+#include <libpad.h>
+static int s_ps2_analog_set = 0;
+static void ps2_pad_ensure_analog(void)
+{
+    if (s_ps2_analog_set) return;
+    if (padGetState(0, 0) != PAD_STATE_STABLE) return;
+    if (padSetMainMode(0, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK) == 1)
+        s_ps2_analog_set = 1;            /* takes a few frames to apply */
+}
+#endif
+
 extern uint8_t g_lmb_clicked;
 extern uint8_t g_rmb_clicked;
 extern uint8_t g_quicksave_request;
@@ -104,6 +120,9 @@ int platform_pad_handle_event(const SDL_Event *ev)
 void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay)
 {
     if (!s_pad) return;
+#ifdef WACKI_PS2
+    ps2_pad_ensure_analog();
+#endif
 
     *dx += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
          - SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
