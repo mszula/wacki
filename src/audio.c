@@ -147,16 +147,28 @@ static void mixer_callback(void *userdata, Uint8 *stream, int len)
     }
 }
 
+#ifdef WACKI_PS2
+/* Pulled by the audsrv audio thread (platform_ps2.c) to fill one chunk of
+ * mixed PCM — wraps the static SDL-style callback. The caller holds the
+ * channel mutex (g_ps2_audio_sema) around this. */
+void mixer_fill_ps2(void *buf, int len)
+{
+    mixer_callback(NULL, (Uint8 *)buf, len);
+}
+#endif
+
 /* Ensure the mixer device + spec is open. Idempotent. */
 int mixer_ensure_open(void)
 {
     if (s_mix_dev) return 1;
 #ifdef WACKI_PS2
-    /* PS2 runs silent — opening an SDL audio device wedges audsrv and
-     * hangs the IOP (see platform_sdl.c). The mixer + every PlaySfx /
-     * dialog path already tolerates "no device open", so just report it
-     * unavailable and never touch SDL audio. */
-    return 0;
+    /* PS2: no SDL audio device (opening one wedges the IOP). Audio is
+     * driven by the native audsrv thread (platform_ps2.c) which pulls
+     * mixer_callback via mixer_fill_ps2(). Report "open" in stereo so the
+     * SFX/music paths populate channels; s_mix_dev stays 0 and the channel
+     * mutex is the audsrv semaphore (MIX_DEV_LOCK). */
+    s_dev_chans = MIX_OUT_CHANS;
+    return 1;
 #endif
     SDL_AudioSpec want;
     SDL_memset(&want, 0, sizeof want);
@@ -224,14 +236,14 @@ void mixer_release(void)
 {
     if (!s_mix_dev) return;
     SDL_PauseAudioDevice(s_mix_dev, 1);
-    SDL_LockAudioDevice(s_mix_dev);
+    MIX_DEV_LOCK();
     for (int i = 0; i < MIX_CHANNEL_COUNT; ++i) {
         s_mix[i].active = 0;
         if (s_mix[i].buf) { SDL_free(s_mix[i].buf); s_mix[i].buf = NULL; }
         s_mix[i].len = 0;
         s_mix[i].pos = 0;
     }
-    SDL_UnlockAudioDevice(s_mix_dev);
+    MIX_DEV_UNLOCK();
     SDL_CloseAudioDevice(s_mix_dev);
     s_mix_dev = 0;
     LOG_INFO("mixer", "released (next play re-opens lazily)");
@@ -248,7 +260,7 @@ void mixer_assign(int idx, Uint8 *buf, Uint32 len, int loop,
                          const char *name)
 {
     if (idx < 0 || idx >= MIX_CHANNEL_COUNT) return;
-    SDL_LockAudioDevice(s_mix_dev);
+    MIX_DEV_LOCK();
     if (s_mix[idx].buf) SDL_free(s_mix[idx].buf);
     s_mix[idx].buf    = buf;
     s_mix[idx].len    = len;
@@ -269,13 +281,13 @@ void mixer_assign(int idx, Uint8 *buf, Uint32 len, int loop,
     } else {
         s_mix[idx].name[0] = 0;
     }
-    SDL_UnlockAudioDevice(s_mix_dev);
+    MIX_DEV_UNLOCK();
 }
 
 void mixer_stop_channel(int idx)
 {
     if (idx < 0 || idx >= MIX_CHANNEL_COUNT) return;
-    SDL_LockAudioDevice(s_mix_dev);
+    MIX_DEV_LOCK();
     s_mix[idx].active = 0;
     if (s_mix[idx].buf) {
         SDL_free(s_mix[idx].buf);
@@ -284,12 +296,48 @@ void mixer_stop_channel(int idx)
     s_mix[idx].len = 0;
     s_mix[idx].pos = 0;
     s_mix[idx].name[0] = 0;
-    SDL_UnlockAudioDevice(s_mix_dev);
+    MIX_DEV_UNLOCK();
 }
 
 /* ------------------------------------------------------------------------- *
  * Menu / background WAV music — backed by mixer channel MIX_CHAN_MUSIC.
  * ------------------------------------------------------------------------- */
+
+#ifdef WACKI_PS2
+/* PS2 has no working libc fopen — SDL_LoadWAV (SDL_RWFromFile) reaches no
+ * device. Read the file through the engine's fileXio shim (the same path
+ * the DTA archive uses) into RAM, then parse the WAV from memory. A size
+ * cap keeps a stray giant file (e.g. the 25 MB menu BGM, which needs
+ * streaming, not a full load) from attempting a doomed 25 MB malloc. */
+typedef struct CygFile CygFile;
+extern CygFile *fopen_cyg(const char *name, const char *mode);
+extern void     fclose_cyg(CygFile *f);
+extern uint32_t fread_cyg(void *dst, uint32_t sz, uint32_t n, CygFile *f);
+extern void     fseek_cyg(CygFile *f, int32_t off, int whence);
+extern int32_t  ftell_cyg(CygFile *f);
+
+#define PS2_STANDALONE_WAV_MAX  (4 * 1024 * 1024)
+
+static int load_wav_via_cyg(const char *path, SDL_AudioSpec *spec,
+                            Uint8 **buf, Uint32 *len)
+{
+    CygFile *f = fopen_cyg(path, "rb");
+    if (!f) return 0;
+    fseek_cyg(f, 0, SEEK_END);
+    int32_t sz = ftell_cyg(f);
+    fseek_cyg(f, 0, SEEK_SET);
+    if (sz <= 12 || sz > PS2_STANDALONE_WAV_MAX) { fclose_cyg(f); return 0; }
+    void *raw = SDL_malloc((size_t)sz);
+    if (!raw) { fclose_cyg(f); return 0; }
+    uint32_t got = fread_cyg(raw, 1, (uint32_t)sz, f);
+    fclose_cyg(f);
+    if (got != (uint32_t)sz) { SDL_free(raw); return 0; }
+    SDL_RWops *rw = SDL_RWFromConstMem(raw, (int)sz);
+    int ok = SDL_LoadWAV_RW(rw, 1, spec, buf, len) != NULL;
+    SDL_free(raw);
+    return ok;
+}
+#endif
 
 static int try_load_wav_at(const char *root, const char *name,
                            SDL_AudioSpec *out_spec, Uint8 **out_buf,
@@ -298,6 +346,9 @@ static int try_load_wav_at(const char *root, const char *name,
     char p[1024];
     if (root && *root) snprintf(p, sizeof p, "%s/%s", root, name);
     else               snprintf(p, sizeof p, "%s", name);
+#ifdef WACKI_PS2
+    return load_wav_via_cyg(p, out_spec, out_buf, out_len);
+#else
     if (SDL_LoadWAV(p, out_spec, out_buf, out_len))
         return 1;
     /* upper-case the basename (CD layout on macOS often) */
@@ -307,6 +358,7 @@ static int try_load_wav_at(const char *root, const char *name,
     for (size_t j = i; j < l; ++j)
         if (p[j] >= 'a' && p[j] <= 'z') p[j] &= 0xDF;
     return SDL_LoadWAV(p, out_spec, out_buf, out_len) != NULL;
+#endif
 }
 
 /* Try to load the WAV as an entry inside the currently mounted .dta
@@ -561,12 +613,12 @@ void TickSfx(void)
 {
     if (!s_mix_dev) return;
     for (int i = MIX_CHAN_SFX_START; i < MIX_CHANNEL_COUNT; ++i) {
-        SDL_LockAudioDevice(s_mix_dev);
+        MIX_DEV_LOCK();
         if (!s_mix[i].active && s_mix[i].buf) {
             SDL_free(s_mix[i].buf);
             s_mix[i].buf = NULL;
             s_mix[i].len = 0;
         }
-        SDL_UnlockAudioDevice(s_mix_dev);
+        MIX_DEV_UNLOCK();
     }
 }

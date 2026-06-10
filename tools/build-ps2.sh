@@ -82,6 +82,7 @@ docker run --rm --platform linux/amd64 \
         bin2c $PS2DEV/ps2sdk/iop/irx/iomanX.irx  /tmp/embed/iomanX_irx.c  iomanX_irx
         bin2c $PS2DEV/ps2sdk/iop/irx/fileXio.irx /tmp/embed/fileXio_irx.c fileXio_irx
         bin2c $PS2DEV/ps2sdk/iop/irx/cdfs.irx    /tmp/embed/cdfs_irx.c    cdfs_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/audsrv.irx  /tmp/embed/audsrv_irx.c  audsrv_irx
         # Wipe host-built artefacts so the cross-build doesn't link against
         # leftover x86_64 .o files or a stale generated PE source.
         rm -rf dist src/embedded_wacki_pe.c

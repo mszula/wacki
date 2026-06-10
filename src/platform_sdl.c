@@ -199,6 +199,9 @@ int PlatformInit(int w, int h, const char *title)
             return 0;
         }
         LOG_INFO("platform", "PS2 gsKit video up (640x448 NTSC, PSMT8+CLUT)");
+        /* Native audsrv audio (SDL audio wedges the IOP). */
+        extern void platform_ps2_audio_init(void);
+        platform_ps2_audio_init();
         return 1;
     }
 #endif

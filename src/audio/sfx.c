@@ -354,10 +354,10 @@ static void sfx_stop_channel_if_ours(struct SfxState *st, const char *reason)
     if (st->channel < MIX_CHAN_SFX_START ||
         st->channel >= MIX_CHANNEL_COUNT || !st->wav)
         return;
-    SDL_LockAudioDevice(s_mix_dev);
+    MIX_DEV_LOCK();
     int ours = s_mix[st->channel].active &&
                strcmp(s_mix[st->channel].name, st->wav) == 0;
-    SDL_UnlockAudioDevice(s_mix_dev);
+    MIX_DEV_UNLOCK();
     if (!ours) return;
     LOG_TRACE("sfx", "stop '%s' (asset=%s ch=%d) — %s", st->wav, st->asset ? st->asset : "(null)", st->channel, reason);
     mixer_stop_channel(st->channel);
@@ -532,11 +532,11 @@ static int sfx_is_currently_playing(struct SfxState *st, const char *wav)
         st->channel >= MIX_CHANNEL_COUNT)
         return 0;
     int playing = 0;
-    SDL_LockAudioDevice(s_mix_dev);
+    MIX_DEV_LOCK();
     if (s_mix[st->channel].active &&
         strcmp(s_mix[st->channel].name, wav) == 0)
         playing = 1;
-    SDL_UnlockAudioDevice(s_mix_dev);
+    MIX_DEV_UNLOCK();
     return playing;
 }
 
@@ -648,10 +648,10 @@ int PlaySfxPannedAndGetChannel(const char *wav_name,
     mixer_assign(slot, buf, len, 0, wav_name);
     /* mixer_assign sets gain to 128/128 (identity); override here for
      * positional pan. Lock once for an atomic L+R update. */
-    SDL_LockAudioDevice(s_mix_dev);
+    MIX_DEV_LOCK();
     s_mix[slot].gain_l = gain_l;
     s_mix[slot].gain_r = gain_r;
-    SDL_UnlockAudioDevice(s_mix_dev);
+    MIX_DEV_UNLOCK();
     LOG_TRACE("sfx", "play '%s' on mixer ch %d (%u bytes, gain L=%u R=%u)", wav_name, slot, len, gain_l, gain_r);
     return slot;
 }
@@ -672,9 +672,9 @@ int PlaySfxLoopAndGetChannel(const char *wav_name, int loop)
     int ch = PlaySfxPannedAndGetChannel(wav_name,
                                         SFX_DEFAULT_GAIN, SFX_DEFAULT_GAIN);
     if (ch >= 0 && loop) {
-        SDL_LockAudioDevice(s_mix_dev);
+        MIX_DEV_LOCK();
         s_mix[ch].loop = 1;
-        SDL_UnlockAudioDevice(s_mix_dev);
+        MIX_DEV_UNLOCK();
     }
     return ch;
 }

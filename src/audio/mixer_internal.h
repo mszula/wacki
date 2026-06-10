@@ -51,6 +51,21 @@ struct MixChannel {
 extern SDL_AudioDeviceID  s_mix_dev;
 extern struct MixChannel  s_mix[MIX_CHANNEL_COUNT];
 
+/* Channel-array mutex. On desktop/handheld it's SDL's audio-device lock
+ * (serialises against SDL's callback thread). On PS2 there is no SDL audio
+ * device — audio runs through a native audsrv thread (platform_ps2.c), so
+ * the lock is an EE semaphore (g_ps2_audio_sema) shared with that thread. */
+#ifdef WACKI_PS2
+extern int g_ps2_audio_sema;          /* created in platform_ps2_audio_init */
+extern int WaitSema(int sema_id);     /* ps2sdk <kernel.h> */
+extern int SignalSema(int sema_id);
+#define MIX_DEV_LOCK()   do { if (g_ps2_audio_sema >= 0) WaitSema(g_ps2_audio_sema);   } while (0)
+#define MIX_DEV_UNLOCK() do { if (g_ps2_audio_sema >= 0) SignalSema(g_ps2_audio_sema); } while (0)
+#else
+#define MIX_DEV_LOCK()   SDL_LockAudioDevice(s_mix_dev)
+#define MIX_DEV_UNLOCK() SDL_UnlockAudioDevice(s_mix_dev)
+#endif
+
 /* ---- mixer kernel API (defined in audio.c) ----------------------- */
 
 /* Open the SDL audio device on demand. Returns 1 on success / already

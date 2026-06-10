@@ -33,10 +33,13 @@
 #include <libcdvd.h>
 #include <gsKit.h>
 #include <dmaKit.h>
+#include <kernel.h>
+#include <audsrv.h>
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
 #include "cdfs_irx.c"
+#include "audsrv_irx.c"
 
 /* Hand-declared to dodge ps2sdk's guarded fileXio_rpc.h ("don't mix
  * fio/fileXio with the newlib port"): the engine uses ONLY fileXio for
@@ -92,6 +95,87 @@ void platform_ps2_io_init(void)
 
     sceCdInit(SCECdINIT);
     SifExecModuleBuffer(cdfs_irx, size_cdfs_irx, 0, NULL, &ret);
+
+    /* Audio: the SPU2 driver (LIBSD, in rom0) + audsrv. Used by the
+     * mixer→audsrv thread in platform_ps2_audio_init(). */
+    SifLoadModule("rom0:LIBSD", 0, NULL);
+    SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, &ret);
+}
+
+/* ---- native audsrv audio ----------------------------------------- *
+ *
+ * SDL2-PS2's audio backend wedges the IOP, so audio goes through audsrv
+ * directly. The engine's SDL-style pull mixer (audio.c mixer_callback) is
+ * driven from a dedicated EE thread that fills a chunk and pushes it with
+ * audsrv_play_audio() (which blocks when audsrv's ring is full — natural
+ * pacing). g_ps2_audio_sema guards the channel array against the game
+ * thread's SFX assigns (mixer_assign/release take it on PS2). */
+
+/* audsrv's internal ring is only ~4700 bytes (~53 ms). wait_audio(CHUNK)
+ * refills whenever CHUNK bytes are free, so a small CHUNK keeps the ring
+ * topped up near-full (~3700/4700 ≈ 41 ms cushion) instead of letting it
+ * swing down to a few ms before each big refill — that low point is when an
+ * IOP-busy moment (game asset reads over the SIF) drains it to 0 and SPU2
+ * repeats its last buffer (the "looping sample" glitch). 1024 B = 256 frames
+ * = ~12 ms feed granularity, ~86 SIF feeds/s. */
+#define PS2_AUD_CHUNK 1024                 /* 256 stereo S16 frames */
+int g_ps2_audio_sema = -1;                 /* shared with audio.c */
+static char s_aud_buf[PS2_AUD_CHUNK]   __attribute__((aligned(64)));
+static char s_aud_stack[16 * 1024]     __attribute__((aligned(16)));
+static volatile int s_aud_run = 0;
+
+extern void mixer_fill_ps2(void *buf, int len);   /* audio.c */
+
+static void ps2_audio_thread(void *arg)
+{
+    (void)arg;
+    while (s_aud_run) {
+        WaitSema(g_ps2_audio_sema);
+        mixer_fill_ps2(s_aud_buf, PS2_AUD_CHUNK);
+        SignalSema(g_ps2_audio_sema);
+        /* Pace to the SPU2 drain rate: wait_audio() blocks until the ring
+         * has room for the whole chunk, then play_audio() queues it in full.
+         * Feeding without wait_audio() overruns the ring and stalls SPU2. */
+        audsrv_wait_audio(PS2_AUD_CHUNK);
+        audsrv_play_audio(s_aud_buf, PS2_AUD_CHUNK);
+    }
+    ExitThread();
+}
+
+void platform_ps2_audio_init(void)
+{
+    if (audsrv_init() != 0) return;
+    struct audsrv_fmt_t fmt;
+    fmt.freq = 22050; fmt.bits = 16; fmt.channels = 2;
+    if (audsrv_set_format(&fmt) != 0) return;
+    audsrv_set_volume(MAX_VOLUME);
+
+    ee_sema_t sema;
+    sema.init_count = 1; sema.max_count = 1; sema.attr = 0; sema.option = 0;
+    g_ps2_audio_sema = CreateSema(&sema);
+    if (g_ps2_audio_sema < 0) return;
+
+    /* The game loop busy-waits on the GS vsync (gsKit_sync_flip) and almost
+     * never yields the CPU, and the EE main thread runs at priority 1 (the
+     * top of the user range). The audio feeder MUST be strictly higher
+     * priority (lower number) than the game thread, or it only runs when the
+     * game happens to block (e.g. a fileXio read on a player action) — the
+     * "audio hangs when idle, advances when I do something" symptom. Since
+     * main sits at 1 there's no room above it, so demote the game thread to
+     * 40 and put the audio thread at 32. */
+    ChangeThreadPriority(GetThreadId(), 40);
+
+    s_aud_run = 1;
+    ee_thread_t th;
+    th.func             = (void *)ps2_audio_thread;
+    th.stack            = s_aud_stack;
+    th.stack_size       = sizeof s_aud_stack;
+    th.gp_reg           = GetGP();
+    th.initial_priority = 32;
+    th.attr             = 0;
+    th.option           = 0;
+    int tid = CreateThread(&th);
+    if (tid >= 0) StartThread(tid, NULL);
 }
 
 /* ---- native gsKit video (hardware palette) ----------------------- *
