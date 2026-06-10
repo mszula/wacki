@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Build a bootable PS2 ISO with the engine + game data baked in, so it
+# runs in PCSX2 (or a modded PS2 / FreeDVDBoot) with ZERO HostFS/config
+# fiddling — just "Boot ISO" and go. The data is read off the disc via
+# cdrom0: (the cdrom0: path rewrite lives in src/cygio.c).
+#
+# Layout written to the ISO:
+#   SYSTEM.CNF            BOOT2 = cdrom0:\WACKI.ELF;1
+#   WACKI.ELF            = dist/wacki-ps2.elf
+#   DATA/DANE_*.DTA      the original game archives (read via cdrom0:\DATA)
+#
+# Usage:    ./tools/build-ps2-iso.sh   (or: make ps2-iso)
+#           FORCE_ELF=1 ./tools/build-ps2-iso.sh   # force an ELF rebuild
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+IMAGE="${PS2_DOCKER_IMAGE:-ps2dev/ps2dev:latest}"
+
+if ! command -v docker >/dev/null 2>&1; then
+    echo "error: docker not installed." >&2
+    exit 1
+fi
+
+# 1. Ensure the ELF exists (build it if missing or forced).
+if [ ! -f dist/wacki-ps2.elf ] || [ "${FORCE_ELF:-0}" = 1 ]; then
+    echo "[ps2-iso] building the ELF first…"
+    ./tools/build-ps2.sh
+fi
+
+# Resolve the real data directory (follow the local-dev symlink so Docker
+# can see the archives).
+data_dir=data
+if [ -L data ]; then
+    data_dir="$(cd "$(dirname "$(readlink data)")" && pwd)/$(basename "$(readlink data)")"
+fi
+if ! ls "$data_dir"/[Dd][Aa][Nn][Ee]_02.[Dd][Tt][Aa] >/dev/null 2>&1; then
+    echo "error: no Dane_02 archive under $data_dir" >&2
+    exit 1
+fi
+
+# 2. Author the ISO in the container (genisoimage from cdrkit). The data
+#    dir is grafted in read-only — no 370 MB copy. SYSTEM.CNF needs CRLF.
+docker run --rm --platform linux/amd64 \
+    -v "$(pwd):/work" -w /work \
+    -v "$data_dir:/data_src:ro" \
+    "$IMAGE" \
+    sh -c '
+        set -e
+        apk add --quiet --no-progress cdrkit >/dev/null
+        printf "BOOT2 = cdrom0:\\WACKI.ELF;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n" > /tmp/SYSTEM.CNF
+        genisoimage -quiet -iso-level 2 -l \
+            -sysid PLAYSTATION -V WACKI \
+            -o dist/wacki-ps2.iso \
+            -graft-points \
+            SYSTEM.CNF=/tmp/SYSTEM.CNF \
+            WACKI.ELF=dist/wacki-ps2.elf \
+            DATA/=/data_src/
+    '
+
+iso=dist/wacki-ps2.iso
+if [ ! -f "$iso" ]; then
+    echo "error: $iso not produced" >&2
+    exit 1
+fi
+
+echo
+echo "[ps2-iso] built $iso"
+ls -lh "$iso"
+echo
+echo "Run it: PCSX2 → Boot ISO (or drag the .iso onto the window). No"
+echo "HostFS, no config — the data is on the disc. Watch the PCSX2 console"
+echo "for a '[data-root] matched on cdrom0:\\DATA' line."

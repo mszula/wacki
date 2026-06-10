@@ -12,11 +12,51 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct CygFile { FILE *fp; } CygFile;
 
+#ifdef WACKI_PS2
+/* PS2 cdrom0: file I/O wants DOS-style paths: backslash separators,
+ * upper-case names, and an ISO9660 ';1' version suffix on the file. The
+ * engine builds unix-ish paths (forward-slash joiner, mixed case), so
+ * rewrite cdrom0: paths here — the single fopen chokepoint for every DTA
+ * archive read. host:/mass: paths pass through untouched (HostFS + USB
+ * use forward slashes and are case-sensitive). Shared with data_root.c's
+ * probe via an extern declaration there. */
+void ps2_normalize_path(const char *in, char *out, size_t outsz)
+{
+    if (outsz == 0) return;
+    if (strncmp(in, "cdrom0:", 7) != 0) {
+        snprintf(out, outsz, "%s", in);
+        return;
+    }
+    size_t o = 0;
+    /* Keep the device token verbatim — the device match is exact and
+     * lower-case ("cdrom0:"); only the path that follows is DOS-ified. */
+    for (size_t k = 0; k < 7 && o + 1 < outsz; ++k) out[o++] = in[k];
+    for (size_t i = 7; in[i] && o + 3 < outsz; ++i) {
+        char c = in[i];
+        if (c == '/')                   c = '\\';
+        else if (c >= 'a' && c <= 'z')  c = (char)(c - 32);
+        out[o++] = c;
+    }
+    out[o] = 0;
+    if (!strstr(out + 7, ";1") && o + 2 < outsz) {
+        out[o++] = ';';
+        out[o++] = '1';
+        out[o]   = 0;
+    }
+}
+#endif
+
 CygFile *fopen_cyg(const char *name, const char *mode)
 {
+#ifdef WACKI_PS2
+    char fixed[320];
+    ps2_normalize_path(name, fixed, sizeof fixed);
+    name = fixed;
+#endif
     FILE *fp = fopen(name, mode);
     if (!fp) return NULL;
     CygFile *f = (CygFile *)malloc(sizeof *f);

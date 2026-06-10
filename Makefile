@@ -401,7 +401,7 @@ TEST_CFLAGS = -O2 -Wall -Wextra -Wpedantic \
               -std=gnu11 -I tests/sdl_stub -I include -I tests
 
 # ---- targets ----------------------------------------------------------------
-.PHONY: all engine tools clean run debug test miyoo ps2
+.PHONY: all engine tools clean run debug test miyoo ps2 ps2-iso
 all: engine tools
 
 engine: $(DIST)/$(BIN_NAME)$(EXE)
@@ -425,6 +425,12 @@ miyoo:
 # on a USB stick and launch via uLaunchELF, or run it in PCSX2.
 ps2:
 	./tools/build-ps2.sh
+
+# Build a bootable PS2 ISO (SYSTEM.CNF + ELF + game data) so it runs in
+# PCSX2 via "Boot ISO" with no HostFS config. Builds the ELF first if
+# needed. Produces dist/wacki-ps2.iso.
+ps2-iso:
+	./tools/build-ps2-iso.sh
 
 # Debug build with sanitizers — separate binary so the release build
 # stays untouched. Run via $(DIST)/wacki-debug --headless for CI fuzz
