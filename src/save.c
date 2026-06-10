@@ -20,6 +20,7 @@
 /* Windows rename() refuses to overwrite an existing destination, which
  * breaks the tmp+rename atomic-write pattern below. MoveFileExA with
  * MOVEFILE_REPLACE_EXISTING is the correct equivalent of POSIX rename. */
+#ifndef WACKI_PS2   /* PS2 saves to the memory card (libmc), no tmp+rename */
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
@@ -32,6 +33,7 @@ static int atomic_replace(const char *from, const char *to)
 {
     return rename(from, to);
 }
+#endif
 #endif
 
 WackiSaveFile g_save;       /* in-memory image, paged to disk by WriteSaveFile */
@@ -52,15 +54,24 @@ extern int       LoadStage(uint16_t stage);
 /* ---- LoadSaveStateOrInitialize ----------------------------------- */
 void LoadSaveStateOrInitialize(void)
 {
-    FILE *fp = fopen(WACKI_SAVE_FILE, "rb");
     int loaded = 0;
 
+#ifdef WACKI_PS2
+    /* PS2 saves live on the memory card (mc0:) via libmc — stdio reaches
+     * no device. See platform_ps2.c::platform_ps2_save_read(). */
+    extern int platform_ps2_save_read(void *buf, int size);
+    if (platform_ps2_save_read(&g_save, (int)sizeof g_save) == (int)sizeof g_save &&
+        g_save.magic == WACKI_SAVE_MAGIC)
+        loaded = 1;
+#else
+    FILE *fp = fopen(WACKI_SAVE_FILE, "rb");
     if (fp) {
         if (fread(&g_save, 1, sizeof g_save, fp) == sizeof g_save &&
             g_save.magic == WACKI_SAVE_MAGIC)
             loaded = 1;
         fclose(fp);
     }
+#endif
 
     if (!loaded) {
         memset(&g_save, 0, sizeof g_save);
@@ -128,6 +139,15 @@ void WriteSaveFile(void)
      * resets to defaults. We write to `Wacki.sav.tmp` first, fflush,
      * then rename over the real file. */
     g_save.magic = WACKI_SAVE_MAGIC;
+#ifdef WACKI_PS2
+    /* PS2 saves go to the memory card via libmc (see platform_ps2.c). The
+     * Win32 tmp+rename atomicity below doesn't apply — libmc has no rename
+     * and the card write is the commit. */
+    extern int platform_ps2_save_write(const void *buf, int size);
+    if (!platform_ps2_save_write(&g_save, (int)sizeof g_save))
+        LOG_INFO("save", "memory-card write failed — save not persisted");
+    return;
+#else
     const char *tmp_path = WACKI_SAVE_FILE ".tmp";
     FILE *fp = fopen(tmp_path, "wb");
     if (!fp) return;
@@ -144,6 +164,7 @@ void WriteSaveFile(void)
     if (atomic_replace(tmp_path, WACKI_SAVE_FILE) != 0) {
         LOG_INFO("save", "rename(%s → %s) failed — keeping tmp", tmp_path, WACKI_SAVE_FILE);
     }
+#endif
 }
 
 /* ---- T53 quicksave / quickload (port extension) ------------------ *

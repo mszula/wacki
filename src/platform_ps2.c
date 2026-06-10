@@ -35,11 +35,14 @@
 #include <dmaKit.h>
 #include <kernel.h>
 #include <audsrv.h>
+#include <libmc.h>
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
 #include "cdfs_irx.c"
 #include "audsrv_irx.c"
+#include "mcman_irx.c"
+#include "mcserv_irx.c"
 
 /* Hand-declared to dodge ps2sdk's guarded fileXio_rpc.h ("don't mix
  * fio/fileXio with the newlib port"): the engine uses ONLY fileXio for
@@ -105,6 +108,98 @@ void platform_ps2_io_init(void)
      * SDL_InitSubSystem(GAMECONTROLLER) brings the pad up itself (loads
      * padman), and loading it a second time here conflicts and kills pad
      * input entirely. The pad already works via SDL. */
+}
+
+/* ---- save to the PS2 memory card (libmc) ------------------------- *
+ *
+ * save.c's stdio path reaches no device on PS2, so its save read/write are
+ * routed here. The save lives in MC_SAVE_PATH on mc0: (port 0, slot 0).
+ * mcman/mcserv are loaded lazily on first access: the save is read/written
+ * from InitializeGameSubsystems / in-game, by which point the SDL pad init
+ * (PlatformInit) has already loaded their sio2man dependency — loading
+ * sio2man ourselves here would double it and break pad input. */
+
+#define MC_O_RDONLY  0x0001
+#define MC_O_WRONLY  0x0002
+#define MC_O_CREAT   0x0200
+#define MC_O_TRUNC   0x0400
+#define MC_SAVE_DIR  "/WACKI"
+#define MC_SAVE_PATH "/WACKI/Wacki.sav"
+#define MC_XFER_MAX  16384                /* bound a single mcRead/mcWrite RPC */
+
+static int s_mc_ready = 0;
+
+/* Block until the pending async mc* op finishes; return its result. Polls
+ * (MC_NOWAIT) rather than trusting a blocking MC_WAIT — robust either way.
+ * The game thread spins, but the prio-32 audio thread keeps feeding audsrv
+ * and mcserv runs on the IOP, so audio is unaffected during a save. */
+static int mc_block(void)
+{
+    int cmd = 0, result = -1;
+    while (mcSync(MC_NOWAIT, &cmd, &result) == 0) { /* in progress */ }
+    return result;
+}
+
+static int ps2_mc_ensure(void)
+{
+    if (s_mc_ready) return 1;
+    int ret;
+    SifExecModuleBuffer(mcman_irx,  size_mcman_irx,  0, NULL, &ret);
+    SifExecModuleBuffer(mcserv_irx, size_mcserv_irx, 0, NULL, &ret);
+    if (mcInit(MC_TYPE_MC) < 0) return 0;   /* mcInit is the one sync call */
+    /* Required first step: mcGetInfo establishes the card connection in
+     * mcman — without it every file op fails with -13 (sceMcResFailDetect2).
+     * The first call returns -1 ("formatted card newly seen"), which is
+     * expected; we only need the side effect of detecting the card. */
+    int type = 0, freeclu = 0, format = 0;
+    mcGetInfo(0, 0, &type, &freeclu, &format);
+    mc_block();
+    s_mc_ready = 1;
+    return 1;
+}
+
+/* Write `size` bytes to the card save. Returns 1 on full success. */
+int platform_ps2_save_write(const void *buf, int size)
+{
+    if (!ps2_mc_ensure()) return 0;
+    mcMkDir(0, 0, MC_SAVE_DIR); mc_block();           /* ok if it exists */
+    mcOpen(0, 0, MC_SAVE_PATH, MC_O_WRONLY | MC_O_CREAT | MC_O_TRUNC);
+    int fd = mc_block();
+    if (fd < 0) return 0;
+    const char *p = (const char *)buf;
+    int total = 0;
+    while (total < size) {
+        int chunk = size - total;
+        if (chunk > MC_XFER_MAX) chunk = MC_XFER_MAX;
+        mcWrite(fd, p + total, chunk);
+        int w = mc_block();
+        if (w <= 0) break;
+        total += w;
+    }
+    mcClose(fd); mc_block();
+    return total == size;
+}
+
+/* Read up to `size` bytes from the card save. Returns bytes read (0 if the
+ * save is absent / unreadable). */
+int platform_ps2_save_read(void *buf, int size)
+{
+    if (!ps2_mc_ensure()) return 0;
+    mcOpen(0, 0, MC_SAVE_PATH, MC_O_RDONLY);
+    int fd = mc_block();
+    if (fd < 0) return 0;
+    char *p = (char *)buf;
+    int total = 0;
+    while (total < size) {
+        int chunk = size - total;
+        if (chunk > MC_XFER_MAX) chunk = MC_XFER_MAX;
+        mcRead(fd, p + total, chunk);
+        int r = mc_block();
+        if (r <= 0) break;
+        total += r;
+    }
+    mcClose(fd); mc_block();
+    return total;
 }
 
 /* ---- native audsrv audio ----------------------------------------- *

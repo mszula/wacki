@@ -65,7 +65,7 @@ PORTS="$PS2DEV/ps2sdk/ports"
 SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \
 -I$PS2DEV/ps2sdk/ee/include -I$PS2DEV/ps2sdk/common/include -I$PS2DEV/gsKit/include -D_EE"
 SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
--lSDL2 -lfileXio -lcdvd -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lps2_drivers -lm"
+-lSDL2 -lfileXio -lcdvd -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lmc -lps2_drivers -lm"
 
 # Run the unchanged Makefile inside the container. The ps2dev image is
 # Alpine and has no host C compiler / make, so add them first (HOSTCC
@@ -83,6 +83,8 @@ docker run --rm --platform linux/amd64 \
         bin2c $PS2DEV/ps2sdk/iop/irx/fileXio.irx /tmp/embed/fileXio_irx.c fileXio_irx
         bin2c $PS2DEV/ps2sdk/iop/irx/cdfs.irx    /tmp/embed/cdfs_irx.c    cdfs_irx
         bin2c $PS2DEV/ps2sdk/iop/irx/audsrv.irx  /tmp/embed/audsrv_irx.c  audsrv_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/mcman.irx   /tmp/embed/mcman_irx.c   mcman_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/mcserv.irx  /tmp/embed/mcserv_irx.c  mcserv_irx
         # Wipe host-built artefacts so the cross-build doesn't link against
         # leftover x86_64 .o files or a stale generated PE source.
         rm -rf dist src/embedded_wacki_pe.c
