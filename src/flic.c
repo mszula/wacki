@@ -83,12 +83,105 @@ static inline uint16_t rd_u16(const uint8_t *p) {
  * room and bounds worst-case ring memory regardless of interleave. */
 #define VIDEO_RING_MAX              32
 
+/* ---- file reader: stdio on desktop, buffered fileXio on PS2 ------------- *
+ *
+ * The streaming loop issues one read per movi sub-chunk (an 8-byte header
+ * then the body). On desktop a setvbuf()'d FILE absorbs those into a few
+ * syscalls. PS2 has no libc file device — reads go through the fileXio
+ * shim and each fileXio call is a SIF RPC, so wrap it in an equivalent
+ * read-ahead buffer (a flood of tiny RPCs would also starve audsrv). */
+#ifdef WACKI_PS2
+typedef struct CygFile CygFile;
+extern CygFile *fopen_cyg(const char *name, const char *mode);
+extern void     fclose_cyg(CygFile *f);
+extern uint32_t fread_cyg(void *dst, uint32_t sz, uint32_t n, CygFile *f);
+extern void     fseek_cyg(CygFile *f, int32_t off, int whence);
+extern int32_t  ftell_cyg(CygFile *f);
+
+#define FLIC_READ_BUF_BYTES   (256u * 1024)
+
+typedef struct {
+    CygFile *cf;
+    uint8_t *buf;
+    uint32_t len;        /* valid bytes in buf */
+    uint32_t bufpos;     /* next byte to serve from buf */
+    int32_t  filepos;    /* logical offset of the next byte to serve */
+} FlicReader;
+
+static FlicReader *flic_open(const char *path)
+{
+    CygFile *cf = fopen_cyg(path, "rb");
+    if (!cf) return NULL;
+    FlicReader *r = (FlicReader *)calloc(1, sizeof *r);
+    uint8_t    *b = (uint8_t *)malloc(FLIC_READ_BUF_BYTES);
+    if (!r || !b) { fclose_cyg(cf); free(r); free(b); return NULL; }
+    r->cf = cf; r->buf = b;
+    return r;
+}
+static uint32_t flic_read(void *dst, uint32_t n, FlicReader *r)
+{
+    uint8_t *d = (uint8_t *)dst;
+    uint32_t done = 0;
+    while (done < n) {
+        if (r->bufpos >= r->len) {
+            r->len = fread_cyg(r->buf, 1, FLIC_READ_BUF_BYTES, r->cf);
+            r->bufpos = 0;
+            if (r->len == 0) break;          /* EOF / error */
+        }
+        uint32_t avail = r->len - r->bufpos;
+        uint32_t take  = n - done;
+        if (take > avail) take = avail;
+        memcpy(d + done, r->buf + r->bufpos, take);
+        r->bufpos  += take;
+        done       += take;
+        r->filepos += (int32_t)take;
+    }
+    return done;
+}
+static void flic_seek(FlicReader *r, int32_t off, int whence)
+{
+    int32_t target;
+    if      (whence == SEEK_SET) target = off;
+    else if (whence == SEEK_CUR) target = r->filepos + off;
+    else { fseek_cyg(r->cf, off, SEEK_END); target = ftell_cyg(r->cf); }
+    int32_t bufstart = r->filepos - (int32_t)r->bufpos;   /* offset of buf[0] */
+    if (r->len && target >= bufstart && target <= bufstart + (int32_t)r->len) {
+        r->bufpos = (uint32_t)(target - bufstart);        /* stay in buffer */
+    } else {
+        fseek_cyg(r->cf, target, SEEK_SET);               /* drop buffer */
+        r->len = r->bufpos = 0;
+    }
+    r->filepos = target;
+}
+static int32_t flic_tell(FlicReader *r) { return r->filepos; }
+static void flic_close(FlicReader *r)
+{
+    if (!r) return;
+    if (r->cf) fclose_cyg(r->cf);
+    free(r->buf);
+    free(r);
+}
+typedef FlicReader *FlicFp;
+#else
+typedef FILE *FlicFp;
+static FlicFp   flic_open(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (f) setvbuf(f, NULL, _IOFBF, STREAM_IO_BUFFER_BYTES);
+    return f;
+}
+static uint32_t flic_read(void *dst, uint32_t n, FlicFp f) { return (uint32_t)fread(dst, 1, n, f); }
+static void     flic_seek(FlicFp f, int32_t off, int whence) { fseek(f, (long)off, whence); }
+static int32_t  flic_tell(FlicFp f) { return (int32_t)ftell(f); }
+static void     flic_close(FlicFp f) { if (f) fclose(f); }
+#endif
+
 /* ---- AVI streaming context ---------------------------------------------- */
 
 typedef struct { uint8_t *data; uint32_t size; } VidFrame;
 
 typedef struct {
-    FILE     *fp;
+    FlicFp    fp;
     uint32_t  pos;               /* current read offset (mirrors ftell) */
     uint32_t  movi_end;          /* file offset where movi data ends */
     int       eof;
@@ -446,24 +539,23 @@ static int avi_parse_header(AviStream *s, const uint8_t *buf, uint32_t bufsz,
 
 static int avi_open_stream(AviStream *s, const char *path)
 {
-    s->fp = fopen(path, "rb");
+    s->fp = flic_open(path);
     if (!s->fp) return 0;
-    setvbuf(s->fp, NULL, _IOFBF, STREAM_IO_BUFFER_BYTES);
 
-    fseek(s->fp, 0, SEEK_END);
-    long fsz_l = ftell(s->fp);
-    fseek(s->fp, 0, SEEK_SET);
-    if (fsz_l <= 0) { fclose(s->fp); s->fp = NULL; return 0; }
+    flic_seek(s->fp, 0, SEEK_END);
+    int32_t fsz_l = flic_tell(s->fp);
+    flic_seek(s->fp, 0, SEEK_SET);
+    if (fsz_l <= 0) { flic_close(s->fp); s->fp = NULL; return 0; }
     uint32_t filesz = (uint32_t)fsz_l;
 
     /* Read the header prefix and parse it in RAM, then free it. */
     uint32_t boot = filesz < STREAM_BOOTSTRAP_BYTES ? filesz : STREAM_BOOTSTRAP_BYTES;
     uint8_t *hdr = (uint8_t *)malloc(boot);
-    if (!hdr) { fclose(s->fp); s->fp = NULL; return 0; }
-    int ok = (fread(hdr, 1, boot, s->fp) == boot) &&
+    if (!hdr) { flic_close(s->fp); s->fp = NULL; return 0; }
+    int ok = (flic_read(hdr, boot, s->fp) == boot) &&
              avi_parse_header(s, hdr, boot, filesz);
     free(hdr);
-    if (!ok) { fclose(s->fp); s->fp = NULL; return 0; }
+    if (!ok) { flic_close(s->fp); s->fp = NULL; return 0; }
 
     /* Open the audio device now — but DON'T prequeue. Audio is streamed
      * in the playback loop and kept ahead of video by the cushion. */
@@ -480,7 +572,7 @@ static int avi_open_stream(AviStream *s, const char *path)
         }
     }
 
-    fseek(s->fp, (long)s->pos, SEEK_SET);   /* to first movi chunk */
+    flic_seek(s->fp, (int32_t)s->pos, SEEK_SET);   /* to first movi chunk */
     return 1;
 }
 
@@ -494,7 +586,7 @@ static int stream_pump_one(AviStream *s)
     if (s->pos + RIFF_CHUNK_HEADER_BYTES > s->movi_end) { s->eof = 1; return 0; }
 
     uint8_t hdr[RIFF_CHUNK_HEADER_BYTES];
-    if (fread(hdr, 1, RIFF_CHUNK_HEADER_BYTES, s->fp) != RIFF_CHUNK_HEADER_BYTES) {
+    if (flic_read(hdr, RIFF_CHUNK_HEADER_BYTES, s->fp) != RIFF_CHUNK_HEADER_BYTES) {
         s->eof = 1; return 0;
     }
     uint32_t tag = rd_u32(hdr);
@@ -507,12 +599,12 @@ static int stream_pump_one(AviStream *s)
     if (tag == FOURCC_00DC) {
         uint8_t *data = (uint8_t *)malloc(sz ? sz : 1);
         if (!data) {                                   /* OOM — drop frame */
-            fseek(s->fp, (long)(sz + pad), SEEK_CUR);
+            flic_seek(s->fp, (int32_t)(sz + pad), SEEK_CUR);
             s->pos = next;
             return 1;
         }
-        if (sz && fread(data, 1, sz, s->fp) != sz) { free(data); s->eof = 1; return 0; }
-        if (pad) fseek(s->fp, 1, SEEK_CUR);
+        if (sz && flic_read(data, sz, s->fp) != sz) { free(data); s->eof = 1; return 0; }
+        if (pad) flic_seek(s->fp, 1, SEEK_CUR);
         if (!ring_push(s, data, sz)) free(data);       /* ring full guard */
         s->pos = next;
         return 1;
@@ -520,19 +612,19 @@ static int stream_pump_one(AviStream *s)
 
     if (tag == FOURCC_01WB && sz && s_audio_open) {
         if (!ascratch_ensure(s, sz)) {                 /* OOM — drop audio */
-            fseek(s->fp, (long)(sz + pad), SEEK_CUR);
+            flic_seek(s->fp, (int32_t)(sz + pad), SEEK_CUR);
             s->pos = next;
             return 1;
         }
-        if (fread(s->ascratch, 1, sz, s->fp) != sz) { s->eof = 1; return 0; }
-        if (pad) fseek(s->fp, 1, SEEK_CUR);
-        audio_queue_chunk(s->ascratch, sz);    /* resamples if needed */
+        if (flic_read(s->ascratch, sz, s->fp) != sz) { s->eof = 1; return 0; }
+        if (pad) flic_seek(s->fp, 1, SEEK_CUR);
+        audio_queue_chunk(s->ascratch, sz);    /* resamples + downmixes if needed */
         s->pos = next;
         return 1;
     }
 
     /* Audio with no device, or any other chunk type — skip the body. */
-    fseek(s->fp, (long)(sz + pad), SEEK_CUR);
+    flic_seek(s->fp, (int32_t)(sz + pad), SEEK_CUR);
     s->pos = next;
     return 1;
 }
@@ -542,7 +634,7 @@ static void avi_close(AviStream *s)
     ring_clear(s);
     free(s->ascratch);
     s->ascratch = NULL;
-    if (s->fp) { fclose(s->fp); s->fp = NULL; }
+    if (s->fp) { flic_close(s->fp); s->fp = NULL; }
 }
 
 /* Is the audio device's FIFO below the cushion target? Always false when
