@@ -170,7 +170,9 @@ static int ps2_mc_ensure(void)
 #define ICON_UVMAX 0x1000                 /* texcoord = 1.0 (/4096) */
 #define ICON_VTX   12                     /* 2 faces × 2 tris × 3 verts */
 
-static int16_t s_icon_tex[128 * 128] __attribute__((aligned(16)));   /* BGR555 */
+/* 128x128 BGR555 cover-art texture, baked from assets/icons/wacki.ico by
+ * tools/gen-ps2-icon.py (defines s_wacki_icon_tex[128*128]). */
+#include "ps2_icon_tex.inc"
 
 /* Pack one .ico vertex (24 bytes): vtx s16[3]+pad, normal s16[3]+pad,
  * texcoord s16[2], rgba u8[4]. Returns p advanced past it. */
@@ -195,6 +197,27 @@ static void ps2_write_one(const char *path, const void *a, int alen,
     mcClose(fd); mc_block();
 }
 
+/* The PS2 BIOS renders the icon.sys title as FULL-WIDTH Shift-JIS, not
+ * single-byte ASCII (verified against a real FMCB icon.sys: 'A' is stored
+ * as 0x8260, big-endian, not 0x41). Map ASCII letters/digits/space to
+ * their full-width SJIS codes; the result is two bytes per character. */
+static int sjis_fullwidth(unsigned short *dst, const char *s, int maxchars)
+{
+    unsigned char *o = (unsigned char *)dst;
+    int n = 0;
+    for (; s[n] && n < maxchars; ++n) {
+        unsigned char c = (unsigned char)s[n];
+        unsigned short w;
+        if      (c >= 'A' && c <= 'Z') w = 0x8260 + (c - 'A');
+        else if (c >= 'a' && c <= 'z') w = 0x8281 + (c - 'a');
+        else if (c >= '0' && c <= '9') w = 0x824F + (c - '0');
+        else                           w = 0x8140;   /* (full-width) space */
+        o[n*2] = (unsigned char)(w >> 8);            /* big-endian */
+        o[n*2 + 1] = (unsigned char)(w & 0xFF);
+    }
+    return n * 2;                                     /* bytes written */
+}
+
 static void ps2_write_icons(void)
 {
     /* --- icon.sys --- rewritten every save so title tweaks take effect */
@@ -202,11 +225,11 @@ static void ps2_write_icons(void)
     memset(&sys, 0, sizeof sys);
     memcpy(sys.head, "PS2D", 4);
     sys.type     = MCICON_TYPE_SAVED_DATA;
-    sys.nlOffset = 6;                          /* "Wacki " | "Kosmiczna Rozgrywka" */
-    sys.trans    = 0x60;
+    sys.nlOffset = 12;                         /* "Wacki " (6 full-width chars × 2 B) */
+    sys.trans    = 0;                          /* matches real saves */
     static const int bg[4][4] = {
-        {0x12,0x12,0x48,0x80}, {0x12,0x12,0x48,0x80},
-        {0x06,0x06,0x20,0x80}, {0x06,0x06,0x20,0x80},
+        {0x12,0x12,0x48,0x00}, {0x12,0x12,0x48,0x00},
+        {0x06,0x06,0x20,0x00}, {0x06,0x06,0x20,0x00},
     };
     for (int i=0;i<4;i++) for (int j=0;j<4;j++) sys.bgCol[i][j]=bg[i][j];
     sys.lightDir[0][0]= 0.5f; sys.lightDir[0][1]= 0.5f; sys.lightDir[0][2]= 0.5f;
@@ -214,21 +237,14 @@ static void ps2_write_icons(void)
     sys.lightDir[2][2]= 1.0f;
     for (int i=0;i<3;i++) sys.lightCol[i][0]=sys.lightCol[i][1]=sys.lightCol[i][2]=0.4f;
     sys.lightAmbient[0]=sys.lightAmbient[1]=sys.lightAmbient[2]=0.5f;
-    memcpy((char *)sys.title, "Wacki Kosmiczna Rozgrywka", 25); /* SJIS==ASCII */
+    sjis_fullwidth(sys.title, "Wacki Kosmiczna Rozgrywka", 34);  /* full-width SJIS */
     memcpy(sys.view, "icon.ico", 8);
     memcpy(sys.copy, "icon.ico", 8);
     memcpy(sys.del,  "icon.ico", 8);
     ps2_write_one(MC_SAVE_DIR "/icon.sys", &sys, (int)sizeof sys, NULL, 0);
 
-    /* --- icon.ico --- write once; the model never changes */
-    mcOpen(0, 0, MC_SAVE_DIR "/icon.ico", MC_O_RDONLY);
-    int ico_fd = mc_block();
-    if (ico_fd >= 0) { mcClose(ico_fd); mc_block(); return; }
-
-    /* solid warm-yellow 128×128 BGR555 texture */
-    int16_t px = (int16_t)((0 << 10) | (24 << 5) | 31);
-    for (int i = 0; i < 128*128; ++i) s_icon_tex[i] = px;
-
+    /* --- icon.ico --- rewritten every save (cheap enough; picks up art
+     * changes without deleting the save). */
     uint8_t ico[20 + ICON_VTX*24 + 44];
     memset(ico, 0, sizeof ico);
     uint32_t *h = (uint32_t *)ico;
@@ -253,7 +269,7 @@ static void ps2_write_icons(void)
     a[7]=0; a[8]=0;  /* frame: unknown */
     a[9]=0; a[10]=0; /* key: time 0.0, value 0.0 */
     ps2_write_one(MC_SAVE_DIR "/icon.ico", ico, (int)sizeof ico,
-                  s_icon_tex, (int)sizeof s_icon_tex);
+                  s_wacki_icon_tex, (int)sizeof s_wacki_icon_tex);
 }
 
 /* Write `size` bytes to the card save. Returns 1 on full success. */
