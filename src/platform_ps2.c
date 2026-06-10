@@ -125,14 +125,52 @@ static char s_aud_stack[16 * 1024]     __attribute__((aligned(16)));
 static volatile int s_aud_run = 0;
 
 extern void mixer_fill_ps2(void *buf, int len);   /* audio.c */
+extern void SDL_Delay(unsigned int ms);           /* SDL2 */
+
+/* AVI cutscene audio. audsrv stays at 22050/16/stereo; the cutscene's PCM
+ * is converted to that on the way in and handed to the SAME audio thread
+ * through a decoupling ring. Feeding straight from the AVI pump (game
+ * thread) couldn't keep up — a slow per-frame FLC decode blocks that
+ * thread far longer than audsrv's ~53 ms ring, draining it (the looping
+ * sample). The audio thread, by contrast, plays from the ring at a steady
+ * real-time rate regardless of decode, and silence-pads a momentary
+ * shortfall instead of repeating. */
+#define AVI_RING_BYTES   (512 * 1024)     /* ~3.0 s of 22050/16/stereo —
+                                           * must exceed the AVI's audio
+                                           * chunk size (they're ~0.7 s+) */
+static uint8_t      s_avi_ring[AVI_RING_BYTES] __attribute__((aligned(16)));
+static volatile uint32_t s_avi_wpos = 0;  /* producer (game thread) */
+static volatile uint32_t s_avi_rpos = 0;  /* consumer (audio thread) */
+static volatile int s_avi_audio_on = 0;
+static int          s_avi_src_ch   = 2;
+static int          s_avi_src_bits = 16;
+
+/* Audio thread: pull one chunk of cutscene audio from the ring (silence
+ * for any shortfall) — single consumer, lock-free against the producer. */
+static void avi_ring_pull(uint8_t *dst, int n)
+{
+    uint32_t r = s_avi_rpos, w = s_avi_wpos;
+    uint32_t avail = (w - r + AVI_RING_BYTES) % AVI_RING_BYTES;
+    uint32_t take  = avail < (uint32_t)n ? avail : (uint32_t)n;
+    uint32_t first = AVI_RING_BYTES - r;
+    if (first > take) first = take;
+    memcpy(dst, s_avi_ring + r, first);
+    if (take > first) memcpy(dst + first, s_avi_ring, take - first);
+    if (take < (uint32_t)n) memset(dst + take, 0, (uint32_t)n - take);
+    s_avi_rpos = (r + take) % AVI_RING_BYTES;
+}
 
 static void ps2_audio_thread(void *arg)
 {
     (void)arg;
     while (s_aud_run) {
-        WaitSema(g_ps2_audio_sema);
-        mixer_fill_ps2(s_aud_buf, PS2_AUD_CHUNK);
-        SignalSema(g_ps2_audio_sema);
+        if (s_avi_audio_on) {                 /* a cutscene is playing */
+            avi_ring_pull((uint8_t *)s_aud_buf, PS2_AUD_CHUNK);
+        } else {
+            WaitSema(g_ps2_audio_sema);
+            mixer_fill_ps2(s_aud_buf, PS2_AUD_CHUNK);
+            SignalSema(g_ps2_audio_sema);
+        }
         /* Pace to the SPU2 drain rate: wait_audio() blocks until the ring
          * has room for the whole chunk, then play_audio() queues it in full.
          * Feeding without wait_audio() overruns the ring and stalls SPU2. */
@@ -140,6 +178,74 @@ static void ps2_audio_thread(void *arg)
         audsrv_play_audio(s_aud_buf, PS2_AUD_CHUNK);
     }
     ExitThread();
+}
+
+/* Begin cutscene audio: remember the source format and route the audio
+ * thread to the cutscene ring (reset empty). audsrv format is unchanged. */
+void platform_ps2_avi_audio_begin(int rate, int channels, int bits)
+{
+    (void)rate;                               /* assumed 22050 (mixer rate) */
+    if (g_ps2_audio_sema < 0) return;
+    s_avi_src_ch   = channels;
+    s_avi_src_bits = bits;
+    s_avi_wpos = s_avi_rpos = 0;
+    s_avi_audio_on = 1;
+}
+
+/* Producer (game thread): convert one cutscene PCM chunk to 22050/16/stereo
+ * and write it into the ring in room-sized blocks. The AVI's audio chunks
+ * are large (~0.7 s+), so a whole chunk usually fits the ring in one pass
+ * (no wait); only if the ring momentarily fills does it yield, splitting
+ * the chunk and pacing to playback. Unsupported formats play silence. */
+void platform_ps2_avi_audio_push(const void *buf, int len)
+{
+    if (!s_avi_audio_on || len <= 0) return;
+    int mono;
+    if      (s_avi_src_ch == 1 && s_avi_src_bits == 16) mono = 1;
+    else if (s_avi_src_ch == 2 && s_avi_src_bits == 16) mono = 0;
+    else return;                              /* unsupported → play silence */
+
+    const int16_t *msp   = (const int16_t *)buf;  /* mono samples */
+    const uint8_t *bsp   = (const uint8_t *)buf;  /* stereo bytes */
+    uint32_t total_out   = mono ? (uint32_t)len * 2 : (uint32_t)len;
+    uint32_t produced    = 0;                 /* output bytes written */
+    uint32_t in_sample   = 0;                 /* mono samples consumed */
+
+    while (produced < total_out) {
+        uint32_t used = (s_avi_wpos - s_avi_rpos + AVI_RING_BYTES) % AVI_RING_BYTES;
+        uint32_t room = AVI_RING_BYTES - used - 1;
+        if (room < 4) {                       /* ring full — let it drain */
+            SDL_Delay(1);
+            if (!s_avi_audio_on) return;
+            continue;
+        }
+        uint32_t w = s_avi_wpos;
+        if (mono) {
+            uint32_t fit = room / 4;          /* whole stereo frames that fit */
+            uint32_t rem = (total_out - produced) / 4;
+            if (fit > rem) fit = rem;
+            for (uint32_t k = 0; k < fit; ++k) {
+                int16_t v = msp[in_sample++];
+                *(int16_t *)(s_avi_ring + w) = v; w = (w + 2) % AVI_RING_BYTES;
+                *(int16_t *)(s_avi_ring + w) = v; w = (w + 2) % AVI_RING_BYTES;
+            }
+            produced += fit * 4;
+        } else {
+            uint32_t can = total_out - produced;
+            if (can > room) can = room;
+            for (uint32_t k = 0; k < can; ++k) {
+                s_avi_ring[w] = bsp[produced + k]; w = (w + 1) % AVI_RING_BYTES;
+            }
+            produced += can;
+        }
+        s_avi_wpos = w;
+    }
+}
+
+/* Cutscene done: route the audio thread back to the mixer. */
+void platform_ps2_avi_audio_end(void)
+{
+    s_avi_audio_on = 0;
 }
 
 void platform_ps2_audio_init(void)

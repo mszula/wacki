@@ -237,13 +237,22 @@ static void audio_cvt_free(void)
     s_cvt_out_cap = 0;
 }
 
+#ifdef WACKI_PS2
+/* PS2 has no SDL audio device — cutscene PCM is fed to audsrv directly
+ * (platform_ps2.c), with the mixer feed thread parked for the duration. */
+extern void platform_ps2_avi_audio_begin(int rate, int channels, int bits);
+extern void platform_ps2_avi_audio_push(const void *buf, int len);
+extern void platform_ps2_avi_audio_end(void);
+static int  s_ps2_avi_audio = 0;
+#endif
+
 static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
 {
 #ifdef WACKI_PS2
-    /* PS2 plays cutscenes silently — SDL audio (audsrv) wedges the IOP
-     * (see platform_sdl.c). Skip the device entirely; the player checks
-     * s_audio_open before queuing, so video keeps running. */
-    (void)sample_rate; (void)channels; (void)bits;
+    /* Hand audsrv to the cutscene at its native PCM format; the audio
+     * chunks are streamed straight to it in stream_pump_one(). */
+    platform_ps2_avi_audio_begin((int)sample_rate, (int)channels, (int)bits);
+    s_ps2_avi_audio = 1;
     return;
 #endif
     SDL_AudioFormat src_fmt = (bits == 8) ? AUDIO_U8 : AUDIO_S16LSB;
@@ -355,6 +364,10 @@ static void audio_queue_chunk(const uint8_t *data, uint32_t sz)
  * desktop with proper multi-device SDL this is just hygiene. */
 static void audio_release(void)
 {
+#ifdef WACKI_PS2
+    if (s_ps2_avi_audio) { platform_ps2_avi_audio_end(); s_ps2_avi_audio = 0; }
+    return;
+#endif
     audio_cvt_free();
     if (!s_audio_open) return;
     SDL_CloseAudioDevice(s_audio_dev);
@@ -610,7 +623,11 @@ static int stream_pump_one(AviStream *s)
         return 1;
     }
 
-    if (tag == FOURCC_01WB && sz && s_audio_open) {
+    int audio_wanted = s_audio_open;
+#ifdef WACKI_PS2
+    audio_wanted = s_ps2_avi_audio;
+#endif
+    if (tag == FOURCC_01WB && sz && audio_wanted) {
         if (!ascratch_ensure(s, sz)) {                 /* OOM — drop audio */
             flic_seek(s->fp, (int32_t)(sz + pad), SEEK_CUR);
             s->pos = next;
@@ -618,6 +635,13 @@ static int stream_pump_one(AviStream *s)
         }
         if (flic_read(s->ascratch, sz, s->fp) != sz) { s->eof = 1; return 0; }
         if (pad) flic_seek(s->fp, 1, SEEK_CUR);
+#ifdef WACKI_PS2
+        /* Push the cutscene's PCM to the audio thread's ring (converted to
+         * 22050/16/stereo there); the thread plays it independent of decode. */
+        platform_ps2_avi_audio_push(s->ascratch, (int)sz);
+        s->pos = next;
+        return 1;
+#endif
         audio_queue_chunk(s->ascratch, sz);    /* resamples + downmixes if needed */
         s->pos = next;
         return 1;
@@ -641,7 +665,16 @@ static void avi_close(AviStream *s)
  * there's no audio stream (so the read-ahead loop becomes a no-op). */
 static int cushion_low(const AviStream *s)
 {
+#ifdef WACKI_PS2
+    /* No SDL FIFO to pre-fill — audsrv's ring is tiny (~53 ms) and the
+     * direct feed in stream_pump_one() self-paces (blocks until room), so
+     * the read-ahead loop is a no-op. The main loop pumps audio as it
+     * walks to each video frame. */
+    (void)s;
+    return 0;
+#else
     return s_audio_open && SDL_GetQueuedAudioSize(s_audio_dev) < s->cushion_bytes;
+#endif
 }
 
 extern void flic_decode_frame(const uint8_t *fdata, uint32_t fsize, int w, int h);
@@ -705,10 +738,25 @@ int PlayFlicAviFile(const char *path)
         }
 
         if (!g_no_pacing) {
+            uint32_t target_ms = frame_us / 1000;
+#ifdef WACKI_PS2
+            /* audsrv's ring is only ~53 ms — smaller than one frame
+             * interval — so if we just SDL_Delay() here it drains between
+             * frames and SPU2 repeats its last buffer (looping sample,
+             * which then stutters the video as the next feed blocks). Spend
+             * the wait PUMPING instead: each audio chunk is fed to audsrv
+             * (the feed self-paces by blocking until the ring has room), and
+             * a few video frames buffer in the ring. The look-ahead cap
+             * keeps audio from running far ahead of the picture. */
+            while (SDL_GetTicks() - t0 < target_ms) {
+                if (!s.eof && s.r_count < 3) stream_pump_one(&s);
+                else SDL_Delay(1);
+            }
+#else
             uint32_t elapsed_ms = SDL_GetTicks() - t0;
-            uint32_t target_ms  = frame_us / 1000;
             if (elapsed_ms < target_ms)
                 SDL_Delay(target_ms - elapsed_ms);
+#endif
         }
     }
 
