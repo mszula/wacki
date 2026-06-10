@@ -307,8 +307,9 @@ else ifeq ($(TARGET),portmaster)
     ENGINE_SRCS += src/platform_portmaster.c
 else ifeq ($(TARGET),ps2)
     # Shared SDL_GameController glue: the DualShock 2 reaches the cursor
-    # through the same pad path as PortMaster/Vita.
-    ENGINE_SRCS += src/platform_portmaster.c
+    # through the same pad path as PortMaster/Vita. platform_ps2.c adds the
+    # PS2 device glue + the bring-up trace breadcrumbs read over PINE.
+    ENGINE_SRCS += src/platform_portmaster.c src/platform_ps2.c
 endif
 
 # macOS desktop gets a small Objective-C helper that re-titles SDL's

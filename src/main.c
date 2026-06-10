@@ -31,6 +31,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Bring-up tracing for the PS2 port: ps2_mark() leaves a breadcrumb in a
+ * global array read over PINE (ps2sdk's stderr doesn't reach PCSX2's
+ * console). No-op on every other target. Defined in src/platform_ps2.c. */
+#ifdef WACKI_PS2
+extern void ps2_mark(unsigned int);
+#define WK_PS2_MARK(x) ps2_mark((unsigned int)(x))
+#else
+#define WK_PS2_MARK(x) ((void)0)
+#endif
+
 /* ---- constants ---------------------------------------------------- */
 
 /* FindDataRoot return value when the data root was found. The
@@ -400,7 +410,10 @@ int WackiMain(int argc, char **argv)
     apply_env_overrides(&args);
     apply_early_cli_effects(&args);
 
-    if (FindDataRoot() != DATA_ROOT_FOUND)
+    WK_PS2_MARK(0x0002u);                 /* reached data-root search */
+    int wk_dr = FindDataRoot();
+    WK_PS2_MARK(0x3000u | (unsigned)wk_dr);   /* dr: 2=found, 0=not found */
+    if (wk_dr != DATA_ROOT_FOUND)
     {
         /* All search ladders + the GUI folder picker exhausted. Tell
          * the user what we tried and bail. SDL_ShowSimpleMessageBox
@@ -433,10 +446,14 @@ int WackiMain(int argc, char **argv)
      * (see include/wacki/embedded_exe.h); PeLoaderRead resolves
      * against them with no runtime init. */
 
-    if (!PlatformInit(WACKI_SCREEN_W, WACKI_SCREEN_H, WACKI_WINDOW_TITLE))
+    int wk_pi = PlatformInit(WACKI_SCREEN_W, WACKI_SCREEN_H, WACKI_WINDOW_TITLE);
+    WK_PS2_MARK(0x4000u | (unsigned)(wk_pi & 1));   /* PlatformInit ok? */
+    if (!wk_pi)
         return 1;
 
-    if (!InitializeGameSubsystems())
+    int wk_ig = InitializeGameSubsystems();
+    WK_PS2_MARK(0x5000u | (unsigned)(wk_ig & 1));   /* subsystems ok? */
+    if (!wk_ig)
     {
         PlatformShowMessageBox("Wacki",
                                "B\xC5\x82\xC4\x85"
@@ -454,6 +471,7 @@ int WackiMain(int argc, char **argv)
         return 0;
     }
 
+    WK_PS2_MARK(0x6000u);                 /* entering the main game loop */
     RunMainGameLoop();
     PlatformShutdown();
     return 0;
@@ -461,7 +479,17 @@ int WackiMain(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-    return WackiMain(argc, argv);
+    int rc = WackiMain(argc, argv);
+#ifdef WACKI_PS2
+    /* Bring-up: stamp the exit code and PARK the EE so PINE can read the
+     * trace breadcrumbs — a returned main() reboots PCSX2 to the BIOS
+     * browser and tears down the game PINE needs to talk to. */
+    extern void ps2_mark(unsigned int);
+    extern void ps2_spin_forever(void);
+    ps2_mark(0xE000u | (unsigned)(rc & 0xFFF));
+    ps2_spin_forever();
+#endif
+    return rc;
 }
 
 /* ---- portable replacements for the original Win32 helpers ------- */
