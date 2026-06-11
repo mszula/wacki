@@ -67,6 +67,12 @@ SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \
 SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
 -lSDL2 -lfileXio -lcdvd -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lmc -lps2_drivers -lm"
 
+# Resolve the build version on the HOST (the container has no git, so the
+# Makefile's `git describe` would fall back to "unknown" — which is what the
+# menu/build string showed). Pass it into the container's make explicitly.
+WACKI_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)"
+echo "[ps2] version: $WACKI_VERSION"
+
 # Run the unchanged Makefile inside the container. The ps2dev image is
 # Alpine and has no host C compiler / make, so add them first (HOSTCC
 # builds embed-pe-data, which runs on the build host, not the PS2).
@@ -91,6 +97,7 @@ docker run --rm --platform linux/amd64 \
         make TARGET=ps2 \
              CROSS_COMPILE=mips64r5900el-ps2-elf- \
              HOSTCC=gcc \
+             WACKI_VERSION='$WACKI_VERSION' \
              SDL2_CFG=true \
              SDL_CFG='$SDL_CFLAGS' \
              SDL_LIB='$SDL_LIBS' \
