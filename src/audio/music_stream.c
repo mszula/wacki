@@ -14,10 +14,12 @@
  * producer reads that play position (a naturally-atomic aligned 32-bit
  * field) to bound how much of the already-played region it refills, staying
  * a near-full ring ahead so the consumer never reads a byte the producer
- * hasn't written. The two touch disjoint regions, and our target platforms
- * (desktop + Linux/ARM handhelds) have cache-coherent SMP, so no explicit
- * cache flush is needed. Setup/teardown synchronise with the callback
- * through mixer_assign / mixer_stop_channel (which lock the device).
+ * hasn't written. The two touch disjoint regions; desktop + Linux/ARM
+ * handhelds have cache-coherent SMP so no flush is needed — but on PS2
+ * fileXio DMAs the file data into RAM behind the EE data cache, so the
+ * producer must flush each just-written span (ms_dcache_flush) or the
+ * audio thread reads a stale ring. Setup/teardown synchronise with the
+ * callback through mixer_assign / mixer_stop_channel (which lock the device).
  * Streaming is raw (no per-chunk convert), so it only engages when the
  * file's format already matches the mixer output exactly. */
 
@@ -35,6 +37,16 @@
 #define MUSIC_RING_BYTES        (256 * 1024)        /* ~3.0 s @ 88200 B/s */
 #define MUSIC_READ_MAX          (64 * 1024)         /* cap per-frame file read */
 #define MUSIC_STREAM_MIN_BYTES  (4u * 1024 * 1024)  /* below this, load whole */
+
+/* PS2: fileXio DMAs into EE RAM behind the data cache, so the audio thread
+ * (a separate EE thread) can read stale bytes from the ring. Flush the span
+ * the producer just wrote. Other targets are cache-coherent → no-op. */
+#ifdef WACKI_PS2
+extern void SyncDCache(void *start, void *end);
+static inline void ms_dcache_flush(void *p, uint32_t n) { SyncDCache(p, (uint8_t *)p + n); }
+#else
+static inline void ms_dcache_flush(void *p, uint32_t n) { (void)p; (void)n; }
+#endif
 
 static CygFile  *s_mstream_file   = NULL;
 static uint8_t  *s_mstream_ring   = NULL;   /* non-owning: MIX_CHAN_MUSIC owns it */
@@ -135,6 +147,7 @@ int music_stream_try_open(const char *name, int loop)
     if (prime > favail) prime = favail & ~3u;
     fseek_cyg(f, (int32_t)doff, SEEK_SET);
     uint32_t got = fread_cyg(ring, 1, prime, f);
+    ms_dcache_flush(ring, got);                 /* PS2: DMA bypassed the cache */
 
     s_mstream_file   = f;
     s_mstream_ring   = ring;
@@ -181,6 +194,7 @@ void music_stream_refill(void)
         if (n == 0) break;
         uint32_t got = fread_cyg(s_mstream_ring + s_mstream_wpos, 1, n, s_mstream_file);
         if (got == 0) break;
+        ms_dcache_flush(s_mstream_ring + s_mstream_wpos, got);  /* PS2: DMA vs cache */
         s_mstream_wpos = (s_mstream_wpos + got) % rlen;
         s_mstream_fpos += got;
         budget -= got;
