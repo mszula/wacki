@@ -593,17 +593,33 @@ uint32_t PlayDialogLine(const char *wav_name)
     return len;
 }
 
+/* "Is the mixer up?" On desktop that's the SDL device handle; on PS2 there is
+ * no SDL device (audsrv drives the mixer, opening an SDL one wedges the IOP)
+ * so s_mix_dev stays 0 even though the mixer runs the whole session.
+ * Functions that gate on "mixer open" — the lip-sync poll, SFX cleanup, the
+ * dialog stop — MUST use this, not s_mix_dev, or they silently no-op on PS2
+ * (which is why mouths never animated while a line played). */
+static inline int mixer_is_open(void)
+{
+#ifdef WACKI_PS2
+    return 1;
+#else
+    return s_mix_dev != 0;
+#endif
+}
+
 /* StopDialogLine — used to cancel mid-line (e.g. user click-to-skip). */
 void StopDialogLine(void)
 {
-    if (!s_mix_dev) return;
+    if (!mixer_is_open()) return;
     mixer_stop_channel(MIX_CHAN_DIALOG);
 }
 
-/* IsDialogLinePlaying — for lip-sync polling. */
+/* IsDialogLinePlaying — for lip-sync polling; the mouth animates while the
+ * dialog channel is active. (Was gated on s_mix_dev = always 0 on PS2.) */
 int IsDialogLinePlaying(void)
 {
-    return s_mix_dev && s_mix[MIX_CHAN_DIALOG].active;
+    return mixer_is_open() && s_mix[MIX_CHAN_DIALOG].active;
 }
 
 /* TickSfx — collect drained channels. Callback already sets active=0
@@ -611,7 +627,7 @@ int IsDialogLinePlaying(void)
  * state during audio callback. */
 void TickSfx(void)
 {
-    if (!s_mix_dev) return;
+    if (!mixer_is_open()) return;
     for (int i = MIX_CHAN_SFX_START; i < MIX_CHANNEL_COUNT; ++i) {
         MIX_DEV_LOCK();
         if (!s_mix[i].active && s_mix[i].buf) {
