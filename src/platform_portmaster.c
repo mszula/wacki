@@ -42,6 +42,12 @@ static void ps2_pad_ensure_analog(void)
     if (padSetMainMode(0, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK) == 1)
         s_ps2_analog_set = 1;            /* takes a few frames to apply */
 }
+
+/* USB HID mouse — platform_ps2.c owns the ps2mouse stack and returns the
+ * per-frame relative delta + click edges. The delta scales to cursor pixels
+ * by PS2_MOUSE_SENS (tune if the pointer feels fast/slow). */
+extern int platform_ps2_mouse_poll(int *dx, int *dy, int *lmb_edge, int *rmb_edge);
+#define PS2_MOUSE_SENS 1.0f
 #endif
 
 extern uint8_t g_lmb_clicked;
@@ -116,23 +122,39 @@ int platform_pad_handle_event(const SDL_Event *ev)
 
 /* Fold the pad into the caller's per-frame cursor poll: the d-pad adds to
  * the discrete dx/dy (sharing the keyboard's accel ramp) and the left
- * stick sets the proportional ax/ay (px/tick). No-op without a pad. */
+ * stick sets the proportional ax/ay (px/tick). On PS2 a USB mouse adds its
+ * relative motion + clicks on top, so it works with or without a pad. */
 void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay)
 {
-    if (!s_pad) return;
+    if (s_pad) {
 #ifdef WACKI_PS2
-    ps2_pad_ensure_analog();
+        ps2_pad_ensure_analog();
 #endif
+        *dx += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+             - SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+        *dy += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+             - SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_UP);
 
-    *dx += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
-         - SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-    *dy += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)
-         - SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_UP);
+        int sx = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX);
+        int sy = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY);
+        if (sx > PAD_ANALOG_DEADZONE || sx < -PAD_ANALOG_DEADZONE)
+            *ax = (float)sx / 32767.0f * PAD_ANALOG_MAX_PX;
+        if (sy > PAD_ANALOG_DEADZONE || sy < -PAD_ANALOG_DEADZONE)
+            *ay = (float)sy / 32767.0f * PAD_ANALOG_MAX_PX;
+    }
 
-    int sx = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX);
-    int sy = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY);
-    if (sx > PAD_ANALOG_DEADZONE || sx < -PAD_ANALOG_DEADZONE)
-        *ax = (float)sx / 32767.0f * PAD_ANALOG_MAX_PX;
-    if (sy > PAD_ANALOG_DEADZONE || sy < -PAD_ANALOG_DEADZONE)
-        *ay = (float)sy / 32767.0f * PAD_ANALOG_MAX_PX;
+#ifdef WACKI_PS2
+    /* USB mouse: relative motion adds to the cursor (on top of the stick),
+     * BTN1/BTN2 fire left/right clicks. Idle mouse = 0 delta, so the pad is
+     * unaffected when no mouse is moving. */
+    {
+        int mdx = 0, mdy = 0, ml = 0, mr = 0;
+        if (platform_ps2_mouse_poll(&mdx, &mdy, &ml, &mr)) {
+            *ax += (float)mdx * PS2_MOUSE_SENS;
+            *ay += (float)mdy * PS2_MOUSE_SENS;
+            if (ml) g_lmb_clicked = 1;
+            if (mr) g_rmb_clicked = 1;
+        }
+    }
+#endif
 }

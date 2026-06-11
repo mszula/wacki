@@ -37,6 +37,8 @@
 #include <kernel.h>
 #include <audsrv.h>
 #include <libmc.h>
+#include <ps2mouse.h>       /* mouse_data + PS2MOUSE_* constants */
+#include <libmouse.h>       /* PS2MouseInit / PS2MouseRead / ... */
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
@@ -44,6 +46,8 @@
 #include "audsrv_irx.c"
 #include "mcman_irx.c"
 #include "mcserv_irx.c"
+#include "usbd_irx.c"
+#include "ps2mouse_irx.c"
 
 /* Hand-declared to dodge ps2sdk's guarded fileXio_rpc.h ("don't mix
  * fio/fileXio with the newlib port"): the engine uses ONLY fileXio for
@@ -105,10 +109,55 @@ void platform_ps2_io_init(void)
     SifLoadModule("rom0:LIBSD", 0, NULL);
     SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, &ret);
 
+    /* USB HID mouse: the USB host driver + the ps2mouse HID driver. A USB
+     * mouse then drives the cursor (a natural fit for point-and-click).
+     * usbd must precede ps2mouse, which binds onto it. */
+    SifExecModuleBuffer(usbd_irx,     size_usbd_irx,     0, NULL, &ret);
+    SifExecModuleBuffer(ps2mouse_irx, size_ps2mouse_irx, 0, NULL, &ret);
+
     /* NOTE: do NOT call init_joystick_driver() here — SDL2-PS2's
      * SDL_InitSubSystem(GAMECONTROLLER) brings the pad up itself (loads
      * padman), and loading it a second time here conflicts and kills pad
      * input entirely. The pad already works via SDL. */
+}
+
+/* ---- USB HID mouse ----------------------------------------------- *
+ *
+ * usbd + ps2mouse (loaded in io_init) expose a USB mouse. Read in DIFF
+ * (relative) mode so the per-frame delta folds into the same virtual cursor
+ * the pad drives — an idle mouse contributes nothing, so the two coexist.
+ * Buttons are edge-detected into single clicks (BTN1 = left = walk/interact,
+ * BTN2 = right = toggle actor). platform_portmaster.c calls this from
+ * platform_pad_read_motion. Returns 1 once the mouse stack is up. */
+static int      s_mouse_state = -1;  /* -1 untried, 0 unavailable, 1 ready */
+static uint32_t s_mouse_btn   = 0;   /* previous button mask (edge detect) */
+
+int platform_ps2_mouse_poll(int *dx, int *dy, int *lmb_edge, int *rmb_edge)
+{
+    *dx = *dy = 0;
+    *lmb_edge = *rmb_edge = 0;
+
+    if (s_mouse_state < 0) {
+        /* PS2MouseInit returns 1 (bound) or 0 (already bound) on success,
+         * -1 on RPC-bind failure. */
+        if (PS2MouseInit() >= 0) {
+            PS2MouseSetReadMode(PS2MOUSE_READMODE_DIFF);
+            s_mouse_state = 1;
+        } else {
+            s_mouse_state = 0;       /* RPC bind failed — give up quietly */
+        }
+    }
+    if (s_mouse_state != 1) return 0;
+
+    mouse_data md = { 0, 0, 0, 0 };
+    if (PS2MouseRead(&md) <= 0) return 1;   /* no new packet — hold button state */
+
+    *dx = md.x;
+    *dy = md.y;
+    if ((md.buttons & PS2MOUSE_BTN1) && !(s_mouse_btn & PS2MOUSE_BTN1)) *lmb_edge = 1;
+    if ((md.buttons & PS2MOUSE_BTN2) && !(s_mouse_btn & PS2MOUSE_BTN2)) *rmb_edge = 1;
+    s_mouse_btn = md.buttons;
+    return 1;
 }
 
 /* ---- save to the PS2 memory card (libmc) ------------------------- *
