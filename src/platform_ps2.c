@@ -717,6 +717,28 @@ int platform_ps2_video_init(int w, int h)
     s_gs->Field          = GS_FRAME;
     s_gs->Width          = 640;
     s_gs->Height         = 480;
+#elif defined(WACKI_PS2_576P)
+    /* PAL progressive 576p (640×576, 50 Hz) — test build: WACKI_PS2_576P=1.
+     * Region-authentic + no interlace flicker. The 640×480 shadow draws 1:1
+     * with a 48px letterbox bar top & bottom. Needs a 576p-capable (component/
+     * RGB) display on real HW. Full geometry like the others. */
+    s_gs->Mode           = GS_MODE_DTV_576P;
+    s_gs->Interlace      = GS_NONINTERLACED;
+    s_gs->Field          = GS_FRAME;
+    s_gs->Width          = 640;
+    s_gs->Height         = 576;
+#elif defined(WACKI_PS2_PAL)
+    /* PAL 640×512 interlaced — test build: WACKI_PS2_PAL=1 ./tools/build-ps2.sh.
+     * The 640×480 shadow scales to the taller PAL frame (less vertical squash
+     * than NTSC's 480→448) and is region-authentic for this Polish game.
+     * Caveat: 50 Hz vs the 30 fps present cadence isn't a clean 2:1, so motion
+     * is a touch less smooth than NTSC. Set the FULL geometry like the
+     * progressive path — a partial override leaves MagV=-1 (top-half only). */
+    s_gs->Mode           = GS_MODE_PAL;
+    s_gs->Interlace      = GS_INTERLACED;
+    s_gs->Field          = GS_FIELD;
+    s_gs->Width          = 640;
+    s_gs->Height         = 512;
 #endif
     /* Default: gsKit's auto-detected mode (NTSC 640×448 interlaced) — full
      * screen, correct MagV. Do NOT override its geometry (overriding left
@@ -765,13 +787,26 @@ void platform_ps2_present(const uint8_t *shadow, const uint8_t *palette,
         s_clut[j] = c;
     }
 
+    /* Vertical fit: if the display frame is TALLER than the 640x480 shadow
+     * (PAL 512), draw 1:1 centred with black letterbox bars rather than
+     * scaling up — sharper, no vertical squash. (PAL 512 → 480 native + a
+     * 16px bar top & bottom = 32px total.) NTSC (448 < 480) still scales to
+     * fill; progressive (480 == 480) is already 1:1. Width is 640 in every
+     * mode, so horizontal is always 1:1. */
+    float dy0 = 0.0f, dy1 = (float)s_gs->Height;
+    if ((int)s_gs->Height > h) {
+        int bar = ((int)s_gs->Height - h) / 2;
+        dy0 = (float)bar;
+        dy1 = (float)(bar + h);
+    }
+
     s_fbtex.Mem = (u32 *)shadow;
-    gsKit_clear(s_gs, 0);
+    gsKit_clear(s_gs, 0);                            /* black; fills the bars */
     gsKit_TexManager_invalidate(s_gs, &s_fbtex);   /* shadow changed → re-upload */
     gsKit_TexManager_bind(s_gs, &s_fbtex);
     gsKit_prim_sprite_texture_3d(s_gs, &s_fbtex,
-        0.0f,            0.0f,            1, 0.0f,     0.0f,
-        (float)s_gs->Width, (float)s_gs->Height, 1, (float)w, (float)h,
+        0.0f,            dy0,            1, 0.0f,     0.0f,
+        (float)s_gs->Width, dy1, 1, (float)w, (float)h,
         0x80808080);
     gsKit_queue_exec(s_gs);
     gsKit_sync_flip(s_gs);
