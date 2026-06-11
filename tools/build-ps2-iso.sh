@@ -5,9 +5,15 @@
 # cdrom0: (the cdrom0: path rewrite lives in src/cygio.c).
 #
 # Layout written to the ISO:
-#   SYSTEM.CNF            BOOT2 = cdrom0:\WACKI.ELF;1
-#   WACKI.ELF            = dist/wacki-ps2.elf
+#   SYSTEM.CNF            BOOT2 = cdrom0:\WACK_001.01;1
+#   WACK_001.01          = dist/wacki-ps2.elf  (boot ELF named as the serial)
 #   DATA/DANE_*.DTA      the original game archives (read via cdrom0:\DATA)
+#
+# Title ID / serial: WACK-00101. The PS2 boot ELF is conventionally named
+# after the disc serial (LLLL_NNN.NN), and PCSX2 / catalogs derive the
+# serial from that BOOT2 filename. "WACK" is a custom homebrew code (real
+# serials start with S + a Sony-allocated region letter) so it can't clash
+# with any released title's database entry.
 #
 # Usage:    ./tools/build-ps2-iso.sh   (or: make ps2-iso)
 #           FORCE_ELF=1 ./tools/build-ps2-iso.sh   # force an ELF rebuild
@@ -49,13 +55,13 @@ docker run --rm --platform linux/amd64 \
     sh -c '
         set -e
         apk add --quiet --no-progress cdrkit >/dev/null
-        printf "BOOT2 = cdrom0:\\WACKI.ELF;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n" > /tmp/SYSTEM.CNF
+        printf "BOOT2 = cdrom0:\\WACK_001.01;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n" > /tmp/SYSTEM.CNF
         genisoimage -quiet -iso-level 2 -l \
             -sysid PLAYSTATION -V WACKI \
             -o dist/wacki-ps2.iso \
             -graft-points \
             SYSTEM.CNF=/tmp/SYSTEM.CNF \
-            WACKI.ELF=dist/wacki-ps2.elf \
+            WACK_001.01=dist/wacki-ps2.elf \
             DATA/=/data_src/
     '
 
