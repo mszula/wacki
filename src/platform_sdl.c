@@ -560,6 +560,13 @@ static void poll_virtual_cursor(void)
         s_vcur_x = s_mouse_x ? s_mouse_x : s_w / 2;
         s_vcur_y = s_mouse_y ? s_mouse_y : s_h / 2;
         s_vcur_initialized = 1;
+        /* Publish the seed immediately. On handhelds there's no real
+         * mouse-motion event to set s_mouse_x/y, so without this the
+         * drawn cursor sits at (0,0) until the first d-pad press — which
+         * then looks like it teleports to centre. The no-input path below
+         * returns early and never writes s_mouse_x/y, so seed them here. */
+        s_mouse_x = (int16_t)s_vcur_x;
+        s_mouse_y = (int16_t)s_vcur_y;
     }
 
     const uint8_t *ks = SDL_GetKeyboardState(NULL);
