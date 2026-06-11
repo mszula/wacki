@@ -124,8 +124,11 @@ void platform_ps2_io_init(void)
 #define MC_O_WRONLY  0x0002
 #define MC_O_CREAT   0x0200
 #define MC_O_TRUNC   0x0400
-#define MC_SAVE_DIR  "/WACKI"
-#define MC_SAVE_PATH "/WACKI/Wacki.sav"
+/* Save folder is named after the disc serial (WACK-00101), as real PS2
+ * games do (mc0:/B<region><serial> or the bare serial). NOTE: changing
+ * this orphans saves under the old /WACKI folder — they don't migrate. */
+#define MC_SAVE_DIR  "/WACK-00101"
+#define MC_SAVE_PATH "/WACK-00101/Wacki.sav"
 #define MC_XFER_MAX  16384                /* bound a single mcRead/mcWrite RPC */
 
 static int s_mc_ready = 0;
