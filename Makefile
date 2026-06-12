@@ -302,25 +302,25 @@ ENGINE_SRCS = \
 # src/platform_portmaster.c carries the Anbernic SDL_GameController →
 # cursor/click input glue.
 # Platform HAL implementations, composed per TARGET (see docs/platform-hal.md).
-# The SDL family (desktop + the handhelds) shares the stdio/SDL storage impls
-# — save (file + atomic rename), data-root discovery (external media / SD card
-# + the native folder picker) and the file-I/O shim (newlib stdio). PS2
-# provides those same interfaces from platform_ps2.c (libmc save + fileXio
-# devices + fileXio file I/O), so it omits SDL_STORAGE_SRCS.
-SDL_STORAGE_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c \
-                   src/platform/sdl/file_host.c
+# The SDL family (desktop + the handhelds) shares the SDL/stdio HAL impls:
+# storage (save file + atomic rename, data-root discovery + folder picker,
+# stdio file I/O) and audio (SDL_OpenAudioDevice). PS2 provides those same
+# interfaces from platform_ps2.c (libmc save + fileXio devices/I/O + audsrv
+# audio), so it omits SDL_PLATFORM_SRCS.
+SDL_PLATFORM_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c \
+                    src/platform/sdl/file_host.c src/platform/sdl/audio_sdl.c
 ifeq ($(TARGET),miyoo)
-    ENGINE_SRCS += src/platform_miyoo.c $(SDL_STORAGE_SRCS)
+    ENGINE_SRCS += src/platform_miyoo.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),portmaster)
-    ENGINE_SRCS += src/platform_portmaster.c $(SDL_STORAGE_SRCS)
+    ENGINE_SRCS += src/platform_portmaster.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),ps2)
     # Shared SDL_GameController glue: the DualShock 2 reaches the cursor
     # through the same pad path as PortMaster/Vita. platform_ps2.c adds the
     # PS2 device glue + the bring-up trace breadcrumbs read over PINE, and
-    # the storage HAL impls (libmc save + fileXio data-root discovery).
+    # the storage + audio HAL impls (libmc save + fileXio I/O + audsrv).
     ENGINE_SRCS += src/platform_portmaster.c src/platform_ps2.c
 else
-    ENGINE_SRCS += $(SDL_STORAGE_SRCS)
+    ENGINE_SRCS += $(SDL_PLATFORM_SRCS)
 endif
 
 # macOS desktop gets a small Objective-C helper that re-titles SDL's

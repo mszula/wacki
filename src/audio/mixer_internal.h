@@ -4,10 +4,11 @@
  * src/audio/mixer_internal.h — private API shared between audio TUs.
  *
  * NOT a public engine header — only audio modules (mixer, music, sfx,
- * dialog playback) include this. The struct + s_mix + s_mix_dev are
+ * dialog playback) include this. The struct + the s_mix[] channel array are
  * defined in src/audio.c (mixer kernel); the SFX dispatcher in
  * src/audio/sfx.c reads them for its replay-guard checks and uses the
- * helpers below to assign / stop mixer channels.
+ * helpers below to assign / stop mixer channels. The audio device itself
+ * lives behind the audio HAL (wacki/platform/audio.h).
  *
  * If you ever build the legacy Win32 path, this header is replaced by
  * the equivalent DSound-internal definitions. */
@@ -17,6 +18,7 @@
 
 #include <SDL.h>
 #include <stdint.h>
+#include "wacki/platform/audio.h"   /* plat_audio_lock/unlock */
 
 /* ---- channel layout ----------------------------------------------- */
 
@@ -47,24 +49,14 @@ struct MixChannel {
     char     name[64];     /* debug name + asset-key for replay guard */
 };
 
-/* Shared mixer state (defined in audio.c). */
-extern SDL_AudioDeviceID  s_mix_dev;
+/* Shared mixer-channel array (defined in audio.c). */
 extern struct MixChannel  s_mix[MIX_CHANNEL_COUNT];
 
-/* Channel-array mutex. On desktop/handheld it's SDL's audio-device lock
- * (serialises against SDL's callback thread). On PS2 there is no SDL audio
- * device — audio runs through a native audsrv thread (platform_ps2.c), so
- * the lock is an EE semaphore (g_ps2_audio_sema) shared with that thread. */
-#ifdef WACKI_PS2
-extern int g_ps2_audio_sema;          /* created in platform_ps2_audio_init */
-extern int WaitSema(int sema_id);     /* ps2sdk <kernel.h> */
-extern int SignalSema(int sema_id);
-#define MIX_DEV_LOCK()   do { if (g_ps2_audio_sema >= 0) WaitSema(g_ps2_audio_sema);   } while (0)
-#define MIX_DEV_UNLOCK() do { if (g_ps2_audio_sema >= 0) SignalSema(g_ps2_audio_sema); } while (0)
-#else
-#define MIX_DEV_LOCK()   SDL_LockAudioDevice(s_mix_dev)
-#define MIX_DEV_UNLOCK() SDL_UnlockAudioDevice(s_mix_dev)
-#endif
+/* Channel-array mutex — serialises mutation against the platform's pull
+ * callback. The audio HAL backs it (SDL's audio-device lock on desktop /
+ * handheld, the audsrv-thread semaphore on PS2). */
+#define MIX_DEV_LOCK()   plat_audio_lock()
+#define MIX_DEV_UNLOCK() plat_audio_unlock()
 
 /* ---- mixer kernel API (defined in audio.c) ----------------------- */
 

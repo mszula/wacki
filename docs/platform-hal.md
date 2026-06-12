@@ -119,7 +119,14 @@ the Makefile. The core is untouched.
       by the umbrella), so `types.h`/`api.h` no longer carry it. **Storage
       subsystem done** — the three worst hotspots (`data_root.c` 23,
       `platform_sdl.c` partial, `save.c` 4) are off the core.
-- [ ] Step 2 — audio device.
+- [x] Step 2 — audio device. `audio.c` is now a pure channel mixer feeding a
+      single pull callback (`mixer_pull`); the device lives behind
+      `audio.h` — `plat_audio_open/close/is_open/lock/unlock`
+      (`platform/sdl/audio_sdl.c` = SDL_OpenAudioDevice; `platform_ps2.c` =
+      audsrv feeder thread). Killed the `s_mix_dev==0` / `mixer_is_open()` /
+      `MIX_DEV_LOCK` per-platform special-casing. NOTE: the WAV *file read*
+      (`load_wav_via_cyg`) still `#ifdef`s on PS2 — a storage concern, folded
+      in a later pass.
 - [ ] Step 3 — FLIC reader.
 - [ ] Step 4 — video + input split.
 - [ ] Step 5 — lifecycle/CLI.
