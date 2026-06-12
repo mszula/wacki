@@ -234,7 +234,6 @@ void RestorePrevFrameRects(void) { /* nop */ }
 #define FADE_OUT_FRAME_MS   25
 void FadeOutToBlack(void)
 {
-    extern int g_headless;
     if (g_headless || !g_back_shadow) return;
 
     uint8_t start[sizeof g_palette_rgb];

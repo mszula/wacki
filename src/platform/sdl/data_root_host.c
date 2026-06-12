@@ -264,7 +264,6 @@ int plat_prompt_data_folder(int (*probe)(const char *root))
     /* No GUI in headless mode (CI smoke, --headless dev runs): a folder
      * picker on a runner with no display either errors out instantly or
      * hangs until the harness timeout. */
-    extern int g_headless;
     if (g_headless) return 0;
 
     char picked[1024] = {0};

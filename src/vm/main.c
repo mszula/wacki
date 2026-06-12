@@ -599,7 +599,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
  * still visible, breaking dialog sequencing. */
             {
                 extern Entity *g_speech_balloon;
-                extern uint8_t g_lmb_clicked;
                 /* Safety cap (~10s real) so a buggy dismiss timer can't
  * hang the game forever. */
                 int safety_ms = 10000;
@@ -1324,7 +1323,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                         FlushFrameToPrimary();
                         /* Wait for LMB or timeout — pump events each frame
  * so SDL stays alive and the user can click out. */
-                        extern uint8_t  g_lmb_clicked;
                         uint32_t budget_ms = 0xFFFF * 16;   /* ~17 minutes */
                         while (budget_ms > 0) {
                             PlatformPumpEvents();

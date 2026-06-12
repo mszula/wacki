@@ -153,7 +153,6 @@ extern void UpdateCursorState(void);
 extern int  PreloadCommonAssets(void);
 extern int  is_walkable_at(int sx, int sy);
 extern int  ClickHitTest(int16_t mouse_x, int16_t mouse_y, uint16_t *out_verb);
-extern int  g_no_pacing;                /* main.c — --no-pacing flag */
 extern const void *PeLoaderRead(uint32_t va);
 
 /* ------------------------------------------------------------------------- *

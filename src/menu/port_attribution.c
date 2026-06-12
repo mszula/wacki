@@ -101,9 +101,6 @@ extern FontHandle *g_default_font;
 extern uint8_t     g_palette_rgb[256 * 3];
 extern uint8_t    *g_back_shadow;
 
-extern uint8_t  g_lmb_clicked;
-extern uint8_t  g_rmb_clicked;
-extern uint16_t g_key_state;
 
 /* ---- helpers ------------------------------------------------------- */
 

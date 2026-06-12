@@ -94,7 +94,6 @@ extern Entity         *SpawnActorEntity(uint16_t id, AnimAsset *atlas,
 extern const void     *xlat_binary_ptr(uint32_t addr);
 extern void            ProcessGameFrameTickInner(void);
 extern void            LoadKomnataScene(uint16_t id);
-extern int             g_no_pacing;
 extern SceneDef       *opt_get_pytanie_scene(void);
 extern void            SnapshotBackbufferForMenu(void);  /* menu_loop.c */
 

@@ -29,7 +29,6 @@ extern AnimAsset *g_panel_asset;
 extern AnimAsset *g_items_atlas;
 extern uint16_t   g_panel_verb_tab[6];
 extern uint16_t   g_active_actor;
-extern int16_t    s_mouse_x, s_mouse_y;
 extern uint32_t   g_frame_delta_ms;
 
 /* Forward decls for helpers still owned by game.c. */

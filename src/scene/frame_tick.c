@@ -40,7 +40,6 @@ extern void  EntityWalkerTick(Entity *head);
 extern void  PerActorWaypointAdvanceTick(void);
 extern void  EntityRenderAll(Entity *head);
 extern int   ClickHitTest(int16_t mouse_x, int16_t mouse_y, uint16_t *out_verb);
-extern int16_t s_mouse_x, s_mouse_y;
 extern Entity *g_render_list_head;
 
 /* ---- constants ---------------------------------------------------- */

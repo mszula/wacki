@@ -23,8 +23,6 @@
 #include <stdint.h>
 
 extern AnimAsset *g_panel_asset;
-extern int16_t    s_mouse_x;
-extern int16_t    s_mouse_y;
 extern uint16_t   g_komnata_flags;
 
 /* ---- constants ---------------------------------------------------- */

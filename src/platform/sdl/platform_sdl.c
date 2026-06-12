@@ -81,10 +81,6 @@ static int           s_vcur_initialized = 0;
 static int           s_vcur_hold_ticks = 0;     /* d-pad-held duration */
 static float         s_vcur_rem_x = 0, s_vcur_rem_y = 0;  /* analog sub-px */
 
-extern int         g_headless;
-extern int         g_scale_factor;
-extern const char *g_scale_mode;
-extern int         g_fullscreen;
 
 /* ---- typed-char ring buffer -------------------------------------- */
 
@@ -277,7 +273,6 @@ static void handle_textinput(const SDL_Event *ev)
 
 static void handle_mouse_motion(const SDL_Event *ev)
 {
-    extern int16_t s_mouse_x, s_mouse_y;
     s_mouse_x = (int16_t)ev->motion.x;
     s_mouse_y = (int16_t)ev->motion.y;
 }
@@ -319,7 +314,6 @@ static void handle_mouse_button_down(const SDL_Event *ev)
  * resets the ramp so the next tap is precise again. */
 static void poll_virtual_cursor(void)
 {
-    extern int16_t s_mouse_x, s_mouse_y;
 
     if (!s_vcur_initialized) {
         /* Seed from real-mouse position so we don't snap on first

@@ -49,7 +49,6 @@
 
 extern uint8_t *g_back_shadow;
 extern uint8_t  g_palette_rgb[256*3];
-extern int      g_no_pacing;                /* T29 — batch-test pacing bypass */
 
 /* T43b — AVI chunk headers aren't guaranteed 4-byte aligned (chunks
  * are byte-aligned in the container). Use memcpy to avoid UBSan
@@ -411,8 +410,6 @@ static int cushion_low(const AviStream *s)
 extern void flic_decode_frame(const uint8_t *fdata, uint32_t fsize, int w, int h);
 
 /* ---- public entry — drop-in replacement for the audio.c stub ------------ */
-extern uint8_t g_lmb_clicked, g_rmb_clicked;
-extern uint16_t g_key_state;
 
 int PlayFlicAviFile(const char *path)
 {
