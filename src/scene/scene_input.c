@@ -30,8 +30,6 @@
 
 /* ---- externs ------------------------------------------------------ */
 
-extern int16_t  s_mouse_x;
-extern int16_t  s_mouse_y;
 extern uint8_t  g_dialog_active;
 extern const DemoScene *g_current_scene;
 

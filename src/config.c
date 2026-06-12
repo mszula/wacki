@@ -33,8 +33,6 @@
 #define WACKI_CFG_PATH      "wacki.cfg"
 #define CFG_SCALE_MAX       8
 
-extern int g_scale_factor;   /* main.c */
-extern int g_fullscreen;     /* main.c */
 
 int g_config_first_run = 0;
 

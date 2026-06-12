@@ -288,7 +288,6 @@ static void dialog_play_line(uint16_t actor, const char *text,
     DialogActivateTopSpeaker();
 
     extern Entity   *g_speech_balloon;
-    extern uint8_t   g_lmb_clicked;
     extern uint16_t  g_speech_dismiss_ticks;
 
     int safety      = audio_started ? DIALOG_AUDIO_FRAME_BUDGET

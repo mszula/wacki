@@ -23,9 +23,7 @@
  *       as an SDL keysym by the mmiyoo backend) into the engine input latches.
  * The remaining hooks (plat_apply_video_prefs, plat_pad_read_extra) are
  * no-ops here — the Miyoo has a fixed display and no controller / USB mouse.
- *
- * The function symbols are declared extern at the call sites — keeping
- * the surface minimal so this module doesn't need its own header.
+ * All four are declared in the HAL headers (system.h / input.h / video.h).
  *
  * Background on the volume side: OnionOS' launch_standalone.sh kills
  * the audioserver daemon before launching ports (KillAudioserver=1 in
@@ -191,12 +189,6 @@ void plat_restore_system_volume(void)
  * All defined in src/main.c (or platform_sdl.c) and declared extern
  * in wacki/globals.h — re-declared here as a quick sanity check that
  * the symbols actually exist at link time. */
-extern uint8_t  g_lmb_clicked;
-extern uint8_t  g_rmb_clicked;
-extern uint16_t g_key_state;
-extern uint8_t  g_quicksave_request;
-extern uint8_t  g_quickload_request;
-extern uint8_t  g_pause_menu_request;
 
 /* Translate one Miyoo Mini Plus hardware button (delivered as an
  * SDL_Keycode by the mmiyoo SDL2 backend) into engine input latches.

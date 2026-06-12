@@ -98,6 +98,21 @@ extern uint8_t   g_stats_dump_request;
 /* T24 — F12 pause/exit confirmation latch (Pytanie.scr equivalent). */
 extern uint8_t   g_pause_menu_request;
 
+/* Virtual cursor position (engine-space 640×480). Driven by the SDL
+ * mouse-motion handler + the d-pad/analog virtual cursor; read by the HUD,
+ * hit-test, and cursor-paint paths. NOTE: the `s_` prefix is historical (it
+ * predates being shared); it's a genuine global. */
+extern int16_t   s_mouse_x;
+extern int16_t   s_mouse_y;
+
+/* ---- display / CLI knobs (set by parse_cli_args + config) -------- */
+
+extern int          g_headless;       /* --headless: skip window + present */
+extern int          g_no_pacing;      /* --test-cutscenes: skip frame sleeps */
+extern int          g_scale_factor;   /* --scale N: window = 640×480 × N */
+extern const char  *g_scale_mode;     /* --scaler: nearest|linear|best */
+extern int          g_fullscreen;     /* --fullscreen / F11 */
+
 /* ---- audio gates ------------------------------------------------- *
  *
  * Options-menu toggles. When music or the global sound flag flips

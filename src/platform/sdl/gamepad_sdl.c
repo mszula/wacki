@@ -29,11 +29,6 @@
 
 #include <stdint.h>
 
-extern uint8_t g_lmb_clicked;
-extern uint8_t g_rmb_clicked;
-extern uint8_t g_quicksave_request;
-extern uint8_t g_quickload_request;
-extern uint8_t g_pause_menu_request;
 
 /* Analog-stick cursor: past the deadzone, full deflection moves
  * PAD_ANALOG_MAX_PX per tick, scaled linearly by how far the stick is

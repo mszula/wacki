@@ -108,7 +108,6 @@ void UpdateCursorState(void)
  * UpdateCursorState uses (states 6/7 reuse slots 0/3). */
 void PaintCursor(void)
 {
-    extern int16_t s_mouse_x, s_mouse_y;
     extern uint8_t g_cursor_state;
     extern uint16_t g_cursor_frame;
     extern AnimAsset *g_cursor_atlas[8];

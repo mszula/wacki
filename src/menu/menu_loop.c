@@ -85,8 +85,6 @@ static int     s_menu_bg_snapshot_valid = 0;
 
 /* ---- externs ------------------------------------------------------ */
 
-extern int16_t  s_mouse_x;
-extern int16_t  s_mouse_y;
 extern uint8_t *g_back_shadow;
 extern int      paint_rawb_pic(const void *blob, uint32_t size, int as_overlay);
 extern void     paint_anim_button_at(AnimAsset *atlas, uint16_t frame,

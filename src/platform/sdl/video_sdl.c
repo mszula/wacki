@@ -41,10 +41,6 @@ static SDL_Renderer *s_ren = NULL;
 static SDL_Texture  *s_tex = NULL;
 static uint32_t      s_pixels32[640 * 480];
 
-extern int         g_headless;
-extern int         g_scale_factor;
-extern const char *g_scale_mode;
-extern int         g_fullscreen;
 
 unsigned plat_video_sdl_init_flags(void)
 {
