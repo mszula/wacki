@@ -25,6 +25,7 @@
 #include "wacki.h"
 #include "wacki/log.h"
 #include "wacki/platform/video.h"
+#include "wacki/platform/input.h"
 
 #include <SDL.h>
 #include <stdint.h>
@@ -487,6 +488,20 @@ void PlatformPumpEvents(void)
 }
 
 int PlatformShouldQuit(void) { return s_quit; }
+
+/* Input capability (wacki/platform/input.h). The handhelds alias hardware
+ * buttons onto unpredictable keysyms and the PS2 has no keyboard, so gameplay
+ * keybindings beyond ESC gate on this. (A WACKI_HANDHELD branch is fine here —
+ * this IS the SDL platform layer; what mattered was keeping the decision out
+ * of core scene code.) */
+int plat_input_has_keyboard(void)
+{
+#ifdef WACKI_HANDHELD
+    return 0;
+#else
+    return 1;
+#endif
+}
 
 /* ---- message box ------------------------------------------------- */
 
