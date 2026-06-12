@@ -124,18 +124,15 @@ the Makefile. The core is untouched.
       `audio.h` — `plat_audio_open/close/is_open/lock/unlock`
       (`platform/sdl/audio_sdl.c` = SDL_OpenAudioDevice; `platform_ps2.c` =
       audsrv feeder thread). Killed the `s_mix_dev==0` / `mixer_is_open()` /
-      `MIX_DEV_LOCK` per-platform special-casing. NOTE: the WAV *file read*
-      (`load_wav_via_cyg`) still `#ifdef`s on PS2 — a storage concern, folded
-      in a later pass.
+      `MIX_DEV_LOCK` per-platform special-casing. (The WAV *file read* was
+      later unified through cygio too — see the conformance pass below.)
 - [x] Step 3 — FLIC reader. flic.c's `FlicFp` now drives `plat_flic_*`
       (wacki/platform/storage.h) — a single global read-ahead reader:
       `platform/sdl/flic_host.c` (setvbuf'd stdio) and the PS2 async ring-fill
       thread (renamed from `platform_ps2_aread_*`) in `platform_ps2.c`. The
-      reader `#ifdef WACKI_PS2` is gone from flic.c. NOTE: flic.c's *AVI audio
-      device* (the cutscene push path: audio_ensure / SDL_QueueAudio vs audsrv
-      + the pacing loop) still `#ifdef`s on PS2 — a separate audio-device
-      concern, deferred (the PS2 pacing is timing-sensitive — the "looping
-      sample" fix — so it wants its own careful pass).
+      reader `#ifdef WACKI_PS2` is gone from flic.c. (flic.c's *AVI audio
+      device* was also lifted into the audio HAL later — see the conformance
+      pass below.)
 - [x] Step 4 — video split. platform_sdl.c's three `#ifdef WACKI_PS2` blocks
       (SDL_Init flags, gsKit video init, gsKit present) are gone — routed
       through a video HAL (wacki/platform/video.h): `plat_video_sdl_init_flags`
@@ -158,16 +155,46 @@ the Makefile. The core is untouched.
       in main.c is the `WACKI_VERSION` build-string fallback (not a platform
       `#ifdef`).
 
+## Full-codebase conformance pass
+
+The five steps above covered the files in the original diagnosis table — but a
+sweep of the *whole* tree (every platform macro in every `.c`/`.h`, not just
+the surveyed files) found four more core `#ifdef` sites the table had missed
+or deferred. All four are now closed:
+
+- **`audio/music_stream.c`** — an `#ifdef WACKI_PS2` dcache shim (`SyncDCache`)
+  → `plat_dcache_flush()` (system.h; no-op on cache-coherent targets).
+- **`main.c`** — the `WK_PS2_MARK` trace macro → `plat_trace_mark()`
+  (system.h). main.c now has zero platform `#ifdef`.
+- **`audio.c`** — the WAV *file read* (`load_wav_via_cyg`) unified: every
+  platform reads WAV bytes through the cygio shim (one `load_wav_file()`), so
+  the loader carries no `#ifdef`. The PS2's 4 MiB cap is kept as a portable
+  backstop.
+- **`scene/play_loop.c`** — the `#ifndef WACKI_HANDHELD` SPACE-keybinding skip
+  → `plat_input_has_keyboard()`, the fifth interface header (`input.h`).
+- **`flic.c`** — the AVI **audio device** (cutscene push path: SDL_QueueAudio
+  vs audsrv + the inter-frame pacing) lifted into the audio HAL:
+  `plat_avi_audio_begin/push/end` + `_is_open/_below_cushion/_flush/_needs_pump`
+  (`audio_sdl.c` + `platform_ps2.c`). The PS2 feeder + pacing are byte-identical
+  (the "looping sample" timing is preserved); the desktop sleep path is
+  unchanged. flic.c is now platform-`#ifdef`-free.
+
 ## Outcome
 
-The five planned steps are done — the core engine (`save.c`, `data_root.c`,
-`audio.c` mixer, `flic.c` reader, `platform_sdl.c`, `main.c`) calls
-per-subsystem HAL interfaces and no longer `#ifdef`s on a platform. Adding a
-platform is now a new `src/platform/<plat>/` dir implementing
-`storage.h` / `audio.h` / `video.h` / `system.h` (reusing `sdl/` where the
-platform has SDL2) plus one `PLATFORM_SRCS` branch in the Makefile.
+The core engine — `save.c`, `data_root.c`, the `audio.c` mixer + WAV loader,
+`audio/music_stream.c`, `flic.c`, `scene/play_loop.c`, `platform_sdl.c`,
+`main.c`, and all of `vm/` `actor/` `render/` `hud/` `scene/` `graphics`
+`assets` `archive` — now calls per-subsystem HAL interfaces and contains **no
+`#ifdef <platform>`** (verified by a full-tree sweep; only comments, the
+`WACKI_VERSION` build fallback, and SDL-version feature guards remain). The
+five interfaces are `storage.h` / `audio.h` / `video.h` / `input.h` /
+`system.h`.
 
-Deferred follow-ups (tracked, not blocking): the FLIC **AVI-audio** device
-(flic.c's cutscene push path + PS2 pacing loop) and the **WAV file-read**
-(`audio.c::load_wav_via_cyg`) still `#ifdef` on PS2 — both are narrow,
-timing/format-sensitive, and want their own careful passes.
+Adding a platform = a new `src/platform/<plat>/` dir implementing those
+interfaces (reusing `sdl/` where the platform has SDL2) plus one
+`PLATFORM_SRCS` branch in the Makefile. Zero core edits.
+
+Platform `#ifdef`s now live ONLY in the platform layer: `platform_sdl.c`
+(shared SDL input/event pump — SDL-family `WACKI_MIYOO`/`WACKI_HANDHELD`/
+`__APPLE__` variants), `src/platform/sdl/*` (OS variants within the SDL
+backend), and `platform_{ps2,miyoo,portmaster,macos}.*`.

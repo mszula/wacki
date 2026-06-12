@@ -41,6 +41,7 @@
  * The Wacki AVIs are 640×480, 8-bit, ~10 fps, paletted. */
 #include "wacki.h"
 #include "wacki/log.h"
+#include "wacki/platform/audio.h"   /* plat_avi_audio_* cutscene audio device */
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,11 +109,12 @@ typedef struct {
     uint16_t  height;
     uint32_t  fps_us;            /* microseconds per frame */
 
-    /* audio stream info — populated from the second strl LIST if present */
+    /* audio stream info — populated from the second strl LIST if present,
+     * passed to plat_avi_audio_begin (the device handles its own downmix /
+     * cushion sizing). */
     uint16_t  audio_channels;
     uint16_t  audio_bits;
     uint32_t  audio_samples_per_sec;
-    uint32_t  cushion_bytes;     /* AUDIO_CUSHION_MS in device-rate bytes */
 
     /* reusable scratch for the current audio chunk */
     uint8_t  *ascratch;
@@ -123,178 +125,12 @@ typedef struct {
     int       r_head, r_tail, r_count;
 } AviStream;
 
-/* SDL audio device, opened on demand and reused across cutscenes.
- * s_audio_spec_cur is the *obtained* spec — i.e. the device's real
- * hardware rate/format, which on Windows/WASAPI is usually NOT the
- * AVI's rate. */
-static SDL_AudioDeviceID s_audio_dev = 0;
-static SDL_AudioSpec     s_audio_spec_cur;
-static int               s_audio_open = 0;
-
-/* The AVI's source PCM spec the device was last opened for. The device
- * may negotiate something else (hardware mix rate / mono), so the reuse
- * check keys off the source — not the obtained spec. */
-static int             s_audio_src_freq  = 0;
-static uint16_t        s_audio_src_chans = 0;
-static SDL_AudioFormat s_audio_src_fmt   = 0;
-
-/* Explicit resampler: source PCM → obtained device spec. Built only when
- * the two differ. We queue its output, which is already at the device's
- * rate, so SDL never has to convert at queue time. See audio_ensure for
- * why we don't lean on SDL's implicit queue-time conversion. NULL when
- * the device opened at exactly the source spec (no conversion needed). */
-static SDL_AudioStream *s_audio_cvt     = NULL;
-static uint8_t         *s_cvt_out       = NULL;
-static int              s_cvt_out_cap   = 0;
-
-static void audio_cvt_free(void)
-{
-    if (s_audio_cvt) { SDL_FreeAudioStream(s_audio_cvt); s_audio_cvt = NULL; }
-    free(s_cvt_out);
-    s_cvt_out = NULL;
-    s_cvt_out_cap = 0;
-}
-
-#ifdef WACKI_PS2
-/* PS2 has no SDL audio device — cutscene PCM is fed to audsrv directly
- * (platform_ps2.c), with the mixer feed thread parked for the duration. */
-extern void platform_ps2_avi_audio_begin(int rate, int channels, int bits);
-extern void platform_ps2_avi_audio_push(const void *buf, int len);
-extern void platform_ps2_avi_audio_end(void);
-static int  s_ps2_avi_audio = 0;
-#endif
-
-static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
-{
-#ifdef WACKI_PS2
-    /* Hand audsrv to the cutscene at its native PCM format; the audio
-     * chunks are streamed straight to it in stream_pump_one(). */
-    platform_ps2_avi_audio_begin((int)sample_rate, (int)channels, (int)bits);
-    s_ps2_avi_audio = 1;
-    return;
-#endif
-    SDL_AudioFormat src_fmt = (bits == 8) ? AUDIO_U8 : AUDIO_S16LSB;
-
-    /* Reuse the open device when the SOURCE spec is unchanged. */
-    if (s_audio_open &&
-        s_audio_src_freq  == (int)sample_rate &&
-        s_audio_src_chans == channels &&
-        s_audio_src_fmt   == src_fmt)
-        return;
-
-    if (s_audio_open) { SDL_CloseAudioDevice(s_audio_dev); s_audio_open = 0; }
-    audio_cvt_free();
-
-    /* mmiyoo holds a single audio device slot — close the SFX/music
-     * mixer if it's up so SDL_OpenAudioDevice below doesn't bounce
-     * off "Audio device already open". The mixer re-opens lazily on
-     * the first SFX/music play after audio_release. */
-    extern void mixer_release(void);
-    mixer_release();
-
-    SDL_AudioSpec want = {0};
-    want.freq     = (int)sample_rate;
-    want.format   = src_fmt;
-    want.channels = (Uint8)channels;
-    /* 4096-frame buffer (~185 ms at 22 kHz) keeps the device fed
-     * between AVI audio chunks, which arrive every video frame —
-     * intro Dane_10.dta runs at 10 fps = 100 ms per chunk. With the
-     * old 1024 sample (~46 ms) buffer the device underruns midway
-     * through every gap → audible chopping. Larger is safer on the
-     * Miyoo/mmiyoo backend which can't switch buffers on the fly. */
-    want.samples  = 4096;
-    /* Let the device pick its own rate/channels/buffer; we adapt to
-     * whatever it returns. Windows/WASAPI shared mode can only run at
-     * the system mix rate (44.1/48 kHz), never the AVI's 22 kHz — and
-     * SDL's implicit conversion of *queued* audio doesn't kick in on
-     * that backend (the callback-based mixer in audio.c converts fine,
-     * but the SDL_QueueAudio path here played our 22 kHz bytes ~2x too
-     * fast: "sped up, then silence" on a loop). So we resample
-     * explicitly below into the obtained spec instead of trusting SDL
-     * to do it for us. */
-    s_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &s_audio_spec_cur,
-                                      SDL_AUDIO_ALLOW_FREQUENCY_CHANGE |
-                                      SDL_AUDIO_ALLOW_CHANNELS_CHANGE |
-                                      SDL_AUDIO_ALLOW_SAMPLES_CHANGE);
-    if (!s_audio_dev) {
-        LOG_INFO("audio", "SDL_OpenAudioDevice (avi): %s", SDL_GetError());
-        return;
-    }
-    s_audio_open      = 1;
-    s_audio_src_freq  = (int)sample_rate;
-    s_audio_src_chans = channels;
-    s_audio_src_fmt   = src_fmt;
-
-    /* Build the resampler whenever the device didn't hand us back the
-     * exact source spec. This also subsumes the old stereo→mono downmix
-     * (mmiyoo): the stream folds channels for us. */
-    if (s_audio_spec_cur.freq != (int)sample_rate ||
-        s_audio_spec_cur.channels != channels ||
-        s_audio_spec_cur.format != src_fmt) {
-        s_audio_cvt = SDL_NewAudioStream(src_fmt, (Uint8)channels, (int)sample_rate,
-                                         s_audio_spec_cur.format,
-                                         s_audio_spec_cur.channels,
-                                         s_audio_spec_cur.freq);
-        if (!s_audio_cvt)
-            LOG_INFO("audio", "SDL_NewAudioStream failed: %s", SDL_GetError());
-    }
-
-    SDL_PauseAudioDevice(s_audio_dev, 0);
-    LOG_INFO("audio", "AVI audio: src %u Hz %u ch %u-bit -> device %d Hz %d ch %d samples%s",
-             sample_rate, channels, bits,
-             s_audio_spec_cur.freq, s_audio_spec_cur.channels,
-             s_audio_spec_cur.samples, s_audio_cvt ? " [resampling]" : "");
-#ifdef WACKI_MIYOO
-    /* mmiyoo resets kernel mixer on each SDL_OpenAudioDevice — re-apply
-     * the OnionOS-saved volume so the AVI doesn't blast at max. */
-    extern void platform_restore_system_volume(void);
-    platform_restore_system_volume();
-#endif
-}
-
-/* Push one AVI audio chunk to the device, resampling through s_audio_cvt
- * first when the device rate/format differs from the source. */
-static void audio_queue_chunk(const uint8_t *data, uint32_t sz)
-{
-    if (!s_audio_cvt) {                       /* device matches source */
-        SDL_QueueAudio(s_audio_dev, data, sz);
-        return;
-    }
-    if (SDL_AudioStreamPut(s_audio_cvt, data, (int)sz) < 0)
-        return;
-    for (;;) {
-        int avail = SDL_AudioStreamAvailable(s_audio_cvt);
-        if (avail <= 0) break;
-        if (avail > s_cvt_out_cap) {
-            uint8_t *n = (uint8_t *)realloc(s_cvt_out, (size_t)avail);
-            if (!n) return;                   /* OOM — drop the tail */
-            s_cvt_out     = n;
-            s_cvt_out_cap = avail;
-        }
-        int got = SDL_AudioStreamGet(s_audio_cvt, s_cvt_out, avail);
-        if (got <= 0) break;
-        SDL_QueueAudio(s_audio_dev, s_cvt_out, (Uint32)got);
-    }
-}
-
-/* Release the AVI audio device. Called at end of playback so the
- * mixer (audio.c) can take the single mmiyoo hardware slot. On a
- * desktop with proper multi-device SDL this is just hygiene. */
-static void audio_release(void)
-{
-#ifdef WACKI_PS2
-    if (s_ps2_avi_audio) { platform_ps2_avi_audio_end(); s_ps2_avi_audio = 0; }
-    return;
-#endif
-    audio_cvt_free();
-    if (!s_audio_open) return;
-    SDL_CloseAudioDevice(s_audio_dev);
-    s_audio_open      = 0;
-    s_audio_dev       = 0;
-    s_audio_src_freq  = 0;
-    s_audio_src_chans = 0;
-    s_audio_src_fmt   = 0;
-}
+/* Cutscene audio is a separate PUSH device behind the audio HAL
+ * (wacki/platform/audio.h): plat_avi_audio_begin / _push / _end plus the
+ * _below_cushion / _flush / _needs_pump queries. The SDL queue-mode device
+ * (incl. the mmiyoo single-slot juggling + stereo→mono downmix) lives in
+ * src/platform/sdl/audio_sdl.c; the audsrv feeder in src/platform_ps2.c. The
+ * decoder below just opens it, pushes chunks, and closes it. */
 
 /* ---- RIFF / AVI FourCCs ------------------------------------------- */
 
@@ -488,20 +324,12 @@ static int avi_open_stream(AviStream *s, const char *path)
     free(hdr);
     if (!ok) { flic_close(s->fp); s->fp = NULL; return 0; }
 
-    /* Open the audio device now — but DON'T prequeue. Audio is streamed
-     * in the playback loop and kept ahead of video by the cushion. */
-    if (s->audio_samples_per_sec) {
-        audio_ensure(s->audio_samples_per_sec, s->audio_channels, s->audio_bits);
-        if (s_audio_open) {
-            /* Cushion is measured against the device FIFO, so size it in
-             * the obtained (device) rate/format — that's also what we
-             * queue, since audio_queue_chunk resamples to it. */
-            int bytes_per_sample = SDL_AUDIO_BITSIZE(s_audio_spec_cur.format) / 8;
-            uint32_t bps = (uint32_t)s_audio_spec_cur.freq *
-                           s_audio_spec_cur.channels * (uint32_t)bytes_per_sample;
-            s->cushion_bytes = bps * AUDIO_CUSHION_MS / 1000;
-        }
-    }
+    /* Open the cutscene audio device now — but DON'T prequeue. Audio is
+     * streamed in the playback loop and kept ahead of video by the cushion.
+     * The device handles its own downmix + cushion sizing internally. */
+    if (s->audio_samples_per_sec)
+        plat_avi_audio_begin((int)s->audio_samples_per_sec,
+                             (int)s->audio_channels, (int)s->audio_bits);
 
     flic_seek(s->fp, (int32_t)s->pos, SEEK_SET);   /* to first movi chunk */
     return 1;
@@ -541,11 +369,7 @@ static int stream_pump_one(AviStream *s)
         return 1;
     }
 
-    int audio_wanted = s_audio_open;
-#ifdef WACKI_PS2
-    audio_wanted = s_ps2_avi_audio;
-#endif
-    if (tag == FOURCC_01WB && sz && audio_wanted) {
+    if (tag == FOURCC_01WB && sz && plat_avi_audio_is_open()) {
         if (!ascratch_ensure(s, sz)) {                 /* OOM — drop audio */
             flic_seek(s->fp, (int32_t)(sz + pad), SEEK_CUR);
             s->pos = next;
@@ -553,14 +377,10 @@ static int stream_pump_one(AviStream *s)
         }
         if (flic_read(s->ascratch, sz, s->fp) != sz) { s->eof = 1; return 0; }
         if (pad) flic_seek(s->fp, 1, SEEK_CUR);
-#ifdef WACKI_PS2
-        /* Push the cutscene's PCM to the audio thread's ring (converted to
-         * 22050/16/stereo there); the thread plays it independent of decode. */
-        platform_ps2_avi_audio_push(s->ascratch, (int)sz);
-        s->pos = next;
-        return 1;
-#endif
-        audio_queue_chunk(s->ascratch, sz);    /* resamples + downmixes if needed */
+        /* Push the chunk to the cutscene audio device; the backend converts
+         * for its own output (SDL folds stereo→mono if it negotiated mono;
+         * PS2 routes to its 22050/16/stereo audsrv ring). */
+        plat_avi_audio_push(s->ascratch, (int)sz);
         s->pos = next;
         return 1;
     }
@@ -579,20 +399,13 @@ static void avi_close(AviStream *s)
     if (s->fp) { flic_close(s->fp); s->fp = NULL; }
 }
 
-/* Is the audio device's FIFO below the cushion target? Always false when
- * there's no audio stream (so the read-ahead loop becomes a no-op). */
+/* Is the cutscene audio device's FIFO below the cushion target? The device
+ * backend answers (0 when there's no audio stream, or where it self-paces on
+ * a tiny ring — PS2 audsrv — so the read-ahead loop becomes a no-op). */
 static int cushion_low(const AviStream *s)
 {
-#ifdef WACKI_PS2
-    /* No SDL FIFO to pre-fill — audsrv's ring is tiny (~53 ms) and the
-     * direct feed in stream_pump_one() self-paces (blocks until room), so
-     * the read-ahead loop is a no-op. The main loop pumps audio as it
-     * walks to each video frame. */
     (void)s;
-    return 0;
-#else
-    return s_audio_open && SDL_GetQueuedAudioSize(s_audio_dev) < s->cushion_bytes;
-#endif
+    return plat_avi_audio_below_cushion(AUDIO_CUSHION_MS);
 }
 
 extern void flic_decode_frame(const uint8_t *fdata, uint32_t fsize, int w, int h);
@@ -639,48 +452,41 @@ int PlayFlicAviFile(const char *path)
         PlatformPumpEvents();
         if (PlatformShouldQuit()) break;
         if (g_lmb_clicked || g_rmb_clicked || (g_key_state & 0xFF) != 0) {
-            /* Skip: stop audio NOW (pause + clear queue) and stop
-             * decoding. Matches the original MCI StopAviPlayback semantic
-             * where the abort tears down both video and audio together. */
+            /* Skip: stop audio NOW and stop decoding. Matches the original
+             * MCI StopAviPlayback semantic where the abort tears down both
+             * video and audio together. */
             g_lmb_clicked = 0;
             g_rmb_clicked = 0;
             g_key_state &= 0xFF00;
-            if (s_audio_open) {
-                SDL_PauseAudioDevice(s_audio_dev, 1);
-                SDL_ClearQueuedAudio(s_audio_dev);
-                if (s_audio_cvt) SDL_AudioStreamClear(s_audio_cvt);
-                SDL_PauseAudioDevice(s_audio_dev, 0);
-            }
+            plat_avi_audio_flush();
             skipped = 1;
             break;
         }
 
         if (!g_no_pacing) {
             uint32_t target_ms = frame_us / 1000;
-#ifdef WACKI_PS2
-            /* audsrv's ring is only ~53 ms — smaller than one frame
-             * interval — so if we just SDL_Delay() here it drains between
-             * frames and SPU2 repeats its last buffer (looping sample,
-             * which then stutters the video as the next feed blocks). Spend
-             * the wait PUMPING instead: each audio chunk is fed to audsrv
-             * (the feed self-paces by blocking until the ring has room), and
-             * a few video frames buffer in the ring. The look-ahead cap
-             * keeps audio from running far ahead of the picture. */
-            while (SDL_GetTicks() - t0 < target_ms) {
-                if (!s.eof && s.r_count < 3) stream_pump_one(&s);
-                else SDL_Delay(1);
+            /* Where the audio device can't buffer a whole frame interval
+             * (PS2 audsrv's ring is ~53 ms), spend the inter-frame wait
+             * PUMPING — each chunk is fed to the device (which self-paces by
+             * blocking until its ring has room) and a few video frames buffer
+             * ahead (cap keeps audio from outrunning the picture). Otherwise
+             * the device FIFO already holds the cushion, so just sleep. */
+            if (plat_avi_audio_needs_pump()) {
+                while (SDL_GetTicks() - t0 < target_ms) {
+                    if (!s.eof && s.r_count < 3) stream_pump_one(&s);
+                    else SDL_Delay(1);
+                }
+            } else {
+                uint32_t elapsed_ms = SDL_GetTicks() - t0;
+                if (elapsed_ms < target_ms)
+                    SDL_Delay(target_ms - elapsed_ms);
             }
-#else
-            uint32_t elapsed_ms = SDL_GetTicks() - t0;
-            if (elapsed_ms < target_ms)
-                SDL_Delay(target_ms - elapsed_ms);
-#endif
         }
     }
 
     LOG_TRACE("avi", "%s end — %d frames decoded%s", path, frame_count,
               skipped ? " (skipped)" : "");
     avi_close(&s);
-    audio_release();
+    plat_avi_audio_end();
     return 1;
 }

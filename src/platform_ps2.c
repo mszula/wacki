@@ -621,7 +621,7 @@ static void ps2_audio_thread(void *arg)
 
 /* Begin cutscene audio: remember the source format and route the audio
  * thread to the cutscene ring (reset empty). audsrv format is unchanged. */
-void platform_ps2_avi_audio_begin(int rate, int channels, int bits)
+void plat_avi_audio_begin(int rate, int channels, int bits)
 {
     (void)rate;                               /* assumed 22050 (mixer rate) */
     if (g_ps2_audio_sema < 0) return;
@@ -636,7 +636,7 @@ void platform_ps2_avi_audio_begin(int rate, int channels, int bits)
  * are large (~0.7 s+), so a whole chunk usually fits the ring in one pass
  * (no wait); only if the ring momentarily fills does it yield, splitting
  * the chunk and pacing to playback. Unsupported formats play silence. */
-void platform_ps2_avi_audio_push(const void *buf, int len)
+void plat_avi_audio_push(void *buf, int len)
 {
     if (!s_avi_audio_on || len <= 0) return;
     int mono;
@@ -682,10 +682,23 @@ void platform_ps2_avi_audio_push(const void *buf, int len)
 }
 
 /* Cutscene done: route the audio thread back to the mixer. */
-void platform_ps2_avi_audio_end(void)
+void plat_avi_audio_end(void)
 {
     s_avi_audio_on = 0;
 }
+
+int  plat_avi_audio_is_open(void) { return s_avi_audio_on; }
+
+/* audsrv's ring is tiny and plat_avi_audio_push self-paces (blocks when the
+ * ring fills), so there's no SDL-style FIFO to pre-fill — the read-ahead loop
+ * is a no-op and the inter-frame wait pumps instead (see needs_pump). */
+int  plat_avi_audio_below_cushion(unsigned ms) { (void)ms; return 0; }
+
+/* On skip the cutscene just stops feeding and end() routes the thread back to
+ * the mixer; audsrv drains its ~53 ms ring on its own. */
+void plat_avi_audio_flush(void) { }
+
+int  plat_avi_audio_needs_pump(void) { return 1; }
 
 /* ---- FLIC reader (storage HAL): async read-ahead for cutscenes -- *
  *

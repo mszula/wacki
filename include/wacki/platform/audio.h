@@ -48,4 +48,41 @@ int  plat_audio_is_open(void);
 void plat_audio_lock(void);
 void plat_audio_unlock(void);
 
+/* ---- cutscene (AVI) audio — a separate PUSH device ---------------- *
+ *
+ * Distinct from the mixer above: each cutscene opens this at its own PCM
+ * format, pushes decoded chunks, and closes it at the end. On SDL it's a
+ * second queue-mode SDL_AudioDevice (on a single-slot backend like mmiyoo it
+ * borrows the hardware from the mixer for the duration — begin() releases the
+ * mixer first); on PS2 it routes through the same audsrv feeder thread as the
+ * mixer, switched to a cutscene ring. */
+
+/* Open the cutscene audio device at the source PCM format (a no-op reopen if
+ * the format is unchanged). */
+void plat_avi_audio_begin(int rate, int channels, int bits);
+
+/* Queue one decoded PCM chunk (in the source format from begin). The backend
+ * converts as its device needs — e.g. the SDL backend folds stereo→mono in
+ * place when it negotiated a mono device, so `pcm` may be modified. */
+void plat_avi_audio_push(void *pcm, int len);
+
+/* Close the cutscene audio device (the mixer re-opens lazily afterwards). */
+void plat_avi_audio_end(void);
+
+/* Is the cutscene audio device currently open? */
+int  plat_avi_audio_is_open(void);
+
+/* Whether less than `ms` milliseconds of audio remain queued in the device
+ * FIFO — drives the decoder's read-ahead. Always 0 where the backend
+ * self-paces by blocking on a tiny ring (PS2 audsrv). */
+int  plat_avi_audio_below_cushion(unsigned ms);
+
+/* Drop all queued audio (the cutscene was skipped mid-play). */
+void plat_avi_audio_flush(void);
+
+/* Whether the decoder must keep feeding audio during the inter-frame wait (1
+ * on PS2 — audsrv's ring is smaller than a frame interval, so a plain sleep
+ * would underrun it; 0 on SDL, whose FIFO already holds the cushion). */
+int  plat_avi_audio_needs_pump(void);
+
 #endif /* WACKI_PLATFORM_AUDIO_H */
