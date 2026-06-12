@@ -165,16 +165,16 @@ static void handle_panel_click(int have_hover, uint16_t hover_verb)
         return;
     }
 
-    if (point_in_rect(s_mouse_x, s_mouse_y,
+    if (point_in_rect(g_mouse_x, g_mouse_y,
                       OPCJE_BTN_X0, OPCJE_BTN_X1,
                       OPCJE_BTN_Y0, OPCJE_BTN_Y1))
     {
-        LOG_TRACE("opt", "OPCJE clicked at (%d,%d) → opszyns", s_mouse_x, s_mouse_y);
+        LOG_TRACE("opt", "OPCJE clicked at (%d,%d) → opszyns", g_mouse_x, g_mouse_y);
         OpenOptionsMenu();
         return;
     }
 
-    if (point_in_rect(s_mouse_x, s_mouse_y,
+    if (point_in_rect(g_mouse_x, g_mouse_y,
                       PAGE_PREV_BTN_X0, PAGE_PREV_BTN_X1,
                       PAGE_PREV_BTN_Y0, PAGE_PREV_BTN_Y1))
     {
@@ -185,7 +185,7 @@ static void handle_panel_click(int have_hover, uint16_t hover_verb)
         return;
     }
 
-    if (point_in_rect(s_mouse_x, s_mouse_y,
+    if (point_in_rect(g_mouse_x, g_mouse_y,
                       PAGE_NEXT_BTN_X0, PAGE_NEXT_BTN_X1,
                       PAGE_NEXT_BTN_Y0, PAGE_NEXT_BTN_Y1))
     {
@@ -199,14 +199,14 @@ static void handle_panel_click(int have_hover, uint16_t hover_verb)
     if (have_hover && hover_verb != SCENE_NEUTRAL_VERB) {
         uint16_t held = g_held_item;
         g_held_item   = SCENE_NEUTRAL_VERB;
-        LOG_TRACE("panel", "HUD verb=0x%04X at (%d,%d) — dispatch", hover_verb, s_mouse_x, s_mouse_y);
+        LOG_TRACE("panel", "HUD verb=0x%04X at (%d,%d) — dispatch", hover_verb, g_mouse_x, g_mouse_y);
         g_lmb_handled = 0;
         DispatchClickEvent(held, hover_verb);
         g_lmb_handled = 0;
         return;
     }
 
-    LOG_TRACE("scene", "panel click at (%d,%d) — empty slot", s_mouse_x, s_mouse_y);
+    LOG_TRACE("scene", "panel click at (%d,%d) — empty slot", g_mouse_x, g_mouse_y);
 }
 
 /* Switch the active actor based on the dispatched verb id (1 = Ebek,
@@ -231,7 +231,7 @@ static void maybe_switch_active_actor(uint16_t verb)
  * an item is held + the hover lands on a panel slot. */
 static void handle_scene_entity_click(uint16_t hover_verb, int active_actor)
 {
-    LOG_TRACE("click", "verb=0x%04X at (%d,%d) — dispatch (%s)", hover_verb, s_mouse_x, s_mouse_y, active_actor ? "Fjej" : "Ebek");
+    LOG_TRACE("click", "verb=0x%04X at (%d,%d) — dispatch (%s)", hover_verb, g_mouse_x, g_mouse_y, active_actor ? "Fjej" : "Ebek");
 
     uint16_t this_arg    = g_held_item;
     uint16_t that_arg    = hover_verb;
@@ -261,8 +261,8 @@ static void handle_scene_entity_click(uint16_t hover_verb, int active_actor)
  * fallback if the click landed on non-walkable scenery). */
 static void handle_free_walk_click(int active_actor)
 {
-    int tx = s_mouse_x;
-    int ty = s_mouse_y;
+    int tx = g_mouse_x;
+    int ty = g_mouse_y;
     int found_walkable = is_walkable_at(tx, ty);
     if (!found_walkable) {
         int btx, bty;
@@ -274,7 +274,7 @@ static void handle_free_walk_click(int active_actor)
     }
 
     if (!found_walkable) {
-        LOG_TRACE("scene", "click (%d,%d) unreachable — ignoring", s_mouse_x, s_mouse_y);
+        LOG_TRACE("scene", "click (%d,%d) unreachable — ignoring", g_mouse_x, g_mouse_y);
         return;
     }
     if (g_actor[active_actor]) {
@@ -312,7 +312,7 @@ void HandleSceneInput(void)
      * in the normal flow, but other callers may not have — idempotent. */
     PanelHitTest();
     uint16_t hover_verb = SCENE_NEUTRAL_VERB;
-    int have_hover = ClickHitTest((int16_t)s_mouse_x, (int16_t)s_mouse_y,
+    int have_hover = ClickHitTest((int16_t)g_mouse_x, (int16_t)g_mouse_y,
                                   &hover_verb);
     g_hover_scene_verb = hover_verb;
 
@@ -328,7 +328,7 @@ void HandleSceneInput(void)
 
         int active_actor = g_active_actor & 1;
 
-        if (s_mouse_y >= HUD_PANEL_TOP_Y) {
+        if (g_mouse_y >= HUD_PANEL_TOP_Y) {
             handle_panel_click(have_hover, hover_verb);
         } else if (have_hover) {
             handle_scene_entity_click(hover_verb, active_actor);

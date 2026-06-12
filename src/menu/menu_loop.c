@@ -188,8 +188,8 @@ static void paint_menu_background(const void *bg_raw, uint32_t bg_size)
 static void resolve_menu_hover(SceneDef *scene, AnimAsset *buttons,
                                int *out_idx, uint16_t *out_id)
 {
-    int idx = (buttons && (s_mouse_x | s_mouse_y))
-            ? hit_test_buttons(scene, buttons, s_mouse_x, s_mouse_y)
+    int idx = (buttons && (g_mouse_x | g_mouse_y))
+            ? hit_test_buttons(scene, buttons, g_mouse_x, g_mouse_y)
             : -1;
     *out_idx = idx;
     *out_id  = (idx >= 0) ? scene->buttons[idx].id : SCENE_NEUTRAL_VERB;

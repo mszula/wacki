@@ -100,10 +100,9 @@ extern uint8_t   g_pause_menu_request;
 
 /* Virtual cursor position (engine-space 640×480). Driven by the SDL
  * mouse-motion handler + the d-pad/analog virtual cursor; read by the HUD,
- * hit-test, and cursor-paint paths. NOTE: the `s_` prefix is historical (it
- * predates being shared); it's a genuine global. */
-extern int16_t   s_mouse_x;
-extern int16_t   s_mouse_y;
+ * hit-test, and cursor-paint paths. */
+extern int16_t   g_mouse_x;
+extern int16_t   g_mouse_y;
 
 /* ---- display / CLI knobs (set by parse_cli_args + config) -------- */
 

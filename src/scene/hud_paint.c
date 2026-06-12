@@ -252,8 +252,8 @@ static void paint_held_item_ghost(void)
     uint16_t idx = (uint16_t)(g_held_item - ITEM_VERB_FIRST);
     if (idx >= g_items_atlas->frame_count) return;
 
-    int16_t target_x = (int16_t)(s_mouse_x - HELD_ITEM_GHOST_X_OFFSET);
-    int16_t target_y = (int16_t)(s_mouse_y - HELD_ITEM_GHOST_Y_OFFSET);
+    int16_t target_x = (int16_t)(g_mouse_x - HELD_ITEM_GHOST_X_OFFSET);
+    int16_t target_y = (int16_t)(g_mouse_y - HELD_ITEM_GHOST_Y_OFFSET);
 
     if (g_held_item != s_ghost_item) {
         s_ghost_x    = target_x;

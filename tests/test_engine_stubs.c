@@ -307,8 +307,8 @@ uint16_t       g_walk_fld_ox     = 0;
 uint16_t       g_walk_fld_oy     = 0;
 
 /* Mouse coordinates — stubs.c speech balloon uses them. */
-int16_t s_mouse_x = 0;
-int16_t s_mouse_y = 0;
+int16_t g_mouse_x = 0;
+int16_t g_mouse_y = 0;
 
 /* g_default_world_state is in stubs.c (production). */
 

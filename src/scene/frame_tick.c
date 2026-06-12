@@ -119,7 +119,7 @@ static void run_per_frame_hit_tests(void)
     ItemHoverDwellTick();
 
     uint16_t hover_verb = NEUTRAL_VERB;
-    (void)ClickHitTest(s_mouse_x, s_mouse_y, &hover_verb);
+    (void)ClickHitTest(g_mouse_x, g_mouse_y, &hover_verb);
     g_hover_scene_verb = hover_verb;
 }
 
@@ -136,7 +136,7 @@ static void run_entity_vm_passes(void)
      * g_lmb_clicked earlier so this is usually 0; only matters if
      * HandleSceneInput was skipped (e.g. no current scene). */
     g_lmb_handled = g_lmb_clicked;
-    UpdateActorMovement(s_mouse_x, s_mouse_y);
+    UpdateActorMovement(g_mouse_x, g_mouse_y);
     g_lmb_handled = 0;
 
     FlushQueuedClicks();

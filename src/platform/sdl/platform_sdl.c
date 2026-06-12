@@ -273,8 +273,8 @@ static void handle_textinput(const SDL_Event *ev)
 
 static void handle_mouse_motion(const SDL_Event *ev)
 {
-    s_mouse_x = (int16_t)ev->motion.x;
-    s_mouse_y = (int16_t)ev->motion.y;
+    g_mouse_x = (int16_t)ev->motion.x;
+    g_mouse_y = (int16_t)ev->motion.y;
 }
 
 /* Env-gated diagnostic — WACKI_INPUT_DEBUG=1 dumps every keydown and
@@ -309,7 +309,7 @@ static void handle_mouse_button_down(const SDL_Event *ev)
  * Polled once per PlatformPumpEvents pass. Reads SDL's current keyboard
  * snapshot (not events — we need REPEAT-style "is the key held right
  * now" semantics so the cursor glides while the d-pad stays pressed).
- * Each tick adds dx/dy to s_mouse_x/y; speed ramps from 1 px/tick to
+ * Each tick adds dx/dy to g_mouse_x/y; speed ramps from 1 px/tick to
  * 8 px/tick over ~10 ticks of continuous hold, then plateaus. Release
  * resets the ramp so the next tap is precise again. */
 static void poll_virtual_cursor(void)
@@ -318,16 +318,16 @@ static void poll_virtual_cursor(void)
     if (!s_vcur_initialized) {
         /* Seed from real-mouse position so we don't snap on first
          * d-pad press if the user had moved the real cursor. */
-        s_vcur_x = s_mouse_x ? s_mouse_x : s_w / 2;
-        s_vcur_y = s_mouse_y ? s_mouse_y : s_h / 2;
+        s_vcur_x = g_mouse_x ? g_mouse_x : s_w / 2;
+        s_vcur_y = g_mouse_y ? g_mouse_y : s_h / 2;
         s_vcur_initialized = 1;
         /* Publish the seed immediately. On handhelds there's no real
-         * mouse-motion event to set s_mouse_x/y, so without this the
+         * mouse-motion event to set g_mouse_x/y, so without this the
          * drawn cursor sits at (0,0) until the first d-pad press — which
          * then looks like it teleports to centre. The no-input path below
-         * returns early and never writes s_mouse_x/y, so seed them here. */
-        s_mouse_x = (int16_t)s_vcur_x;
-        s_mouse_y = (int16_t)s_vcur_y;
+         * returns early and never writes g_mouse_x/y, so seed them here. */
+        g_mouse_x = (int16_t)s_vcur_x;
+        g_mouse_y = (int16_t)s_vcur_y;
     }
 
     const uint8_t *ks = SDL_GetKeyboardState(NULL);
@@ -377,8 +377,8 @@ static void poll_virtual_cursor(void)
     if (s_vcur_x >= s_w)     s_vcur_x = s_w - 1;
     if (s_vcur_y >= s_h)     s_vcur_y = s_h - 1;
 
-    s_mouse_x = (int16_t)s_vcur_x;
-    s_mouse_y = (int16_t)s_vcur_y;
+    g_mouse_x = (int16_t)s_vcur_x;
+    g_mouse_y = (int16_t)s_vcur_y;
     ++s_vcur_hold_ticks;
 }
 

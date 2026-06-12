@@ -124,8 +124,8 @@ void PaintCursor(void)
     uint16_t fh = a->off_heights[fi];
     int16_t  ox = a->off_drawX ? (int16_t)a->off_drawX[fi] : 0;
     int16_t  oy = a->off_drawY ? (int16_t)a->off_drawY[fi] : 0;
-    int16_t dx = (int16_t)(s_mouse_x + ox);
-    int16_t dy = (int16_t)(s_mouse_y + oy);
+    int16_t dx = (int16_t)(g_mouse_x + ox);
+    int16_t dy = (int16_t)(g_mouse_y + oy);
     if (fw == 0 || fh == 0) return;
     BlitSpriteToBackbuffer((uint16_t)dx, (uint16_t)dy, 0, 0,
                            fw, fh, fw, fh, px, 0);

@@ -61,10 +61,10 @@ void PanelHitTest(void)
 
     int16_t panel_x = (int16_t)g_panel_asset->off_drawX[0];
     int16_t panel_y = (int16_t)g_panel_asset->off_drawY[0];
-    if (panel_y >= s_mouse_y) return;       /* mouse above panel top */
+    if (panel_y >= g_mouse_y) return;       /* mouse above panel top */
 
-    int local_x = s_mouse_x - panel_x;
-    int local_y = s_mouse_y - panel_y;
+    int local_x = g_mouse_x - panel_x;
+    int local_y = g_mouse_y - panel_y;
     if (local_y <= PANEL_BUTTON_ROW_Y ||
         local_y >= PANEL_BUTTON_ROW_Y + PANEL_BUTTON_SIZE) return;
 

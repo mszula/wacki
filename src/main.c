@@ -14,8 +14,8 @@
  *   - Module-owned globals: input latches (g_lmb_clicked / g_rmb_
  *     clicked / g_key_state / g_*_request), playthrough stats
  *     (g_stats), display knobs (g_headless / g_no_pacing /
- *     g_scale_factor / g_scale_mode), mouse coords (s_mouse_x /
- *     s_mouse_y), data root (g_data_root).
+ *     g_scale_factor / g_scale_mode), mouse coords (g_mouse_x /
+ *     g_mouse_y), data root (g_data_root).
  *
  *   - Win32-equivalent shims: PumpEvents / HasPendingKey /
  *     WaitForKey — the engine's call sites still use the original
@@ -68,8 +68,8 @@
 /* ---- module-owned globals ---------------------------------------- */
 
 char g_data_root[260] = "";
-int16_t s_mouse_x = 0;
-int16_t s_mouse_y = 0;
+int16_t g_mouse_x = 0;
+int16_t g_mouse_y = 0;
 
 uint8_t g_lmb_clicked = 0;
 uint8_t g_rmb_clicked = 0;
