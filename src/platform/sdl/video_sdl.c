@@ -100,14 +100,10 @@ int plat_video_init(int w, int h, const char *title)
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, g_scale_mode);
     }
 
-#ifdef WACKI_PORTMASTER
-    /* Anbernic / PortMaster: standard SDL2 drives a KMSDRM panel with no
-     * window manager, so always cover the whole display via desktop-
-     * fullscreen and let SDL_RenderSetLogicalSize letterbox the 640×480
-     * canvas. (Miyoo's mmiyoo backend is inherently fullscreen and is happier
-     * left as a "window", so it keeps g_fullscreen as-is.) */
-    g_fullscreen = 1;
-#endif
+    /* Platform display prefs: PortMaster forces desktop-fullscreen here (its
+     * KMSDRM panel has no window manager); a no-op on desktop / Miyoo, which
+     * keep g_fullscreen as configured. */
+    plat_apply_video_prefs();
 
     Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
     if (g_fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;

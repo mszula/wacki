@@ -45,4 +45,10 @@ void plat_dcache_flush(void *p, unsigned int n);
  * every other target. */
 void plat_trace_mark(unsigned int code);
 
+/* Re-apply the firmware/OS volume after the SDL audio device (re)opens. The
+ * mmiyoo SDL2 backend resets the MStar kernel mixer to max on every
+ * SDL_OpenAudioDevice, so the Miyoo restores the OnionOS-saved level here. A
+ * no-op everywhere else. */
+void plat_restore_system_volume(void);
+
 #endif /* WACKI_PLATFORM_SYSTEM_H */

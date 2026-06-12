@@ -15,18 +15,14 @@
  * libmi_ao, OnionOS config files, or hardware-button keysym mapping
  * specific to the mmiyoo SDL2 backend lives here.
  *
- * Current contents:
- *   platform_restore_system_volume — re-apply the OnionOS-saved system
- *       volume via MStar's MI_AO_SetVolume. Called from PlatformInit
- *       (platform_sdl.c) and after every SDL_OpenAudioDevice (audio.c
- *       mixer + flic.c AVI) because the mmiyoo SDL2 backend resets
- *       the MStar audio-out volume on each device open.
- *
- *   platform_miyoo_handle_keydown — translate a Miyoo Mini Plus
- *       hardware button (delivered as an SDL_Keycode by the mmiyoo
- *       backend) into the engine's input latch globals. Called from
- *       platform_sdl.c's handle_keydown so the keysym mapping itself
- *       doesn't need to pollute the cross-platform path.
+ * This is the Miyoo target's single platform-hooks provider. Real hooks:
+ *   plat_restore_system_volume — re-apply the OnionOS-saved system volume via
+ *       MStar's MI_AO_SetVolume, after every SDL_OpenAudioDevice (the mmiyoo
+ *       SDL2 backend resets the MStar audio-out volume on each open).
+ *   plat_handle_platform_key — translate a Miyoo hardware button (delivered
+ *       as an SDL keysym by the mmiyoo backend) into the engine input latches.
+ * The remaining hooks (plat_apply_video_prefs, plat_pad_read_extra) are
+ * no-ops here — the Miyoo has a fixed display and no controller / USB mouse.
  *
  * The function symbols are declared extern at the call sites — keeping
  * the surface minimal so this module doesn't need its own header.
@@ -45,6 +41,9 @@
 
 #include "wacki.h"
 #include "wacki/log.h"
+#include "wacki/platform/system.h"   /* plat_restore_system_volume */
+#include "wacki/platform/input.h"    /* plat_handle_platform_key, plat_pad_read_extra */
+#include "wacki/platform/video.h"    /* plat_apply_video_prefs */
 
 #include <SDL.h>
 
@@ -110,10 +109,10 @@ typedef int (*mi_ao_set_volume_fn)(int /*AoDevId*/, int /*s32VolumeDb*/);
 static mi_ao_set_volume_fn s_mi_ao_set_volume = NULL;
 
 /* Try to resolve MI_AO_SetVolume. Retries on every call so the FIRST
- * platform_restore_system_volume — fired from PlatformInit before
- * any SDL_OpenAudioDevice — can fail (libmi_ao not yet in process)
- * and the SECOND call from mixer_ensure_open / audio_ensure can
- * succeed once SDL has pulled in the library. */
+ * plat_restore_system_volume — fired from PlatformInit before any
+ * SDL_OpenAudioDevice — can fail (libmi_ao not yet in process) and a later
+ * call (after the mixer opens its device) can succeed once SDL has pulled in
+ * the library. */
 static void resolve_mi_ao(void)
 {
     if (s_mi_ao_set_volume) return;
@@ -162,7 +161,7 @@ static void resolve_mi_ao(void)
  * consequence is the user hears playback at the firmware default
  * volume until they hit Vol+/-, which is the existing (pre-fix)
  * behaviour. */
-void platform_restore_system_volume(void)
+void plat_restore_system_volume(void)
 {
     resolve_mi_ao();
 
@@ -227,7 +226,7 @@ extern uint8_t  g_pause_menu_request;
  * jednocześnie" from the user's bug report). play_loop.c now skips
  * the toggle under WACKI_HANDHELD too, so the swallow is belt-and-
  * suspenders. */
-int platform_miyoo_handle_keydown(SDL_Keycode sym)
+int plat_handle_platform_key(int sym)
 {
     switch (sym) {
     case SDLK_SPACE:                       /* A → LMB */
@@ -255,3 +254,8 @@ int platform_miyoo_handle_keydown(SDL_Keycode sym)
         return 0;
     }
 }
+
+/* The Miyoo has a fixed fullscreen display and no SDL_GameController / USB
+ * mouse, so these platform hooks are no-ops here. */
+void plat_apply_video_prefs(void)              { }
+void plat_pad_read_extra(float *ax, float *ay) { (void)ax; (void)ay; }

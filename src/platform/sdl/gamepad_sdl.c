@@ -22,32 +22,11 @@
 
 #include "wacki.h"
 #include "wacki/log.h"
+#include "wacki/platform/input.h"   /* plat_pad_read_extra */
 
 #include <SDL.h>
 
 #include <stdint.h>
-
-#ifdef WACKI_PS2
-/* SDL2-PS2's joystick backend only padRead()s the pad — it never puts the
- * DualShock into analog (DUALSHOCK) mode, so padRead returns no stick bytes
- * and the SDL axes read 0. Request analog mode ourselves via libpad once the
- * pad is stable. (-lpadx, already linked.) */
-#include <libpad.h>
-static int s_ps2_analog_set = 0;
-static void ps2_pad_ensure_analog(void)
-{
-    if (s_ps2_analog_set) return;
-    if (padGetState(0, 0) != PAD_STATE_STABLE) return;
-    if (padSetMainMode(0, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK) == 1)
-        s_ps2_analog_set = 1;            /* takes a few frames to apply */
-}
-
-/* USB HID mouse — platform_ps2.c owns the ps2mouse stack and returns the
- * per-frame relative delta + click edges. The delta scales to cursor pixels
- * by PS2_MOUSE_SENS (tune if the pointer feels fast/slow). */
-extern int platform_ps2_mouse_poll(int *dx, int *dy, int *lmb_edge, int *rmb_edge);
-#define PS2_MOUSE_SENS 1.0f
-#endif
 
 extern uint8_t g_lmb_clicked;
 extern uint8_t g_rmb_clicked;
@@ -126,9 +105,6 @@ int platform_pad_handle_event(const SDL_Event *ev)
 void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay)
 {
     if (s_pad) {
-#ifdef WACKI_PS2
-        ps2_pad_ensure_analog();
-#endif
         *dx += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
              - SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
         *dy += SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)
@@ -142,18 +118,8 @@ void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay)
             *ay = (float)sy / 32767.0f * PAD_ANALOG_MAX_PX;
     }
 
-#ifdef WACKI_PS2
-    /* USB mouse: relative motion adds to the cursor (on top of the stick),
-     * BTN1/BTN2 fire left/right clicks. Idle mouse = 0 delta, so the pad is
-     * unaffected when no mouse is moving. */
-    {
-        int mdx = 0, mdy = 0, ml = 0, mr = 0;
-        if (platform_ps2_mouse_poll(&mdx, &mdy, &ml, &mr)) {
-            *ax += (float)mdx * PS2_MOUSE_SENS;
-            *ay += (float)mdy * PS2_MOUSE_SENS;
-            if (ml) g_lmb_clicked = 1;
-            if (mr) g_rmb_clicked = 1;
-        }
-    }
-#endif
+    /* Platform extras folded on top of the SDL pad read — on PS2 the DualShock
+     * is kicked into analog mode and the USB HID mouse delta + clicks are
+     * added; a no-op elsewhere. */
+    plat_pad_read_extra(ax, ay);
 }

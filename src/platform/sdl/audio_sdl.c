@@ -10,6 +10,7 @@
 #include "wacki.h"
 #include "wacki/log.h"
 #include "wacki/platform/audio.h"
+#include "wacki/platform/system.h"   /* plat_restore_system_volume */
 
 #include <SDL.h>
 
@@ -71,13 +72,9 @@ int plat_audio_open(int freq, int channels, plat_audio_pull_fn pull)
     LOG_INFO("audio", "opened: %d Hz, %d ch, %d-bit, %d samples",
              s_spec.freq, s_spec.channels,
              SDL_AUDIO_BITSIZE(s_spec.format), s_spec.samples);
-#ifdef WACKI_MIYOO
-    /* mmiyoo SDL2 resets the kernel mixer to driver-default (max) on every
-     * SDL_OpenAudioDevice — re-apply the user's saved OnionOS volume now so
-     * audio doesn't blast at full volume until they mash Vol+/-. */
-    extern void platform_restore_system_volume(void);
-    platform_restore_system_volume();
-#endif
+    /* Some backends (mmiyoo) reset the kernel mixer to max on every
+     * SDL_OpenAudioDevice — the platform re-applies its saved volume here. */
+    plat_restore_system_volume();
     return s_spec.channels;
 }
 
@@ -147,10 +144,7 @@ void plat_avi_audio_begin(int rate, int channels, int bits)
     SDL_PauseAudioDevice(s_avi_dev, 0);
     LOG_INFO("audio", "AVI audio: %d Hz, %d ch, %d samples",
              s_avi_spec.freq, s_avi_spec.channels, s_avi_spec.samples);
-#ifdef WACKI_MIYOO
-    extern void platform_restore_system_volume(void);
-    platform_restore_system_volume();
-#endif
+    plat_restore_system_volume();
 }
 
 void plat_avi_audio_push(void *pcm, int len)

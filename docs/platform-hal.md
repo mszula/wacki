@@ -194,7 +194,33 @@ Adding a platform = a new `src/platform/<plat>/` dir implementing those
 interfaces (reusing `sdl/` where the platform has SDL2) plus one
 `PLATFORM_SRCS` branch in the Makefile. Zero core edits.
 
-Platform `#ifdef`s now live ONLY in the platform layer: `platform_sdl.c`
-(shared SDL input/event pump — SDL-family `WACKI_MIYOO`/`WACKI_HANDHELD`/
-`__APPLE__` variants), `src/platform/sdl/*` (OS variants within the SDL
-backend), and `platform_{ps2,miyoo,portmaster,macos}.*`.
+## Directory reorg + the per-target hooks model
+
+The flat `src/platform_*.c` files are gone — everything platform-specific
+lives under `src/platform/<family>/`:
+
+```
+src/platform/
+  sdl/   platform_sdl.c (Platform* + input/event pump) · video_sdl.c
+         audio_sdl.c · system_sdl.c · save_host.c · data_root_host.c
+         file_host.c · flic_host.c · gamepad_sdl.c (SDL_GameController glue)
+         hooks_desktop.c (desktop no-op hooks)
+  ps2/   system_ps2.c · storage_ps2.c · audio_ps2.c · video_ps2.c
+         (+ ps2_internal.h for the 2 cross-file decls)
+  miyoo/ miyoo.c          portmaster/ portmaster.c        macos/ macos.m
+```
+
+The `sdl/` files are pure SDL2 — **no `WACKI_MIYOO` / `WACKI_PORTMASTER` /
+`WACKI_PS2` `#ifdef`**. The few platform-variant behaviors they call —
+`plat_restore_system_volume` (firmware volume), `plat_handle_platform_key`
+(keysym buttons), `plat_apply_video_prefs` (fullscreen default),
+`plat_pad_read_extra` (PS2 analog + USB mouse) — are hooks. Each target links
+exactly **one hooks provider** (`hooks_desktop.c` / `miyoo.c` /
+`portmaster.c` / `system_ps2.c`); that single-provider-per-target rule is what
+removes the `#ifdef` without duplicate symbols. `gamepad_sdl.c` is linked on
+every SDL target (runtime no-op where no pad is present), so the gamepad gate
+is gone too.
+
+Platform `#ifdef`s now live ONLY inside `src/platform/`: SDL-family
+`WACKI_MIYOO`/`WACKI_HANDHELD`/`__APPLE__`/`_WIN32`/`__linux__` variants in
+`sdl/` (none on the device platforms) and `WACKI_PS2` guards in `ps2/`.

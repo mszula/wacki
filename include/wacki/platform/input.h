@@ -24,4 +24,15 @@
  * button → RMB → toggle) covers the same action on those targets. */
 int plat_input_has_keyboard(void);
 
+/* A platform-specific hardware-button keydown (handhelds map buttons to
+ * firmware keysyms). Returns 1 if it fired a click/menu latch, 0 otherwise.
+ * Real only on the Miyoo (its keysym button map); a no-op (0) elsewhere. */
+int plat_handle_platform_key(int sym);
+
+/* Per-frame platform extras folded into the gamepad cursor read: on PS2 the
+ * USB HID mouse delta is added to (*ax,*ay) and its buttons fire clicks, plus
+ * the DualShock is kicked into analog mode. A no-op everywhere else. Called
+ * from the SDL gamepad read (gamepad_sdl.c). */
+void plat_pad_read_extra(float *ax, float *ay);
+
 #endif /* WACKI_PLATFORM_INPUT_H */

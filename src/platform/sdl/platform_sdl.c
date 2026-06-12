@@ -27,6 +27,7 @@
 #include "wacki/log.h"
 #include "wacki/platform/video.h"
 #include "wacki/platform/input.h"
+#include "wacki/platform/system.h"
 
 #include <SDL.h>
 #include <stdint.h>
@@ -34,14 +35,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Builds that drive the cursor from a real SDL_GameController — a
- * physical pad + analog stick — rather than (or alongside) a mouse:
- * Anbernic/PortMaster, the PS Vita, and the PlayStation 2 (DualShock 2).
- * All share the controller glue in src/platform_portmaster.c, so the pad
- * hooks below gate on this one symbol instead of repeating the list. */
-#if defined(WACKI_PORTMASTER) || defined(WACKI_VITA) || defined(WACKI_PS2)
-#define WACKI_HAS_SDL_GAMEPAD       1
-#endif
+/* The SDL_GameController glue (sdl/gamepad_sdl.c) is linked on every SDL
+ * target; where no controller is present these calls are runtime no-ops, so
+ * the pump invokes them unconditionally — no platform #ifdef. */
+extern void platform_pad_open(void);
+extern int  platform_pad_handle_event(const SDL_Event *ev);
+extern void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay);
 
 /* ---- constants ---------------------------------------------------- */
 
@@ -145,21 +144,14 @@ int PlatformInit(int w, int h, const char *title)
     s_w = w;
     s_h = h;
 
-#ifdef WACKI_MIYOO
-    /* Implemented in platform_miyoo.c — re-apply OnionOS-saved volume
-     * via MI_AO_SetVolume. Linked only when TARGET=miyoo. */
-    extern void platform_restore_system_volume(void);
-    platform_restore_system_volume();
-#endif
+    /* Re-apply the firmware/OS volume (mmiyoo resets it on audio init); a
+     * no-op on platforms that don't need it. */
+    plat_restore_system_volume();
 
-#ifdef WACKI_HAS_SDL_GAMEPAD
-    /* Open the device's game controller — see src/platform_portmaster.c
-     * (shared by PortMaster handhelds, the Vita, and the PS2). */
-    if (!g_headless) {
-        extern void platform_pad_open(void);
+    /* Adopt a game controller if one's present (handhelds + DualShock; on a
+     * mouse-only desktop with no pad this finds nothing and no-ops). */
+    if (!g_headless)
         platform_pad_open();
-    }
-#endif
 
     if (g_headless) {
         /* T45: no window/renderer/texture. SDL stays initialised (dummy
@@ -259,17 +251,11 @@ static void handle_keydown(const SDL_Event *ev)
     if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER)
         PlatformPushTypedChar(ASCII_ENTER);
 
-    /* Miyoo hardware buttons arrive as SDL keysyms from the mmiyoo
-     * backend; platform_miyoo.c maps them to engine latches. Anbernic /
-     * PortMaster instead use real SDL_GameController events (handled in
-     * the pump loop), so this keysym path is Miyoo-only. Returns 1 iff a
-     * face-button mouse-click latch fired (for the input-debug log). */
-#ifdef WACKI_MIYOO
-    extern int platform_miyoo_handle_keydown(SDL_Keycode);
-    int handled = platform_miyoo_handle_keydown(sym);
-#else
-    int handled = 0;
-#endif
+    /* Platform hardware buttons that arrive as SDL keysyms (the Miyoo's mmiyoo
+     * backend maps its buttons that way; pad-based handhelds use real
+     * SDL_GameController events in the pump loop instead, so this is a no-op
+     * there). Returns 1 iff a face-button click/menu latch fired. */
+    int handled = plat_handle_platform_key((int)sym);
 
     if (input_debug_enabled()) {
         SDL_Keymod mod = SDL_GetModState();
@@ -364,12 +350,9 @@ static void poll_virtual_cursor(void)
      * the deadzone. The d-pad folds into the discrete dx/dy. Filled by
      * src/platform_portmaster.c on Anbernic; a no-op extern elsewhere. */
     float ax = 0.0f, ay = 0.0f;
-#ifdef WACKI_HAS_SDL_GAMEPAD
-    {
-        extern void platform_pad_read_motion(int *, int *, float *, float *);
-        platform_pad_read_motion(&dx, &dy, &ax, &ay);
-    }
-#endif
+    /* Fold the game controller (+ PS2 USB mouse) into the cursor; no-op when
+     * no pad is open. */
+    platform_pad_read_motion(&dx, &dy, &ax, &ay);
 
     if (dx == 0 && dy == 0 && ax == 0.0f && ay == 0.0f) {
         s_vcur_hold_ticks = 0;
@@ -469,16 +452,11 @@ void PlatformPumpEvents(void)
         case SDL_MOUSEBUTTONDOWN:
             handle_mouse_button_down(&ev);
             break;
-#ifdef WACKI_HAS_SDL_GAMEPAD
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
-            {
-                extern int platform_pad_handle_event(const SDL_Event *);
-                platform_pad_handle_event(&ev);
-            }
+            platform_pad_handle_event(&ev);
             break;
-#endif
         }
     }
 

@@ -48,4 +48,9 @@ void plat_video_toggle_fullscreen(void);
  * caller before this is reached. */
 void plat_video_message_box(const char *title, const char *body);
 
+/* Apply platform display preferences before the window is created: PortMaster
+ * forces desktop-fullscreen (KMSDRM has no window manager) by setting
+ * g_fullscreen. A no-op everywhere else. */
+void plat_apply_video_prefs(void);
+
 #endif /* WACKI_PLATFORM_VIDEO_H */

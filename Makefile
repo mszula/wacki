@@ -300,31 +300,35 @@ ENGINE_SRCS = \
 # per target so the core never #ifdefs on a platform.
 #
 # SDL_PLATFORM_SRCS = the SDL2/stdio HAL impls shared by desktop + the
-# handhelds: storage (save file + atomic rename, data-root + folder picker,
-# stdio file I/O), audio (SDL_OpenAudioDevice), video, system. The PS2 brings
-# its own equivalents (libmc / fileXio / gsKit / audsrv) so it omits this set.
+# handhelds: storage (save + data-root + file I/O), audio, video, system, and
+# the SDL_GameController glue (gamepad_sdl.c — harmless where no pad is
+# present, so linked everywhere SDL is). PS2 brings its own equivalents
+# (libmc / fileXio / gsKit / audsrv) so it omits this set, but still links
+# gamepad_sdl.c for the DualShock.
 #
-# src/platform/sdl/gamepad_sdl.c is the SDL_GameController → cursor glue,
-# shared by every pad-driven target (PortMaster, the PS2's DualShock, Vita) —
-# NOT desktop (mouse) or miyoo (firmware keysym buttons).
+# Each target then links exactly ONE "hooks provider" — the small set of
+# platform-variant behaviors (firmware volume, keysym buttons, fullscreen
+# default, the PS2 analog/USB-mouse pad extras) the sdl/ core calls through.
+# That single-provider-per-target rule is what lets the sdl/ files stay free
+# of any WACKI_MIYOO / WACKI_PORTMASTER / WACKI_PS2 #ifdef.
 SDL_PLATFORM_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c \
                     src/platform/sdl/file_host.c src/platform/sdl/audio_sdl.c \
                     src/platform/sdl/flic_host.c src/platform/sdl/video_sdl.c \
-                    src/platform/sdl/system_sdl.c
+                    src/platform/sdl/system_sdl.c src/platform/sdl/gamepad_sdl.c
 ifeq ($(TARGET),miyoo)
-    # miyoo/miyoo.c carries the OnionOS/MStar bits (MI_AO volume restore +
-    # keysym button map) and pulls in libdl — kept out of desktop builds.
+    # miyoo/miyoo.c = the hooks provider (MI_AO volume + keysym buttons; pulls
+    # in libdl) — kept out of desktop builds.
     ENGINE_SRCS += src/platform/miyoo/miyoo.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),portmaster)
-    ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c $(SDL_PLATFORM_SRCS)
+    ENGINE_SRCS += src/platform/portmaster/portmaster.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),ps2)
-    # PS2 backend split per HAL subsystem (src/platform/ps2/); gamepad_sdl.c
-    # is the shared SDL_GameController glue (DualShock).
+    # PS2 backend split per HAL subsystem (src/platform/ps2/); system_ps2.c is
+    # also the hooks provider. gamepad_sdl.c is the shared DualShock glue.
     ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c \
                    src/platform/ps2/system_ps2.c src/platform/ps2/storage_ps2.c \
                    src/platform/ps2/audio_ps2.c  src/platform/ps2/video_ps2.c
 else
-    ENGINE_SRCS += $(SDL_PLATFORM_SRCS)
+    ENGINE_SRCS += src/platform/sdl/hooks_desktop.c $(SDL_PLATFORM_SRCS)
 endif
 
 # macOS desktop gets a small Objective-C helper that re-titles SDL's
