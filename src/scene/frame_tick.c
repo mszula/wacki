@@ -32,7 +32,6 @@ extern void  PaintCursor(void);
 extern void  UpdateCursorState(void);
 extern void  TickSpeechBalloon(void);
 extern void  FlushQueuedClicks(void);
-extern int   PlatformShouldQuit(void);
 extern int   paint_rawb_pic(const void *blob, uint32_t size, int as_overlay);
 extern void  ScreenshotToBmpAutoIncrement(void);
 extern void  ScreenshotToPcxAutoIncrement(void);

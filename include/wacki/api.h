@@ -172,6 +172,11 @@ uint32_t PlayDialogLine(const char *wav_name);  /* returns byte length */
 void     StopDialogLine(void);
 int      IsDialogLinePlaying(void);
 
+/* Release the mixer's hold on the audio output (frees the device + channels)
+ * so a single-slot backend can hand the hardware to an AVI playback; the
+ * mixer re-opens lazily on the next play. Called by the AVI audio device. */
+void     mixer_release(void);
+
 /* Wacky.scr [sampl] parser. Walks the current komnata section
  * between (start, end) and populates the per-asset frame-trigger SFX
  * table from [animacja]…[sampl] pairs. */

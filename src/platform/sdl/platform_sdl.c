@@ -28,19 +28,13 @@
 #include "wacki/platform/video.h"
 #include "wacki/platform/input.h"
 #include "wacki/platform/system.h"
+#include "sdl_internal.h"            /* platform_pad_* (gamepad_sdl.c) */
 
 #include <SDL.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* The SDL_GameController glue (sdl/gamepad_sdl.c) is linked on every SDL
- * target; where no controller is present these calls are runtime no-ops, so
- * the pump invokes them unconditionally — no platform #ifdef. */
-extern void platform_pad_open(void);
-extern int  platform_pad_handle_event(const SDL_Event *ev);
-extern void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay);
 
 /* ---- constants ---------------------------------------------------- */
 

@@ -15,6 +15,9 @@
 #include "wacki.h"
 #include "wacki/log.h"
 #include "wacki/platform/video.h"
+#ifdef __APPLE__
+#include "wacki/platform/macos.h"   /* PlatformSetupMacMenu */
+#endif
 
 #include <SDL.h>
 #include <stdint.h>
@@ -154,9 +157,8 @@ int plat_video_init(int w, int h, const char *title)
 
 #ifdef __APPLE__
     /* Polish-localise SDL's stock menu bar AND add a "Gra" menu (defined in
-     * src/platform_macos.m, linked on Darwin desktop builds only). The menu
+     * platform/macos/macos.m, linked on Darwin desktop builds only). The menu
      * exists by the time SDL_CreateWindow has returned. */
-    extern void PlatformSetupMacMenu(void);
     PlatformSetupMacMenu();
 #endif
 

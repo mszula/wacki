@@ -54,7 +54,6 @@ extern const uint8_t *ScriptObjGetSectionEnd  (void *self);
 
 extern void          ScriptCallShowText(uint16_t actor, const char *text);
 extern Entity       *FindEntityByVerbId(uint16_t verb);
-extern int           PlatformShouldQuit(void);
 
 /* ---- constants ---------------------------------------------------- */
 

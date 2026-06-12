@@ -411,8 +411,6 @@ static int cushion_low(const AviStream *s)
 extern void flic_decode_frame(const uint8_t *fdata, uint32_t fsize, int w, int h);
 
 /* ---- public entry — drop-in replacement for the audio.c stub ------------ */
-extern void PlatformPumpEvents(void);
-extern int  PlatformShouldQuit(void);
 extern uint8_t g_lmb_clicked, g_rmb_clicked;
 extern uint16_t g_key_state;
 

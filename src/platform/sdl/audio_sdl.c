@@ -121,7 +121,6 @@ void plat_avi_audio_begin(int rate, int channels, int bits)
     /* mmiyoo holds a single audio device slot — release the SFX/music mixer so
      * SDL_OpenAudioDevice doesn't bounce off "device already open". The mixer
      * re-opens lazily on the first play after the cutscene ends. */
-    extern void mixer_release(void);
     mixer_release();
 
     SDL_AudioSpec want = {0};

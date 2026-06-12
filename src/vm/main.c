@@ -1325,8 +1325,6 @@ int RunScriptInterpreter(uint16_t this_id, uint16_t that_id,
                         /* Wait for LMB or timeout — pump events each frame
  * so SDL stays alive and the user can click out. */
                         extern uint8_t  g_lmb_clicked;
-                        extern void     PlatformPumpEvents(void);
-                        extern int      PlatformShouldQuit(void);
                         uint32_t budget_ms = 0xFFFF * 16;   /* ~17 minutes */
                         while (budget_ms > 0) {
                             PlatformPumpEvents();

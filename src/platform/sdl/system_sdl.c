@@ -12,6 +12,9 @@
 #include "wacki.h"
 #include "wacki/log.h"
 #include "wacki/platform/system.h"
+#ifdef __APPLE__
+#include "wacki/platform/macos.h"   /* PlatformMacUseAppSupportDir */
+#endif
 
 #ifdef _WIN32
 #include <stdio.h>
@@ -44,7 +47,6 @@ void plat_system_early_init(void)
      * ~/Library/Application Support/Wacki/ so Wacki.sav, wacki.cfg and
      * screenshots have a writable home. Must precede ConfigLoad and the
      * cwd-relative FindDataRoot probes. No-op for a bare binary. */
-    extern int PlatformMacUseAppSupportDir(void);
     if (PlatformMacUseAppSupportDir())
         LOG_INFO("platform", "user dir: ~/Library/Application Support/Wacki");
 #endif

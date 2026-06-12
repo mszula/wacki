@@ -27,6 +27,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "wacki/platform/macos.h"   /* our own declarations */
+
 /* When launched from Finder, a .app bundle's working directory is "/"
  * (read-only), so the engine's cwd-relative Wacki.sav / wacki.cfg /
  * screenshot writes have nowhere to land. Relocate the process to

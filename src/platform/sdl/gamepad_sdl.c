@@ -23,6 +23,7 @@
 #include "wacki.h"
 #include "wacki/log.h"
 #include "wacki/platform/input.h"   /* plat_pad_read_extra */
+#include "sdl_internal.h"           /* platform_pad_* declarations */
 
 #include <SDL.h>
 

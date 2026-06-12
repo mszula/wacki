@@ -42,7 +42,6 @@ uint32_t  g_scene_snapshot[0x1E];       /* g_inventory */
  * could finish, and QUIT events were never honoured (game unkillable
  * during any verb-script walk). */
 extern int  BindActorWalker(int actor_idx, int target_x, int target_y);
-extern int  PlatformShouldQuit(void);
 
 /* Komnata flag bitfield — set from komnata table entry[+4] inside
  * LoadKomnata. Bits read by the engine:
