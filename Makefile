@@ -318,7 +318,11 @@ ifeq ($(TARGET),miyoo)
 else ifeq ($(TARGET),portmaster)
     ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),ps2)
-    ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c src/platform_ps2.c
+    # PS2 backend split per HAL subsystem (src/platform/ps2/); gamepad_sdl.c
+    # is the shared SDL_GameController glue (DualShock).
+    ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c \
+                   src/platform/ps2/system_ps2.c src/platform/ps2/storage_ps2.c \
+                   src/platform/ps2/audio_ps2.c  src/platform/ps2/video_ps2.c
 else
     ENGINE_SRCS += $(SDL_PLATFORM_SRCS)
 endif
