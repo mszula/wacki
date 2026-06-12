@@ -149,4 +149,26 @@ the Makefile. The core is untouched.
       gamepad). Input wasn't physically split out — it has no `WACKI_PS2`
       `#ifdef` to remove (only SDL-family `WACKI_MIYOO`/`WACKI_HANDHELD`/
       `__APPLE__` variants, which are fine inside the SDL platform file).
-- [ ] Step 5 — lifecycle/CLI.
+- [x] Step 5 — lifecycle/CLI. main.c's edge-of-process `#ifdef`s (PS2 IOP
+      bring-up, Win32 stderr→logfile, macOS app-support cwd, the PS2 exit
+      park) are routed through a system HAL (wacki/platform/system.h):
+      `plat_system_early_init` / `plat_system_exit`
+      (`platform/sdl/system_sdl.c` + `platform_ps2.c`). The only conditionals
+      left in main.c are the `WK_PS2_MARK` bring-up-trace macro (a no-op
+      elsewhere — kept deliberately for the PS2 PINE debug rig) and the
+      `WACKI_VERSION` build-string fallback; no platform lifecycle `#ifdef`
+      blocks remain.
+
+## Outcome
+
+The five planned steps are done — the core engine (`save.c`, `data_root.c`,
+`audio.c` mixer, `flic.c` reader, `platform_sdl.c`, `main.c`) calls
+per-subsystem HAL interfaces and no longer `#ifdef`s on a platform. Adding a
+platform is now a new `src/platform/<plat>/` dir implementing
+`storage.h` / `audio.h` / `video.h` / `system.h` (reusing `sdl/` where the
+platform has SDL2) plus one `PLATFORM_SRCS` branch in the Makefile.
+
+Deferred follow-ups (tracked, not blocking): the FLIC **AVI-audio** device
+(flic.c's cutscene push path + PS2 pacing loop) and the **WAV file-read**
+(`audio.c::load_wav_via_cyg`) still `#ifdef` on PS2 — both are narrow,
+timing/format-sensitive, and want their own careful passes.
