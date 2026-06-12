@@ -21,9 +21,8 @@
  *   - Dialog line (PlayDialogLine)
  *   - The per-flag gates (g_audio_music_enabled, _sfx_enabled, etc.)
  *
- * NOTE: the WAV *file read* (load_wav_via_cyg) still #ifdefs on WACKI_PS2 —
- * that's a storage concern (it routes WAV bytes through the cygio shim on
- * PS2); folding it behind the storage HAL is a follow-up. */
+ * Standalone WAV files are read through the cygio shim (stdio / fileXio) on
+ * every platform, so the loader carries no platform #ifdef. */
 
 #include "wacki.h"
 #include "wacki/log.h"
@@ -250,24 +249,27 @@ void mixer_stop_channel(int idx)
  * Menu / background WAV music — backed by mixer channel MIX_CHAN_MUSIC.
  * ------------------------------------------------------------------------- */
 
-#ifdef WACKI_PS2
-/* PS2 has no working libc fopen — SDL_LoadWAV (SDL_RWFromFile) reaches no
- * device. Read the file through the engine's fileXio shim (fopen_cyg, the
- * same path the DTA archive uses, declared in the storage HAL) into RAM,
- * then parse the WAV from memory. A size cap keeps a stray giant file (e.g.
- * the 25 MB menu BGM, which needs streaming, not a full load) from
- * attempting a doomed 25 MB malloc. */
-#define PS2_STANDALONE_WAV_MAX  (4 * 1024 * 1024)
+/* A standalone WAV file's bytes always come through the cygio shim — stdio on
+ * desktop/handheld, fileXio on PS2 (where libc fopen reaches no device) — read
+ * whole into RAM and parsed from memory. Routing every platform through the
+ * one shim is what lets this stay #ifdef-free; SDL_LoadWAV would internally do
+ * the same RWFromFile + LoadWAV_RW on desktop anyway.
+ *
+ * The cap rejects a stray giant file before a doomed malloc: the ~25 MB menu
+ * BGM streams via music_stream (it never reaches here), and every one-shot
+ * SFX / dialog clip is well under 4 MiB (≈45 s at 22050/16/stereo), so 4 MiB
+ * is safe on the PS2's 32 MB RAM yet never clips a real asset. */
+#define STANDALONE_WAV_MAX_BYTES  (4 * 1024 * 1024)
 
-static int load_wav_via_cyg(const char *path, SDL_AudioSpec *spec,
-                            Uint8 **buf, Uint32 *len)
+static int load_wav_file(const char *path, SDL_AudioSpec *spec,
+                         Uint8 **buf, Uint32 *len)
 {
     CygFile *f = fopen_cyg(path, "rb");
     if (!f) return 0;
     fseek_cyg(f, 0, SEEK_END);
     int32_t sz = ftell_cyg(f);
     fseek_cyg(f, 0, SEEK_SET);
-    if (sz <= 12 || sz > PS2_STANDALONE_WAV_MAX) { fclose_cyg(f); return 0; }
+    if (sz <= 12 || sz > STANDALONE_WAV_MAX_BYTES) { fclose_cyg(f); return 0; }
     void *raw = SDL_malloc((size_t)sz);
     if (!raw) { fclose_cyg(f); return 0; }
     uint32_t got = fread_cyg(raw, 1, (uint32_t)sz, f);
@@ -278,7 +280,6 @@ static int load_wav_via_cyg(const char *path, SDL_AudioSpec *spec,
     SDL_free(raw);
     return ok;
 }
-#endif
 
 static int try_load_wav_at(const char *root, const char *name,
                            SDL_AudioSpec *out_spec, Uint8 **out_buf,
@@ -287,19 +288,14 @@ static int try_load_wav_at(const char *root, const char *name,
     char p[1024];
     if (root && *root) snprintf(p, sizeof p, "%s/%s", root, name);
     else               snprintf(p, sizeof p, "%s", name);
-#ifdef WACKI_PS2
-    return load_wav_via_cyg(p, out_spec, out_buf, out_len);
-#else
-    if (SDL_LoadWAV(p, out_spec, out_buf, out_len))
-        return 1;
-    /* upper-case the basename (CD layout on macOS often) */
-    size_t l = strlen(p);
-    size_t i = l;
+    if (load_wav_file(p, out_spec, out_buf, out_len)) return 1;
+    /* Retry with the basename upper-cased (DOS-conventional CD layout, or a
+     * case-sensitive FS). Harmless extra probe on case-insensitive devices. */
+    size_t l = strlen(p), i = l;
     while (i > 0 && p[i-1] != '/' && p[i-1] != '\\') --i;
     for (size_t j = i; j < l; ++j)
         if (p[j] >= 'a' && p[j] <= 'z') p[j] &= 0xDF;
-    return SDL_LoadWAV(p, out_spec, out_buf, out_len) != NULL;
-#endif
+    return load_wav_file(p, out_spec, out_buf, out_len);
 }
 
 /* Try to load the WAV as an entry inside the currently mounted .dta
