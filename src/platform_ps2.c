@@ -45,6 +45,7 @@
 #include "wacki/platform/storage.h"   /* plat_save_read/write contract */
 #include "wacki/platform/audio.h"     /* plat_audio_* contract */
 #include "wacki/platform/video.h"     /* plat_video_* contract */
+#include "wacki/platform/system.h"    /* plat_system_* contract */
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
@@ -1048,5 +1049,24 @@ void plat_video_present(const uint8_t *shadow, const uint8_t *palette_rgb,
 void plat_video_shutdown(void)                                   { }
 void plat_video_toggle_fullscreen(void)                          { }
 void plat_video_message_box(const char *t, const char *b)        { (void)t; (void)b; }
+
+/* ---- process-lifecycle HAL (wacki/platform/system.h) ------------- */
+
+void plat_system_early_init(void)
+{
+    /* Bring up the IOP fileio stack BEFORE any file access — ps2sdk's newlib
+     * fopen reaches no device, so cygio reads everything through fileXio. */
+    platform_ps2_io_init();
+    ps2_mark(0x0001u);
+}
+
+void plat_system_exit(int rc)
+{
+    /* Stamp the exit code and PARK the EE so PINE can read the trace
+     * breadcrumbs — a returned main() reboots PCSX2 to the BIOS browser and
+     * tears down the game PINE needs to talk to. Never returns. */
+    ps2_mark(0xE000u | (unsigned)(rc & 0xFFF));
+    ps2_spin_forever();
+}
 
 #endif /* WACKI_PS2 */

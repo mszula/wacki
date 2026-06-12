@@ -23,6 +23,7 @@
 
 #include "wacki.h"
 #include "wacki/log.h"
+#include "wacki/platform/system.h"
 
 #include <SDL.h>
 #include <signal.h>
@@ -355,54 +356,14 @@ static int run_cutscene_test_mode(const CliArgs *args)
 
 /* ---- WackiMain + main ------------------------------------------- */
 
-#ifdef _WIN32
-#include <windows.h>
-/* On a Windows GUI-subsystem build (Makefile -mwindows) there's no
- * console attached when Explorer double-clicks wacki.exe — printf
- * goes nowhere. Pipe stderr (and stdout, for completeness) into
- * wacki.log so users can attach it to bug reports.
- *
- * Only do this when GetConsoleWindow() == NULL (no console). For
- * CI smoke runs and dev launches from cmd.exe with the
- * WACKI_WINDOWED=0 build, a console exists and we leave the
- * standard streams alone so the user / CI sees output in real
- * time. */
-static void redirect_streams_to_logfile_if_no_console(void)
-{
-    if (GetConsoleWindow())
-        return;
-    FILE *f = freopen("wacki.log", "w", stderr);
-    if (f)
-    {
-        setvbuf(stderr, NULL, _IOLBF, 0); /* line-buffered → flush per LOG */
-        freopen("wacki.log", "a", stdout);
-    }
-}
-#endif
-
 int WackiMain(int argc, char **argv)
 {
-#ifdef WACKI_PS2
-    /* Bring up the IOP fileio stack (reset IOP, load iomanX/fileXio/cdfs,
-     * fileXioInit, sceCdInit) BEFORE any file access — ps2sdk's newlib
-     * fopen reaches no device, so cygio.c reads everything through
-     * fileXio. Defined in src/platform_ps2.c. */
-    extern void platform_ps2_io_init(void);
-    platform_ps2_io_init();
-    WK_PS2_MARK(0x0001u);
-#endif
-#ifdef _WIN32
-    redirect_streams_to_logfile_if_no_console();
-#endif
-#ifdef __APPLE__
-    /* A Finder-launched .app runs with cwd="/" (read-only). Move to
-     * ~/Library/Application Support/Wacki/ so Wacki.sav, wacki.cfg and
-     * screenshots have a writable home. Must precede ConfigLoad and the
-     * cwd-relative FindDataRoot probes below. No-op for a bare binary. */
-    extern int PlatformMacUseAppSupportDir(void);
-    if (PlatformMacUseAppSupportDir())
-        LOG_INFO("platform", "user dir: ~/Library/Application Support/Wacki");
-#endif
+    /* Earliest process setup, before config/data: PS2 IOP fileio bring-up
+     * (+ its first trace breadcrumb), Win32 stderr→logfile, macOS app-support
+     * cwd. The system HAL picks the right one per platform (a no-op on bare
+     * Linux / handheld). */
+    plat_system_early_init();
+
     /* SIGINT first so it covers init failures too. */
     signal(SIGINT, sigint_handler);
 
@@ -489,15 +450,10 @@ int WackiMain(int argc, char **argv)
 int main(int argc, char **argv)
 {
     int rc = WackiMain(argc, argv);
-#ifdef WACKI_PS2
-    /* Bring-up: stamp the exit code and PARK the EE so PINE can read the
-     * trace breadcrumbs — a returned main() reboots PCSX2 to the BIOS
-     * browser and tears down the game PINE needs to talk to. */
-    extern void ps2_mark(unsigned int);
-    extern void ps2_spin_forever(void);
-    ps2_mark(0xE000u | (unsigned)(rc & 0xFFF));
-    ps2_spin_forever();
-#endif
+    /* Final teardown: a no-op on most platforms (we return rc); on PS2 this
+     * stamps the exit code and parks the EE forever so PINE can read the
+     * trace (a returned main() reboots PCSX2 to the BIOS browser). */
+    plat_system_exit(rc);
     return rc;
 }
 
