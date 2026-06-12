@@ -128,7 +128,7 @@ typedef struct {
  * (wacki/platform/audio.h): plat_avi_audio_begin / _push / _end plus the
  * _below_cushion / _flush / _needs_pump queries. The SDL queue-mode device
  * (incl. the mmiyoo single-slot juggling + stereo→mono downmix) lives in
- * src/platform/sdl/audio_sdl.c; the audsrv feeder in src/platform_ps2.c. The
+ * src/platform/sdl/audio_sdl.c; the audsrv feeder in src/platform/ps2/audio_ps2.c. The
  * decoder below just opens it, pushes chunks, and closes it. */
 
 /* ---- RIFF / AVI FourCCs ------------------------------------------- */

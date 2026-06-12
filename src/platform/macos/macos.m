@@ -13,7 +13,7 @@
  *   2. Add a "Gra" menu exposing the in-game shortcuts as clickable
  *      items: Szybki zapis (F5), Szybki odczyt (F9), Zrzut ekranu,
  *      Pełny ekran (F11), Pauza (F12). Each item calls a C bridge in
- *      src/platform_sdl.c that performs the exact same action as the
+ *      src/platform/sdl/platform_sdl.c that performs the exact same action as the
  *      keyboard shortcut.
  *
  * Compiled and linked only on Darwin desktop builds (see Makefile);
@@ -116,7 +116,7 @@ char *PlatformMacUntranslocatePath(const char *path)
     }
 }
 
-/* C bridges implemented in src/platform_sdl.c. */
+/* C bridges implemented in src/platform/sdl/platform_sdl.c. */
 extern void PlatformMenuQuickSave(void);
 extern void PlatformMenuQuickLoad(void);
 extern void PlatformMenuScreenshot(void);

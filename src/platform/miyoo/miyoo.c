@@ -152,8 +152,8 @@ static void resolve_mi_ao(void)
  * intended call sites are:
  *   - PlatformInit (first chance — may no-op if libmi_ao isn't loaded
  *                   yet, that's fine; subsequent calls retry resolve)
- *   - audio.c mixer_ensure_open (after first SFX/music device open)
- *   - flic.c  audio_ensure       (after each AVI device open)
+ *   - audio_sdl.c plat_audio_open   (after the SFX/music device opens)
+ *   - audio_sdl.c plat_avi_audio_begin (after each AVI device opens)
  *
  * Failure modes are logged at INFO but never fatal — the only
  * consequence is the user hears playback at the firmware default

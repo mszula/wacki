@@ -10,7 +10,7 @@
  *
  *   desktop / handheld  src/platform/sdl/audio_sdl.c  (SDL_OpenAudioDevice +
  *                                                      its callback thread)
- *   PS2                 src/platform_ps2.c            (audsrv + a dedicated
+ *   PS2                 src/platform/ps2/audio_ps2.c            (audsrv + a dedicated
  *                                                      EE feeder thread; an
  *                                                      SDL audio device wedges
  *                                                      the IOP)

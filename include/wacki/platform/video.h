@@ -10,7 +10,7 @@
  *
  *   desktop / handheld  src/platform/sdl/video_sdl.c  (SDL window + renderer +
  *                                                      streaming ARGB texture)
- *   PS2                 src/platform_ps2.c            (gsKit: a PSMT8 texture +
+ *   PS2                 src/platform/ps2/video_ps2.c            (gsKit: a PSMT8 texture +
  *                                                      hardware CLUT — an SDL
  *                                                      window would fight the
  *                                                      GS gsKit drives)

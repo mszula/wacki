@@ -23,7 +23,7 @@ flowchart TB
     A[PlayFlicAviFile path] --> B[avi_open<br/>load + validate RIFF]
     B --> C[parse hdrl LIST<br/>avih + strl chunks]
     C --> D{has audio stream?}
-    D -- tak --> E[audio_ensure<br/>open SDL audio device]
+    D -- tak --> E[plat_avi_audio_begin<br/>open SDL audio device]
     D -- nie --> F[skip audio path]
     E --> G[main loop:<br/>avi_next_video]
     F --> G
@@ -37,7 +37,7 @@ flowchart TB
     M -- nie --> O[SDL_Delay<br/>frame_us pacing]
     N --> O
     O --> G
-    L --> P[audio_release<br/>close SDL audio device]
+    L --> P[plat_avi_audio_end<br/>close SDL audio device]
     G -. end of stream .-> P
     P --> Q[avi_close + free buffer]
 ```
@@ -181,7 +181,7 @@ sequenceDiagram
     Note over Mixer: mixer device open w gameplay'u
     Caller->>FLIC: PlayFlicAviFile Dane_10.dta
     FLIC->>Mixer: mixer NOT touched here — see note below
-    FLIC->>SDL: audio_ensure — open new device for AVI spec
+    FLIC->>SDL: plat_avi_audio_begin — open new device for AVI spec
     Note over SDL: SDL2 normalnie wspiera multiple devices, ale na mmiyoo jeden device naraz
     loop per frame
         FLIC->>SDL: SDL_QueueAudio — audio body z 01wb
@@ -189,7 +189,7 @@ sequenceDiagram
     end
     Caller->>FLIC: user click — skip
     FLIC->>SDL: SDL_PauseAudioDevice + SDL_ClearQueuedAudio
-    FLIC->>SDL: audio_release — close device
+    FLIC->>SDL: plat_avi_audio_end — close device
     Note over Mixer: mixer może teraz re-take audio slot
 ```
 
@@ -197,12 +197,12 @@ Note: w aktualnej implementacji mixer device pozostaje otwarty
 podczas cutscene'u. Na desktopach (macOS/Linux/Win) SDL2 obsługuje
 wiele równoległych devices, więc nic nie pęka. Na Miyoo jest jeden
 hardware slot — Miyoo SDL2 buffer'uje "second open" wewnętrznie ale
-trzeba mu pomóc: nasz `audio_release()` na końcu cutscene'u zwalnia
+trzeba mu pomóc: nasz `plat_avi_audio_end()` na końcu cutscene'u zwalnia
 FLIC's device, mixer może wówczas nadal grać normalnie.
 
 ### Buffer sizing
 
-FLIC'owy `audio_ensure` żąda 4096-frame bufora (~185 ms przy 22050 Hz)
+FLIC'owy `plat_avi_audio_begin` żąda 4096-frame bufora (~185 ms przy 22050 Hz)
 zamiast typowych 1024. Powody:
 
 - Cutscene'y AVI mają 100-ms chunk gaps między audio packet'ami
@@ -312,7 +312,8 @@ stage transition'y między etapami — wszystko shipped 1:1.
 
 - **AVI container**: `src/flic.c` — `avi_open`, `avi_slurp_file`,
   `parse_avih`, `parse_strl`, `avi_next_video`, `avi_close`
-- **Audio**: `src/flic.c` — `audio_ensure`, `audio_release`
+- **Audio**: the AVI-audio HAL — `plat_avi_audio_begin/push/end`
+  (`src/platform/sdl/audio_sdl.c`; PS2 in `src/platform/ps2/audio_ps2.c`)
 - **FLIC dekoder**: `src/flic/decoder.c` — `flic_decode_frame`
   dispatcher + chunk handlers (`flic_color_256`, `flic_brun`,
   `flic_delta_flc`)

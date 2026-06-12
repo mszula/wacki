@@ -155,7 +155,7 @@ int PlatformInit(int w, int h, const char *title)
 
     /* Bring up the display through the video HAL — SDL window + renderer +
      * streaming texture on desktop/handheld (src/platform/sdl/video_sdl.c),
-     * gsKit on PS2 (platform_ps2.c). */
+     * gsKit on PS2 (src/platform/ps2/video_ps2.c). */
     if (!plat_video_init(w, h, title)) return 0;
     return 1;
 }
@@ -186,7 +186,7 @@ void PlatformPresent(const uint8_t *shadow,
 static int input_debug_enabled(void);
 
 #ifdef __APPLE__
-/* C bridges for the macOS "Gra" menu (src/platform_macos.m). Each maps
+/* C bridges for the macOS "Gra" menu (src/platform/macos/macos.m). Each maps
  * a menu item to the exact in-engine action its keyboard shortcut
  * triggers: the quicksave / quickload / pause "request" latches the
  * game loop consumes once per frame, a direct screenshot dump, and the
@@ -336,7 +336,7 @@ static void poll_virtual_cursor(void)
 
     /* Analog-stick contribution (px/tick), 0 unless a pad pushes past
      * the deadzone. The d-pad folds into the discrete dx/dy. Filled by
-     * src/platform_portmaster.c on Anbernic; a no-op extern elsewhere. */
+     * src/gamepad_sdl.c on Anbernic; a no-op extern elsewhere. */
     float ax = 0.0f, ay = 0.0f;
     /* Fold the game controller (+ PS2 USB mouse) into the cursor; no-op when
      * no pad is open. */

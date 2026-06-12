@@ -7,7 +7,7 @@
  * stdio. This is the desktop + handheld implementation of the fopen_cyg /
  * fread_cyg / fseek_cyg / ftell_cyg / fclose_cyg contract declared in
  * wacki/platform/storage.h. The PS2 backend (fileXio, since ps2sdk's newlib
- * fopen reaches no device) lives in platform_ps2.c. */
+ * fopen reaches no device) lives in src/platform/ps2/storage_ps2.c. */
 
 #include "wacki/platform/storage.h"   /* CygFile + fopen_cyg/... contract */
 

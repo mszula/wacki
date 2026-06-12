@@ -4,7 +4,8 @@
  * tests/test_engine_stubs.c — engine externs the test binary needs.
  *
  * Linked production sources (TEST_ENGINE_SRCS in Makefile):
- *   depack.c archive.c graphics.c pe_loader.c heap.c cygio.c
+ *   depack.c archive.c graphics.c pe_loader.c heap.c
+ *   platform/sdl/file_host.c (the stdio fopen_cyg shim)
  *   assets.c font.c save.c binary_data.c timer.c script.c
  *   stubs.c  ← linked via tests/sdl_stub/SDL.h (declares SDL types +
  *               stubs we provide below for SDL_Delay / SDL_GetTicks /

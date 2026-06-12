@@ -7,7 +7,7 @@
  * system.h) for the SDL family. The only edge-of-process work here is on
  * Windows (redirect the GUI build's lost stderr to a log file) and macOS
  * (escape the read-only Finder cwd); Linux + handheld need nothing. The PS2
- * lifecycle (IOP bring-up + the EE park) lives in platform_ps2.c. */
+ * lifecycle (IOP bring-up + the EE park) lives in src/platform/ps2/system_ps2.c. */
 
 #include "wacki.h"
 #include "wacki/log.h"

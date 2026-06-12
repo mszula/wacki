@@ -56,13 +56,14 @@ fi
 #   ee/lib     → libaudsrv, libpadx, libmtap, libpatches (ps2sdk core)
 PS2DEV=/usr/local/ps2dev
 PORTS="$PS2DEV/ps2sdk/ports"
-# -I/tmp/embed: platform_ps2.c #includes the bin2c-generated IRX blobs
-# (iomanX/fileXio/cdfs) generated in the container below.
+# -I/tmp/embed: the src/platform/ps2/ backend #includes the bin2c-generated
+# IRX blobs (iomanX/fileXio/cdfs in system_ps2.c, mcman/mcserv in
+# storage_ps2.c) generated in the container below.
 # -lfileXio -lcdvd: the engine's PS2 file I/O (the fileXio backend of the
-# storage HAL, in platform_ps2.c) reads through fileXio + CDVD, brought up
-# after an IOP reset.
-# ps2sdk EE/common includes + -D_EE: platform_ps2.c now pulls in sifrpc.h,
-# loadfile.h, libcdvd.h etc. (and ps2sdk's tamtypes.h needs _EE defined).
+# storage HAL, in src/platform/ps2/storage_ps2.c) reads through fileXio +
+# CDVD, brought up after an IOP reset.
+# ps2sdk EE/common includes + -D_EE: the src/platform/ps2/ TUs pull in
+# sifrpc.h, loadfile.h, libcdvd.h etc. (and ps2sdk's tamtypes.h needs _EE).
 SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \
 -I$PS2DEV/ps2sdk/ee/include -I$PS2DEV/ps2sdk/common/include -I$PS2DEV/gsKit/include -D_EE"
 SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
@@ -100,7 +101,7 @@ docker run --rm --platform linux/amd64 \
     sh -c "
         set -e
         apk add --quiet --no-progress make gcc musl-dev
-        # Embed the IOP fileio modules platform_ps2.c loads at boot.
+        # Embed the IOP fileio modules the src/platform/ps2/ backend loads at boot.
         mkdir -p /tmp/embed
         bin2c $PS2DEV/ps2sdk/iop/irx/iomanX.irx  /tmp/embed/iomanX_irx.c  iomanX_irx
         bin2c $PS2DEV/ps2sdk/iop/irx/fileXio.irx /tmp/embed/fileXio_irx.c fileXio_irx
