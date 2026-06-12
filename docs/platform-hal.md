@@ -127,6 +127,14 @@ the Makefile. The core is untouched.
       `MIX_DEV_LOCK` per-platform special-casing. NOTE: the WAV *file read*
       (`load_wav_via_cyg`) still `#ifdef`s on PS2 — a storage concern, folded
       in a later pass.
-- [ ] Step 3 — FLIC reader.
+- [x] Step 3 — FLIC reader. flic.c's `FlicFp` now drives `plat_flic_*`
+      (wacki/platform/storage.h) — a single global read-ahead reader:
+      `platform/sdl/flic_host.c` (setvbuf'd stdio) and the PS2 async ring-fill
+      thread (renamed from `platform_ps2_aread_*`) in `platform_ps2.c`. The
+      reader `#ifdef WACKI_PS2` is gone from flic.c. NOTE: flic.c's *AVI audio
+      device* (the cutscene push path: audio_ensure / SDL_QueueAudio vs audsrv
+      + the pacing loop) still `#ifdef`s on PS2 — a separate audio-device
+      concern, deferred (the PS2 pacing is timing-sensitive — the "looping
+      sample" fix — so it wants its own careful pass).
 - [ ] Step 4 — video + input split.
 - [ ] Step 5 — lifecycle/CLI.

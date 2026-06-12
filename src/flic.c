@@ -63,11 +63,6 @@ static inline uint16_t rd_u16(const uint8_t *p) {
 
 /* ---- tuning knobs ------------------------------------------------------- */
 
-/* Fully-buffered stdio buffer. The playback loop issues one fread per
- * AVI chunk (KB-sized); stdio coalesces them into 1 MiB sequential
- * block reads — best case for SD/eMMC. */
-#define STREAM_IO_BUFFER_BYTES      (1u << 20)
-
 /* The RIFF/AVI header (hdrl + per-stream strl lists) always precedes the
  * movi data and is at most a couple KB. We read this prefix, parse it
  * in RAM, then stream the (huge) movi body straight off disk. */
@@ -83,43 +78,21 @@ static inline uint16_t rd_u16(const uint8_t *p) {
  * room and bounds worst-case ring memory regardless of interleave. */
 #define VIDEO_RING_MAX              32
 
-/* ---- file reader: stdio on desktop, buffered fileXio on PS2 ------------- *
+/* ---- file reader (storage HAL) ----------------------------------------- *
  *
  * The streaming loop issues one read per movi sub-chunk (an 8-byte header
- * then the body). On desktop a setvbuf()'d FILE absorbs those into a few
- * syscalls. PS2 has no libc file device — reads go through the fileXio
- * shim and each fileXio call is a SIF RPC, so wrap it in an equivalent
- * read-ahead buffer (a flood of tiny RPCs would also starve audsrv). */
-#ifdef WACKI_PS2
-/* A background thread reads the AVI into a big ring (platform_ps2.c); the
- * decoder pulls from RAM so disc latency never pauses playback. One
- * cutscene at a time → a single global reader; FlicFp is just an open
- * flag. */
-extern int      platform_ps2_aread_open(const char *path);
-extern uint32_t platform_ps2_aread_read(void *dst, uint32_t n);
-extern void     platform_ps2_aread_seek(int32_t off, int whence);
-extern int32_t  platform_ps2_aread_tell(void);
-extern void     platform_ps2_aread_close(void);
-
+ * then the body) — KB-sized. plat_flic_* (wacki/platform/storage.h) is a
+ * read-ahead-optimized single global reader so disc latency never pauses the
+ * decoder: a setvbuf'd stdio FILE on desktop/handheld, a background ring-fill
+ * thread on PS2 (where a flood of tiny fileXio RPCs would also starve audsrv).
+ * One cutscene plays at a time, so the reader needs no handle — FlicFp is just
+ * an "open" flag, and the per-AviStream fp field tracks that. */
 typedef void *FlicFp;                     /* non-NULL = open (state is global) */
-static FlicFp   flic_open(const char *path) { return platform_ps2_aread_open(path) ? (void *)1 : NULL; }
-static uint32_t flic_read(void *dst, uint32_t n, FlicFp f) { (void)f; return platform_ps2_aread_read(dst, n); }
-static void     flic_seek(FlicFp f, int32_t off, int whence) { (void)f; platform_ps2_aread_seek(off, whence); }
-static int32_t  flic_tell(FlicFp f) { (void)f; return platform_ps2_aread_tell(); }
-static void     flic_close(FlicFp f) { (void)f; platform_ps2_aread_close(); }
-#else
-typedef FILE *FlicFp;
-static FlicFp   flic_open(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-    if (f) setvbuf(f, NULL, _IOFBF, STREAM_IO_BUFFER_BYTES);
-    return f;
-}
-static uint32_t flic_read(void *dst, uint32_t n, FlicFp f) { return (uint32_t)fread(dst, 1, n, f); }
-static void     flic_seek(FlicFp f, int32_t off, int whence) { fseek(f, (long)off, whence); }
-static int32_t  flic_tell(FlicFp f) { return (int32_t)ftell(f); }
-static void     flic_close(FlicFp f) { if (f) fclose(f); }
-#endif
+static FlicFp   flic_open(const char *path) { return plat_flic_open(path) ? (void *)1 : NULL; }
+static uint32_t flic_read(void *dst, uint32_t n, FlicFp f) { (void)f; return plat_flic_read(dst, n); }
+static void     flic_seek(FlicFp f, int32_t off, int whence) { (void)f; plat_flic_seek(off, whence); }
+static int32_t  flic_tell(FlicFp f) { (void)f; return plat_flic_tell(); }
+static void     flic_close(FlicFp f) { (void)f; plat_flic_close(); }
 
 /* ---- AVI streaming context ---------------------------------------------- */
 

@@ -71,4 +71,23 @@ uint32_t fread_cyg (void *dst, uint32_t sz, uint32_t n, CygFile *);
 void     fseek_cyg (CygFile *, int32_t off, int whence);
 int32_t  ftell_cyg (CygFile *);
 
+/* ---- FLIC / AVI cutscene streaming reader ------------------------ *
+ *
+ * A read-ahead-optimized reader for the (large) cutscene files: the decoder
+ * issues one read per AVI sub-chunk and must never block on disc latency.
+ * Only one cutscene plays at a time, so this is a single *global* reader (no
+ * handle). Implementations:
+ *
+ *   desktop / handheld  src/platform/sdl/flic_host.c  (a setvbuf'd stdio FILE
+ *                                                      — 1 MiB read-ahead)
+ *   PS2                 src/platform_ps2.c            (a background thread
+ *                                                      filling a ring; a flood
+ *                                                      of tiny fileXio RPCs
+ *                                                      would starve audsrv) */
+int      plat_flic_open(const char *path);   /* 1 = opened, 0 = failed */
+uint32_t plat_flic_read(void *dst, uint32_t n);
+void     plat_flic_seek(int32_t off, int whence);
+int32_t  plat_flic_tell(void);
+void     plat_flic_close(void);
+
 #endif /* WACKI_PLATFORM_STORAGE_H */

@@ -685,18 +685,19 @@ void platform_ps2_avi_audio_end(void)
     s_avi_audio_on = 0;
 }
 
-/* ---- async read-ahead for streamed cutscenes -------------------- *
+/* ---- FLIC reader (storage HAL): async read-ahead for cutscenes -- *
  *
- * A blocking disc read pauses the FLIC decoder, so off a disc the 52 MB
- * cutscene AVI stutters on every refill. A background thread reads the
- * file sequentially into a big ring; flic.c pulls from RAM and only ever
- * waits if the disc can't keep up (the emulated/real drive is several×
- * faster than the AVI bitrate, so it stays ahead). Single instance — one
- * cutscene plays at a time. SPSC ring: the thread is the sole producer
- * (wpos), the decoder the sole consumer (rpos). Seeks are forward-within-
- * buffer (just advance rpos) except the one-time header seeks at open,
- * which reposition the thread via s_aread_seekreq. The fopen_cyg/... shim it
- * pulls from is the PS2 file backend above (declared in storage.h). */
+ * The PS2 plat_flic_* backend. A blocking disc read pauses the FLIC decoder,
+ * so off a disc the 52 MB cutscene AVI stutters on every refill. A background
+ * thread reads the file sequentially into a big ring; flic.c pulls from RAM
+ * and only ever waits if the disc can't keep up (the emulated/real drive is
+ * several× faster than the AVI bitrate, so it stays ahead). Single instance —
+ * one cutscene plays at a time, which is why the HAL reader needs no handle.
+ * SPSC ring: the thread is the sole producer (wpos), the decoder the sole
+ * consumer (rpos). Seeks are forward-within-buffer (just advance rpos) except
+ * the one-time header seeks at open, which reposition the thread via
+ * s_aread_seekreq. The underlying bytes come through the fopen_cyg/... shim
+ * (the PS2 file backend above). */
 #define AREAD_RING (2 * 1024 * 1024)          /* ~2.4 s at the AVI bitrate */
 static uint8_t  s_aread_ring[AREAD_RING] __attribute__((aligned(64)));
 static char     s_aread_stack[16 * 1024]  __attribute__((aligned(16)));
@@ -742,7 +743,7 @@ static void aread_thread(void *arg)
     ExitThread();
 }
 
-int platform_ps2_aread_open(const char *path)
+int plat_flic_open(const char *path)
 {
     s_aread_cf = fopen_cyg(path, "rb");
     if (!s_aread_cf) return 0;
@@ -765,7 +766,7 @@ int platform_ps2_aread_open(const char *path)
     return 1;
 }
 
-uint32_t platform_ps2_aread_read(void *dst, uint32_t n)
+uint32_t plat_flic_read(void *dst, uint32_t n)
 {
     uint8_t *d = (uint8_t *)dst;
     uint32_t got = 0;
@@ -788,7 +789,7 @@ uint32_t platform_ps2_aread_read(void *dst, uint32_t n)
     return got;
 }
 
-void platform_ps2_aread_seek(int32_t off, int whence)
+void plat_flic_seek(int32_t off, int whence)
 {
     int32_t target;
     if      (whence == SEEK_SET) target = off;
@@ -805,9 +806,9 @@ void platform_ps2_aread_seek(int32_t off, int whence)
     }
 }
 
-int32_t platform_ps2_aread_tell(void) { return s_aread_rfilepos; }
+int32_t plat_flic_tell(void) { return s_aread_rfilepos; }
 
-void platform_ps2_aread_close(void)
+void plat_flic_close(void)
 {
     s_aread_run = 0;
     for (int i = 0; i < 1000 && s_aread_alive; ++i) SDL_Delay(1);  /* let it exit */
