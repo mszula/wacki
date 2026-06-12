@@ -20,8 +20,19 @@
 
 #include <stdint.h>
 
-/* ---- generic byte-offset accessors -------------------------------- */
-#define EOFF(e, o, T) (*(T *)((uint8_t *)(e) + (o)))
+/* ---- generic byte-offset accessors -------------------------------- *
+ *
+ * Entity slots sit at the original engine's raw byte offsets, and several
+ * u16/u32 fields land at addresses that aren't naturally aligned (e.g. the
+ * interned-pointer slots at 0x16 / 0x0A / 0x0E, all ≡2 mod 4). A plain
+ * `*(T*)` cast emits an aligned load/store (lw/lh/sw/sh), which the R5900
+ * TRAPS on a misaligned address — the game hung loading the first room on
+ * real PS2 (op 0x2F → build_mask_entity), while x86/PCSX2 silently tolerate
+ * the misaligned access. Route the typed accessor through a packed struct
+ * so the compiler emits unaligned-safe loads/stores (lwl/lwr …) — same
+ * value, still usable as an lvalue, no behaviour change on any target. */
+#define EOFF(e, o, T) (((struct { T v; } __attribute__((packed)) *) \
+                        ((uint8_t *)(e) + (o)))->v)
 #define EOFF8(e, o)   (*((uint8_t *)(e) + (o)))
 
 /* ---- Entity field offsets ----------------------------------------- *

@@ -164,8 +164,13 @@ void ScriptCallRegMaskList(uint16_t id, uint32_t click_ptr, int verb_table)
         return;
     }
 
-    const uint16_t *pool       = (const uint16_t *)xlat_binary_ptr(click_ptr);
-    uint16_t        pool_count = pool ? pool[0] : 0;
+    /* The verb-mask pool is raw PE data at an arbitrary (possibly odd) byte
+     * offset — the same misaligned-u16 hazard as EOFF (see entity_offsets.h),
+     * but it's a plain pointer deref, not an entity slot, so that fix doesn't
+     * cover it. Read its u16s via memcpy so the R5900 can't trap on `lhu`. */
+    const uint8_t  *pool       = (const uint8_t *)xlat_binary_ptr(click_ptr);
+    uint16_t        pool_count = 0;
+    if (pool) memcpy(&pool_count, pool, sizeof pool_count);
     uint16_t        pool_idx   = 0;
     int             spawned    = 0;
 
@@ -191,7 +196,8 @@ void ScriptCallRegMaskList(uint16_t id, uint32_t click_ptr, int verb_table)
         }
 
         if (pool && pool_count > 0) {
-            uint16_t verb_id = pool[pool_idx + 1];
+            uint16_t verb_id;
+            memcpy(&verb_id, pool + (size_t)(pool_idx + 1) * 2, sizeof verb_id);
             Entity  *pld     = build_click_payload(mask, verb_id);
             if (pld) {
                 LinkEntityToList(&g_click_list_head, pld, 0);
