@@ -112,7 +112,13 @@ the Makefile. The core is untouched.
       (`platform/sdl/data_root_host.c` + the PS2 impl in `platform_ps2.c`).
       The file-existence probe routes through the existing `cygio` shim, so
       it needed no new interface.
-- [ ] Step 1c — file I/O.
+- [x] Step 1c — file I/O. `cygio.c` deleted; its two backends split into
+      `platform/sdl/file_host.c` (newlib stdio) and the fileXio backend in
+      `platform_ps2.c` — no `#ifdef WACKI_PS2` left in a shared file. The
+      `CygFile` shim (`fopen_cyg/...`) is now declared in `storage.h` (pulled
+      by the umbrella), so `types.h`/`api.h` no longer carry it. **Storage
+      subsystem done** — the three worst hotspots (`data_root.c` 23,
+      `platform_sdl.c` partial, `save.c` 4) are off the core.
 - [ ] Step 2 — audio device.
 - [ ] Step 3 — FLIC reader.
 - [ ] Step 4 — video + input split.

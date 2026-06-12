@@ -273,7 +273,7 @@ ENGINE_SRCS = \
 	src/actor/render.c src/actor/alloc.c \
 	src/actor/walker.c                            \
 	src/save.c    src/font.c      src/flic.c   src/flic/decoder.c \
-	src/heap.c     src/cygio.c   src/timer.c     src/stubs.c     \
+	src/heap.c     src/timer.c     src/stubs.c                    \
 	src/binary_data.c src/pe_loader.c src/log.c                  \
 	src/platform_sdl.c src/vm/script_obj.c src/vm/parser.c       \
 	src/util/rng.c                                               \
@@ -303,10 +303,12 @@ ENGINE_SRCS = \
 # cursor/click input glue.
 # Platform HAL implementations, composed per TARGET (see docs/platform-hal.md).
 # The SDL family (desktop + the handhelds) shares the stdio/SDL storage impls
-# — save (file + atomic rename) and data-root discovery (external media / SD
-# card + the native folder picker). PS2 provides those same interfaces from
-# platform_ps2.c (libmc save + fileXio devices), so it omits SDL_STORAGE_SRCS.
-SDL_STORAGE_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c
+# — save (file + atomic rename), data-root discovery (external media / SD card
+# + the native folder picker) and the file-I/O shim (newlib stdio). PS2
+# provides those same interfaces from platform_ps2.c (libmc save + fileXio
+# devices + fileXio file I/O), so it omits SDL_STORAGE_SRCS.
+SDL_STORAGE_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c \
+                   src/platform/sdl/file_host.c
 ifeq ($(TARGET),miyoo)
     ENGINE_SRCS += src/platform_miyoo.c $(SDL_STORAGE_SRCS)
 else ifeq ($(TARGET),portmaster)
@@ -341,7 +343,7 @@ endif
 endif
 
 TOOL_SRCS_EXTRACT = tools/dta-extract.c src/depack.c src/archive.c \
-                    src/cygio.c src/heap.c src/log.c
+                    src/platform/sdl/file_host.c src/heap.c src/log.c
 TOOL_SRCS_PKV2    = tools/pkv2-depack.c src/depack.c src/log.c
 
 # ---- tests (no SDL) -----------------------------------------------------
@@ -381,7 +383,7 @@ TEST_SRCS = \
 TEST_ENGINE_SRCS = \
 	tests/embedded_wacki_pe_stub.c                 \
 	src/depack.c    src/archive.c  src/graphics.c \
-	src/pe_loader.c src/heap.c     src/cygio.c    \
+	src/pe_loader.c src/heap.c     src/platform/sdl/file_host.c \
 	src/assets.c    src/font.c     src/save.c     \
 	src/platform/sdl/save_host.c                   \
 	src/binary_data.c src/timer.c  src/vm/main.c  src/log.c \

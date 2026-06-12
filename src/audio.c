@@ -305,17 +305,11 @@ void mixer_stop_channel(int idx)
 
 #ifdef WACKI_PS2
 /* PS2 has no working libc fopen — SDL_LoadWAV (SDL_RWFromFile) reaches no
- * device. Read the file through the engine's fileXio shim (the same path
- * the DTA archive uses) into RAM, then parse the WAV from memory. A size
- * cap keeps a stray giant file (e.g. the 25 MB menu BGM, which needs
- * streaming, not a full load) from attempting a doomed 25 MB malloc. */
-typedef struct CygFile CygFile;
-extern CygFile *fopen_cyg(const char *name, const char *mode);
-extern void     fclose_cyg(CygFile *f);
-extern uint32_t fread_cyg(void *dst, uint32_t sz, uint32_t n, CygFile *f);
-extern void     fseek_cyg(CygFile *f, int32_t off, int whence);
-extern int32_t  ftell_cyg(CygFile *f);
-
+ * device. Read the file through the engine's fileXio shim (fopen_cyg, the
+ * same path the DTA archive uses, declared in the storage HAL) into RAM,
+ * then parse the WAV from memory. A size cap keeps a stray giant file (e.g.
+ * the 25 MB menu BGM, which needs streaming, not a full load) from
+ * attempting a doomed 25 MB malloc. */
 #define PS2_STANDALONE_WAV_MAX  (4 * 1024 * 1024)
 
 static int load_wav_via_cyg(const char *path, SDL_AudioSpec *spec,

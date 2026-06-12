@@ -58,8 +58,9 @@ PS2DEV=/usr/local/ps2dev
 PORTS="$PS2DEV/ps2sdk/ports"
 # -I/tmp/embed: platform_ps2.c #includes the bin2c-generated IRX blobs
 # (iomanX/fileXio/cdfs) generated in the container below.
-# -lfileXio -lcdvd: the engine's PS2 file I/O (cygio.c + platform_ps2.c)
-# reads through fileXio + CDVD, brought up after an IOP reset.
+# -lfileXio -lcdvd: the engine's PS2 file I/O (the fileXio backend of the
+# storage HAL, in platform_ps2.c) reads through fileXio + CDVD, brought up
+# after an IOP reset.
 # ps2sdk EE/common includes + -D_EE: platform_ps2.c now pulls in sifrpc.h,
 # loadfile.h, libcdvd.h etc. (and ps2sdk's tamtypes.h needs _EE defined).
 SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \

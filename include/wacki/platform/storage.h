@@ -16,6 +16,8 @@
 #ifndef WACKI_PLATFORM_STORAGE_H
 #define WACKI_PLATFORM_STORAGE_H
 
+#include <stdint.h>   /* fread_cyg/ftell_cyg widths — keeps this header self-contained */
+
 /* ---- save image -------------------------------------------------- *
  *
  * The whole save (`g_save`) is read once at boot and written on demand. */
@@ -50,5 +52,23 @@ int plat_data_roots(int (*probe)(const char *root));
  * 0 when no picker is available (handheld / PS2), the user cancelled, or the
  * run is headless. */
 int plat_prompt_data_folder(int (*probe)(const char *root));
+
+/* ---- file I/O ---------------------------------------------------- *
+ *
+ * The Cygert "Base_IO_CPP" file-class shim — every DTA archive + asset read
+ * routes through here, which is exactly why swapping the backend per platform
+ * needs no other engine changes. CygFile is opaque; the concrete struct is
+ * defined by the per-platform implementation:
+ *
+ *   desktop / handheld  src/platform/sdl/file_host.c  (newlib stdio)
+ *   PS2                 src/platform_ps2.c            (fileXio — newlib fopen
+ *                                                     reaches no device) */
+typedef struct CygFile CygFile;
+
+CygFile *fopen_cyg (const char *name, const char *mode);
+void     fclose_cyg(CygFile *);
+uint32_t fread_cyg (void *dst, uint32_t sz, uint32_t n, CygFile *);
+void     fseek_cyg (CygFile *, int32_t off, int whence);
+int32_t  ftell_cyg (CygFile *);
 
 #endif /* WACKI_PLATFORM_STORAGE_H */

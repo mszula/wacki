@@ -11,8 +11,7 @@
  *   - DTA / Pkv2 / asset-magic constants
  *   - Engine-wide structs (DtaIndexEntry, AnimAsset, Entity,
  *     StageDef, WackiSettings, WackiSlot, WackiSaveFile, DemoScene,
- *     SceneDef, FontHandle (forward), TextRenderTarget, WackiStats,
- *     CygFile (forward))
+ *     SceneDef, FontHandle (forward), TextRenderTarget, WackiStats)
  *   - Scene-flag bit masks (SCENE_FLAG_*)
  *
  * No function declarations and no extern globals — those live in
@@ -331,8 +330,7 @@ typedef struct WackiStats
     uint32_t total_quickloads;    /* F9 */
 } WackiStats;
 
-/* ---- cygio forward ----------------------------------------------- */
-
-typedef struct CygFile CygFile;
+/* The CygFile file-I/O shim moved to wacki/platform/storage.h (the storage
+ * HAL); the umbrella header pulls that in alongside this one. */
 
 #endif /* WACKI_TYPES_H */

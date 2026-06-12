@@ -9,11 +9,12 @@
  * The contents are split across three sibling headers — pull this
  * umbrella in and you get all three:
  *
- *   wacki/types.h    structs, enums, format magic numbers
- *   wacki/api.h      module function declarations
- *   wacki/globals.h  extern globals + macro aliases (g_script_vars
- *                    aliases for g_game_over_code /
- *                    g_completed_stages, etc.)
+ *   wacki/types.h           structs, enums, format magic numbers
+ *   wacki/api.h             module function declarations
+ *   wacki/platform/storage.h storage HAL (save / data-root / file I/O)
+ *   wacki/globals.h         extern globals + macro aliases (g_script_vars
+ *                           aliases for g_game_over_code /
+ *                           g_completed_stages, etc.)
  *
  * Source modules can keep writing `#include "wacki.h"` and need not
  * care about the split. Code that wants a tighter dependency surface
@@ -29,6 +30,7 @@
 
 #include "wacki/types.h"
 #include "wacki/api.h"
+#include "wacki/platform/storage.h"
 #include "wacki/globals.h"
 
 #endif /* WACKI_H */

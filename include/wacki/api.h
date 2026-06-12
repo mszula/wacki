@@ -374,16 +374,13 @@ void StatsDump(void);
 uint32_t WackiRand(uint16_t bound);
 void     WackiRandSeed(uint32_t seed);
 
-/* ---- heap.c / cygio.c -------------------------------------------- */
+/* ---- heap.c ------------------------------------------------------ */
 
 void *xmalloc(uint32_t sz);
 void *xcalloc(uint32_t sz, int zero);
 void  xfree  (void *p);
 
-CygFile *fopen_cyg (const char *name, const char *mode);
-void     fclose_cyg(CygFile *);
-uint32_t fread_cyg (void *dst, uint32_t sz, uint32_t n, CygFile *);
-void     fseek_cyg (CygFile *, int32_t off, int whence);
-int32_t  ftell_cyg (CygFile *);
+/* The fopen_cyg/... file-I/O shim is declared in wacki/platform/storage.h
+ * (the storage HAL), pulled in by the umbrella header. */
 
 #endif /* WACKI_API_H */

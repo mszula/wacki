@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * tests/test_heap_cygio.c — heap.c + cygio.c thin wrappers.
+ * tests/test_heap_cygio.c — heap.c + cygio file-I/O shim thin wrappers.
  *
- * Both files are minimal shims (xmalloc → malloc; fopen_cyg → fopen via
- * a CygFile handle). The tests are completeness smokes — they verify
- * the wrappers don't silently break (e.g. someone "optimizes" xcalloc
- * to skip the zero-init flag, or fseek_cyg flips SEEK_END semantics).
+ * Both are minimal shims (xmalloc → malloc; fopen_cyg → fopen via a CygFile
+ * handle). The tests are completeness smokes — they verify the wrappers
+ * don't silently break (e.g. someone "optimizes" xcalloc to skip the
+ * zero-init flag, or fseek_cyg flips SEEK_END semantics).
  *
- * Reference: src/heap.c, src/cygio.c.
+ * Reference: src/heap.c, src/platform/sdl/file_host.c (the stdio backend
+ * the host tests link; the PS2 fileXio backend is in platform_ps2.c).
  */
 
 #include "test.h"
