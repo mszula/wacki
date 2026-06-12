@@ -24,6 +24,7 @@
 
 #include "wacki.h"
 #include "wacki/log.h"
+#include "wacki/platform/video.h"
 
 #include <SDL.h>
 #include <stdint.h>
@@ -51,26 +52,10 @@
 #define ASCII_BACKSPACE             0x08
 #define ASCII_ENTER                 0x0D
 
-/* ARGB8888 pixel layout (matches SDL_PIXELFORMAT_ARGB8888): alpha is
- * the top byte, then R / G / B descending. */
-#define ARGB_BYTES_PER_PIXEL        4
-#define ARGB_ALPHA_OPAQUE_SHIFTED   (0xFFu << 24)
-#define ARGB_R_SHIFT                16
-#define ARGB_G_SHIFT                8
-
 /* UTF-8 lead/continuation bytes start at 0x80 — used to drop multi-
  * byte sequences from SDL_TEXTINPUT (the save-slot name field is
  * single-byte latin-1, accepts only space + '0'..'Z'). */
 #define UTF8_MULTIBYTE_MARK         0x80
-
-/* PALETTE_BYTES_PER_ENTRY mirrors the 3-byte RGB entries in the .PAL
- * file — kept local so this module doesn't depend on the alpha-blit
- * module's copy. */
-#define PALETTE_BYTES_PER_ENTRY     3
-
-/* Default scale factor when --scale wasn't given (1× = native 640×480
- * window). */
-#define DEFAULT_SCALE_FACTOR        1
 
 /* Virtual cursor — d-pad / arrow-keys drive a fake mouse so the game
  * is playable on handhelds (Miyoo Mini Plus and friends, where the
@@ -86,12 +71,11 @@
 
 /* ---- module state ------------------------------------------------- */
 
-static SDL_Window   *s_win  = NULL;
-static SDL_Renderer *s_ren  = NULL;
-static SDL_Texture  *s_tex  = NULL;
+/* The SDL window / renderer / texture live in the video HAL backend
+ * (src/platform/sdl/video_sdl.c); this layer keeps only the framebuffer
+ * dimensions (for the virtual-cursor clamp) and the quit latch. */
 static int           s_w = 0, s_h = 0;
 static int           s_quit = 0;
-static uint32_t      s_pixels32[640 * 480];
 
 static uint8_t       s_typed_q[TYPED_QUEUE_SZ];
 static int           s_typed_head = 0, s_typed_tail = 0;
@@ -148,15 +132,11 @@ int PlatformInit(int w, int h, const char *title)
     SDL_SetHint(SDL_HINT_APP_NAME, "Wacki");
 #endif
 
-#ifdef WACKI_PS2
-    /* PS2: NO SDL video — gsKit owns the GS directly (hardware-palette
-     * present in platform_ps2.c), so SDL must not init its own gsKit. And
-     * NO audio — SDL2-PS2's audsrv backend wedges the IOP. SDL is used
-     * only for input (SDL_GameController) + timing (SDL_GetTicks). */
-    if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0) {
-#else
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0) {
-#endif
+    /* The SDL subsystems each platform needs come from the video HAL:
+     * VIDEO|EVENTS|AUDIO on the SDL backend; EVENTS|TIMER on PS2, where gsKit
+     * owns the GS and audsrv the sound (SDL2-PS2's video/audio backends fight
+     * the IOP), so SDL is used only for input + timing. */
+    if (SDL_Init(plat_video_sdl_init_flags()) != 0) {
         LOG_INFO("log", "SDL_Init: %s", SDL_GetError());
         return 0;
     }
@@ -189,246 +169,29 @@ int PlatformInit(int w, int h, const char *title)
         return 1;
     }
 
-#ifdef WACKI_PS2
-    /* PS2 video is native gsKit (no SDL window/renderer/texture): a PSMT8
-     * texture + CLUT so the GS does the palette lookup in hardware. */
-    {
-        extern int platform_ps2_video_init(int w, int h);
-        if (!platform_ps2_video_init(w, h)) {
-            LOG_INFO("platform", "gsKit video init failed");
-            return 0;
-        }
-        LOG_INFO("platform", "PS2 gsKit video up (640x448 NTSC, PSMT8+CLUT)");
-        /* Native audsrv audio (SDL audio wedges the IOP). */
-        extern void platform_ps2_audio_init(void);
-        platform_ps2_audio_init();
-        return 1;
-    }
-#endif
-
-#ifndef WACKI_HANDHELD
-    /* First launch (no wacki.cfg yet) and the player didn't force a
-     * display mode on the command line / env — ask once which mode
-     * they want, then persist the choice so we never ask again.
-     * Needs SDL video, which SDL_Init above provided; a standalone
-     * message box (NULL parent) is fine before any window exists.
-     * Handheld skips this — Miyoo is always full-screen and has no
-     * pointer to click dialog buttons. */
-    extern int  g_config_first_run;
-    extern void ConfigSave(void);
-    if (g_config_first_run && g_fullscreen == 0 && g_scale_factor == 0) {
-        /* Raw UTF-8 literals — the source file is UTF-8, SDL message
-         * boxes take UTF-8, and every toolchain we build with (clang,
-         * gcc, mingw, arm-gcc) uses a UTF-8 execution charset. Avoids
-         * the \x-escape greedy-extend trap (\xBCesz parses "BCe" as
-         * one out-of-range escape). */
-        const SDL_MessageBoxButtonData btns[] = {
-            { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Pełny ekran" },
-            { 0,                                       1, "Okno 2×" },
-            { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Okno 1×" },
-        };
-        const SDL_MessageBoxData mbd = {
-            SDL_MESSAGEBOX_INFORMATION, NULL,
-            "Wacki — tryb wyświetlania",
-            "Jak chcesz grać?\n\n"
-            "Możesz to później zmienić:\n"
-            "  • F11 — przełącz pełny ekran\n"
-            "  • rozciągnij okno za róg, aby zmienić zoom",
-            (int)SDL_arraysize(btns), btns, NULL
-        };
-        int choice = -1;
-        if (SDL_ShowMessageBox(&mbd, &choice) == 0) {
-            switch (choice) {
-            case 0: g_fullscreen = 1;                    break;
-            case 1: g_fullscreen = 0; g_scale_factor = 2; break;
-            case 2: g_fullscreen = 0; g_scale_factor = 1; break;
-            default: break;   /* closed without picking → defaults */
-            }
-        }
-        ConfigSave();
-    }
-#endif
-
-    /* T54 — HiDPI scaling. The framebuffer stays w×h; the SDL window
-     * can be enlarged Nx and SDL_RenderSetLogicalSize handles the
-     * upscale via SDL_HINT_RENDER_SCALE_QUALITY. */
-    int sf    = g_scale_factor > 0 ? g_scale_factor : DEFAULT_SCALE_FACTOR;
-    int win_w = w * sf;
-    int win_h = h * sf;
-    if (g_scale_mode && *g_scale_mode) {
-        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, g_scale_mode);
-    }
-
-    /* SDL_WINDOW_FULLSCREEN_DESKTOP (not _FULLSCREEN) keeps the desktop
-     * resolution and just makes the window cover the active display —
-     * cheap to toggle, no jarring mode-switch, plays nicely with macOS
-     * Spaces and multi-monitor setups. The framebuffer remains 640×480
-     * and SDL_RenderSetLogicalSize letterboxes it inside the screen.
-     *
-     * SDL_WINDOW_RESIZABLE lets the player drag the window edge to
-     * rescale — the most discoverable zoom control (everyone knows
-     * how to resize a window). RenderSetLogicalSize keeps the 640×480
-     * canvas centred + letterboxed at any window size. */
-#ifdef WACKI_PORTMASTER
-    /* Anbernic / PortMaster: standard SDL2 drives a KMSDRM panel with no
-     * window manager, so always cover the whole display via desktop-
-     * fullscreen and let SDL_RenderSetLogicalSize letterbox the 640×480
-     * canvas. (Miyoo's mmiyoo backend is inherently fullscreen and is
-     * happier left as a "window", so it keeps g_fullscreen as-is.) */
-    g_fullscreen = 1;
-#endif
-
-    Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
-    if (g_fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-
-    s_win = SDL_CreateWindow(title,
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        win_w, win_h, win_flags);
-    if (!s_win) {
-        LOG_INFO("log", "SDL_CreateWindow: %s", SDL_GetError());
-        return 0;
-    }
-
-    s_ren = SDL_CreateRenderer(s_win, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!s_ren) {
-        /* Try software fallback before bailing. */
-        s_ren = SDL_CreateRenderer(s_win, -1, SDL_RENDERER_SOFTWARE);
-    }
-    if (!s_ren) {
-        LOG_INFO("log", "SDL_CreateRenderer: %s", SDL_GetError());
-        return 0;
-    }
-
-    SDL_RenderSetLogicalSize(s_ren, w, h);
-    s_tex = SDL_CreateTexture(s_ren, SDL_PIXELFORMAT_ARGB8888,
-                              SDL_TEXTUREACCESS_STREAMING, w, h);
-    if (!s_tex) {
-        LOG_INFO("log", "SDL_CreateTexture: %s", SDL_GetError());
-        return 0;
-    }
-
-    /* Embedded window icon — the 64×64 BMP baked into the binary by
-     * the embedded_icon.c slot. SDL scales it for whatever target
-     * surface the window manager asks for (taskbar 16×16, dock 128×128,
-     * Alt-Tab thumbnail …). Failure to load is non-fatal; falls back
-     * to the SDL2 default cross icon. */
-    extern unsigned char wacki_icon_bmp[];
-    extern unsigned int  wacki_icon_bmp_len;
-    SDL_RWops *icon_rw = SDL_RWFromConstMem(wacki_icon_bmp,
-                                            (int)wacki_icon_bmp_len);
-    if (icon_rw) {
-        SDL_Surface *icon = SDL_LoadBMP_RW(icon_rw, 1 /* freesrc */);
-        if (icon) {
-            SDL_SetWindowIcon(s_win, icon);
-            SDL_FreeSurface(icon);
-        } else {
-            LOG_INFO("platform", "SDL_LoadBMP_RW (icon): %s", SDL_GetError());
-        }
-    }
-
-#ifdef __APPLE__
-    /* Polish-localise SDL's stock menu bar AND add a "Gra" menu with
-     * Szybki zapis / odczyt, Zrzut ekranu, Pełny ekran, Pauza — wired
-     * to the PlatformMenu* bridges above. Defined in
-     * src/platform_macos.m, linked on Darwin desktop builds only; the
-     * menu exists by the time SDL_CreateWindow has returned. */
-    extern void PlatformSetupMacMenu(void);
-    PlatformSetupMacMenu();
-#endif
-
-    /* T31 v2 — hide the OS cursor; PaintCursor blits the olowek /
-     * kaseta / magnes / drzwi sprite at mouse pos every frame
-     * (matches the original DirectDraw build where the GDI cursor was
-     * hidden and the engine drew its own sprite via the scene-blit
-     * path).
-     *
-     * The initial call here covers the common case (cursor over the
-     * window at launch). PlatformPumpEvents re-asserts SDL_DISABLE on
-     * every poll to defeat macOS Cocoa restoring the arrow on focus-
-     * loss / mouse-leave / re-enter. The repeated call is cheap (SDL
-     * early-outs when the state already matches). */
-    SDL_ShowCursor(SDL_DISABLE);
-
-    const char *drv = SDL_GetCurrentVideoDriver();
-    LOG_INFO("platform", "SDL ready: %dx%d window (%dx scale, %s filter, fullscreen=%d), renderer=%s", win_w, win_h, sf, g_scale_mode ? g_scale_mode : "nearest", g_fullscreen, drv ? drv : "?");
-
-    /* Black initial frame so the window is never garbage. */
-    memset(s_pixels32, 0, (size_t)w * h * ARGB_BYTES_PER_PIXEL);
-    SDL_UpdateTexture(s_tex, NULL, s_pixels32, w * ARGB_BYTES_PER_PIXEL);
-    SDL_RenderClear(s_ren);
-    SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
-    SDL_RenderPresent(s_ren);
-    SDL_PumpEvents();
+    /* Bring up the display through the video HAL — SDL window + renderer +
+     * streaming texture on desktop/handheld (src/platform/sdl/video_sdl.c),
+     * gsKit on PS2 (platform_ps2.c). */
+    if (!plat_video_init(w, h, title)) return 0;
     return 1;
 }
 
 void PlatformShutdown(void)
 {
-    if (s_tex) { SDL_DestroyTexture (s_tex); s_tex = NULL; }
-    if (s_ren) { SDL_DestroyRenderer(s_ren); s_ren = NULL; }
-    if (s_win) { SDL_DestroyWindow  (s_win); s_win = NULL; }
+    plat_video_shutdown();
     SDL_Quit();
 }
 
 /* ---- presentation ------------------------------------------------ */
 
-/* Convert one (palette index, palette[256×3]) frame into the streaming
- * ARGB8888 texture and present it. Caller passes the shadow buffer +
- * the live palette explicitly so this module doesn't reach into
- * graphics.c. */
+/* Present one (8-bpp shadow, palette[256×3]) frame through the video HAL.
+ * Caller passes the shadow buffer + the live palette explicitly so this
+ * module doesn't reach into graphics.c. */
 void PlatformPresent(const uint8_t *shadow,
                      const uint8_t *palette_rgb, int w, int h)
 {
     if (g_headless) return;
-#ifdef WACKI_PS2
-    /* Native gsKit present — GS hardware palette (see platform_ps2.c). */
-    extern void platform_ps2_present(const uint8_t *, const uint8_t *, int, int);
-    platform_ps2_present(shadow, palette_rgb, w, h);
-    return;
-#endif
-    if (!s_tex || !shadow || !palette_rgb) return;
-
-    /* SDL_LockTexture maps the GPU/streaming texture into our address
-     * space so we expand the 8-bpp shadow + palette LUT straight into
-     * its backing memory — one fewer 1.2 MB memcpy per frame than the
-     * SDL_UpdateTexture path. Falls back if Lock fails for any reason
-     * so we still get a frame on screen. */
-    void *pixels = NULL;
-    int   pitch  = 0;
-    if (SDL_LockTexture(s_tex, NULL, &pixels, &pitch) == 0 && pixels) {
-        uint32_t *out         = (uint32_t *)pixels;
-        int       row_stride  = pitch / ARGB_BYTES_PER_PIXEL;
-        for (int y = 0; y < h; ++y) {
-            uint32_t      *row     = out + (size_t)y * row_stride;
-            const uint8_t *src_row = shadow + (size_t)y * w;
-            for (int x = 0; x < w; ++x) {
-                uint8_t        idx = src_row[x];
-                const uint8_t *e   = palette_rgb + idx * PALETTE_BYTES_PER_ENTRY;
-                row[x] = ARGB_ALPHA_OPAQUE_SHIFTED
-                       | ((uint32_t)e[0] << ARGB_R_SHIFT)
-                       | ((uint32_t)e[1] << ARGB_G_SHIFT)
-                       |  (uint32_t)e[2];
-            }
-        }
-        SDL_UnlockTexture(s_tex);
-    } else {
-        int n   = w * h;
-        int cap = (int)(sizeof s_pixels32 / sizeof s_pixels32[0]);
-        if (n > cap) n = cap;
-        for (int i = 0; i < n; ++i) {
-            uint8_t        idx = shadow[i];
-            const uint8_t *e   = palette_rgb + idx * PALETTE_BYTES_PER_ENTRY;
-            s_pixels32[i] = ARGB_ALPHA_OPAQUE_SHIFTED
-                          | ((uint32_t)e[0] << ARGB_R_SHIFT)
-                          | ((uint32_t)e[1] << ARGB_G_SHIFT)
-                          |  (uint32_t)e[2];
-        }
-        SDL_UpdateTexture(s_tex, NULL, s_pixels32, w * ARGB_BYTES_PER_PIXEL);
-    }
-    SDL_RenderClear(s_ren);
-    SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
-    SDL_RenderPresent(s_ren);
+    plat_video_present(shadow, palette_rgb, w, h);
 }
 
 /* ---- event pump -------------------------------------------------- */
@@ -437,23 +200,6 @@ void PlatformPresent(const uint8_t *shadow,
  * nothing. PlatformPumpEvents dispatches on ev.type. */
 
 static int input_debug_enabled(void);
-
-#ifndef WACKI_HANDHELD
-/* Flip between windowed and desktop-fullscreen at runtime and persist
- * the choice. Shared by the F11 key handler and (on macOS) the "Gra"
- * menu's "Pełny ekran" item. SDL_WINDOW_FULLSCREEN_DESKTOP keeps the
- * desktop resolution and just covers the active display. */
-static void toggle_fullscreen_runtime(void)
-{
-    if (!s_win) return;
-    g_fullscreen = !g_fullscreen;
-    SDL_SetWindowFullscreen(s_win,
-        g_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
-    LOG_INFO("platform", "fullscreen=%d", g_fullscreen);
-    extern void ConfigSave(void);
-    ConfigSave();
-}
-#endif
 
 #ifdef __APPLE__
 /* C bridges for the macOS "Gra" menu (src/platform_macos.m). Each maps
@@ -466,7 +212,7 @@ static void toggle_fullscreen_runtime(void)
 void PlatformMenuQuickSave(void)  { g_quicksave_request  = 1; }
 void PlatformMenuQuickLoad(void)  { g_quickload_request  = 1; }
 void PlatformMenuPause(void)      { g_pause_menu_request = 1; }
-void PlatformMenuToggleFull(void) { toggle_fullscreen_runtime(); }
+void PlatformMenuToggleFull(void) { plat_video_toggle_fullscreen(); }
 void PlatformMenuScreenshot(void)
 {
     extern void ScreenshotToBmpAutoIncrement(void);
@@ -498,12 +244,10 @@ static void handle_keydown(const SDL_Event *ev)
     /* T24 — F12 opens the Pytanie quit-confirmation menu. */
     if (sym == SDLK_F12) g_pause_menu_request = 1;
 
-#ifndef WACKI_HANDHELD
-    /* F11 toggles fullscreen at runtime — common convention across
-     * desktop apps. Skipped on handheld builds (Miyoo has no concept
-     * of windowed mode). */
-    if (sym == SDLK_F11) toggle_fullscreen_runtime();
-#endif
+    /* F11 toggles fullscreen at runtime — common convention across desktop
+     * apps. plat_video_toggle_fullscreen is a no-op on handheld/PS2 (no
+     * windowed mode), so this needs no platform guard. */
+    if (sym == SDLK_F11) plat_video_toggle_fullscreen();
 
     /* Inline-edit (save-slot rename): queue Backspace / Enter as
      * typed-char events so the edit loop sees them alongside the
@@ -755,5 +499,5 @@ void PlatformShowMessageBox(const char *title, const char *body)
         LOG_TRACE("msgbox", "%s: %s", title ? title : "(null)", body  ? body  : "(null)");
         return;
     }
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, title, body, s_win);
+    plat_video_message_box(title, body);
 }

@@ -44,6 +44,7 @@
 
 #include "wacki/platform/storage.h"   /* plat_save_read/write contract */
 #include "wacki/platform/audio.h"     /* plat_audio_* contract */
+#include "wacki/platform/video.h"     /* plat_video_* contract */
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
@@ -1007,5 +1008,45 @@ void platform_ps2_present(const uint8_t *shadow, const uint8_t *palette,
 
     g_ps2_present_n++;   /* frame counter — read over PINE to measure fps */
 }
+
+/* ---- video-output HAL (wacki/platform/video.h) ------------------- *
+ *
+ * Thin wrappers over the gsKit display + audsrv set up above. platform_sdl.c
+ * (the shared SDL input/event layer, also compiled for PS2) drives these
+ * instead of #ifdef'ing WACKI_PS2 in PlatformInit/Present. */
+
+/* SDL_Init flags for the PS2: EVENTS + TIMER only (gsKit owns the GS, audsrv
+ * the sound; SDL2-PS2's video/audio backends fight the IOP). These are stable
+ * SDL2 ABI values — naming them here avoids pulling the whole SDL.h into this
+ * gsKit/ps2sdk TU (which already hand-declares SDL_Delay) for two constants. */
+#define PS2_SDL_INIT_TIMER   0x00000001u
+#define PS2_SDL_INIT_EVENTS  0x00004000u
+
+unsigned plat_video_sdl_init_flags(void)
+{
+    return PS2_SDL_INIT_EVENTS | PS2_SDL_INIT_TIMER;
+}
+
+int plat_video_init(int w, int h, const char *title)
+{
+    (void)title;
+    if (!platform_ps2_video_init(w, h)) return 0;
+    /* Native audsrv audio is brought up eagerly here (the intro cutscene's
+     * audio thread must be running before any mixer attach). */
+    platform_ps2_audio_init();
+    return 1;
+}
+
+void plat_video_present(const uint8_t *shadow, const uint8_t *palette_rgb,
+                        int w, int h)
+{
+    platform_ps2_present(shadow, palette_rgb, w, h);
+}
+
+/* gsKit needs no explicit teardown before the process exits; there's no
+ * windowed mode and no SDL message-box surface on the PS2. */
+void plat_video_shutdown(void)                                   { }
+void plat_video_toggle_fullscreen(void)                          { }
+void plat_video_message_box(const char *t, const char *b)        { (void)t; (void)b; }
 
 #endif /* WACKI_PS2 */

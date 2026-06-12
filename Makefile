@@ -309,7 +309,7 @@ ENGINE_SRCS = \
 # audio), so it omits SDL_PLATFORM_SRCS.
 SDL_PLATFORM_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c \
                     src/platform/sdl/file_host.c src/platform/sdl/audio_sdl.c \
-                    src/platform/sdl/flic_host.c
+                    src/platform/sdl/flic_host.c src/platform/sdl/video_sdl.c
 ifeq ($(TARGET),miyoo)
     ENGINE_SRCS += src/platform_miyoo.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),portmaster)

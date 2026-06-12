@@ -136,5 +136,17 @@ the Makefile. The core is untouched.
       + the pacing loop) still `#ifdef`s on PS2 — a separate audio-device
       concern, deferred (the PS2 pacing is timing-sensitive — the "looping
       sample" fix — so it wants its own careful pass).
-- [ ] Step 4 — video + input split.
+- [x] Step 4 — video split. platform_sdl.c's three `#ifdef WACKI_PS2` blocks
+      (SDL_Init flags, gsKit video init, gsKit present) are gone — routed
+      through a video HAL (wacki/platform/video.h): `plat_video_sdl_init_flags`
+      / `plat_video_init` / `plat_video_present` / `plat_video_shutdown` /
+      `plat_video_toggle_fullscreen` / `plat_video_message_box`. The SDL window
+      + renderer + streaming-texture present moved to
+      `platform/sdl/video_sdl.c`; PS2 wraps its gsKit + audsrv in
+      `platform_ps2.c`. platform_sdl.c stays the shared input/event pump (PS2
+      reuses it — the one remaining `WACKI_PS2` mention is just the
+      `WACKI_HAS_SDL_GAMEPAD` feature gate, since the DualShock 2 *is* an SDL
+      gamepad). Input wasn't physically split out — it has no `WACKI_PS2`
+      `#ifdef` to remove (only SDL-family `WACKI_MIYOO`/`WACKI_HANDHELD`/
+      `__APPLE__` variants, which are fine inside the SDL platform file).
 - [ ] Step 5 — lifecycle/CLI.
