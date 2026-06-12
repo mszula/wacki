@@ -5,12 +5,12 @@
  *
  * The raw input/event pump (PlatformPumpEvents, the virtual cursor, the
  * keyboard/mouse/gamepad handlers) is cross-platform and lives in
- * src/platform_sdl.c — every target drives the cursor through the same path,
+ * src/platform/sdl/platform_sdl.c — every target drives the cursor through the same path,
  * so it needs no per-platform split. What *does* vary is input *capability*:
  * gameplay code must not assume a real keyboard exists. That query lives here
  * so scene/gameplay code stays platform-agnostic.
  *
- * Implementation: src/platform_sdl.c (the SDL input layer).
+ * Implementation: src/platform/sdl/platform_sdl.c (the SDL input layer).
  */
 #ifndef WACKI_PLATFORM_INPUT_H
 #define WACKI_PLATFORM_INPUT_H

@@ -3,7 +3,7 @@
  *
  * include/wacki.h — umbrella header for the reconstructed Wacki engine.
  *
- * The engine runs on the SDL2 platform layer (src/platform_sdl.c).
+ * The engine runs on the SDL2 platform layer (src/platform/sdl/platform_sdl.c).
  * Function and field names match the RE'd binary.
  *
  * The contents are split across three sibling headers — pull this

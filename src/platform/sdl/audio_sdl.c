@@ -5,7 +5,7 @@
  *
  * Desktop + handheld implementation of plat_audio_* (wacki/platform/audio.h):
  * one SDL audio device whose callback pulls mixed PCM from the engine mixer.
- * The PS2 backend (audsrv + an EE feeder thread) lives in platform_ps2.c. */
+ * The PS2 backend (audsrv + an EE feeder thread) lives in src/platform/ps2/audio_ps2.c. */
 
 #include "wacki.h"
 #include "wacki/log.h"

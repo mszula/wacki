@@ -15,7 +15,8 @@
  *   plat_prompt_data_folder()— the native folder picker (desktop only;
  *                              osascript / PowerShell / zenity / kdialog).
  *
- * The PS2 equivalents live in platform_ps2.c (fileXio devices + USB mount).
+ * The PS2 equivalents live in src/platform/ps2/storage_ps2.c (fileXio
+ * devices) + system_ps2.c (the USB-mass mount).
  * The OS `#ifdef`s that remain here are intrinsic to one SDL backend
  * spanning macOS / Windows / Linux / handheld — the engine core stays clean. */
 

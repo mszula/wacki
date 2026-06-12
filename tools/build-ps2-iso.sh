@@ -2,7 +2,8 @@
 # Build a bootable PS2 ISO with the engine + game data baked in, so it
 # runs in PCSX2 (or a modded PS2 / FreeDVDBoot) with ZERO HostFS/config
 # fiddling — just "Boot ISO" and go. The data is read off the disc via
-# cdrom0: (the cdrom0: path rewrite lives in src/cygio.c).
+# cdrom0: (the cdfs:/cdrom0: path rewrite lives in ps2_normalize_path,
+# src/platform/ps2/storage_ps2.c).
 #
 # Layout written to the ISO:
 #   SYSTEM.CNF            BOOT2 = cdrom0:\WACK_001.01;1

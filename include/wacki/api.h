@@ -17,7 +17,8 @@
  *   Save                        (src/save.c)
  *   Font + text                 (src/font.c)
  *   Game state machine          (src/game.c, src/menu, src/scene)
- *   Heap + cygio                (src/heap.c, src/cygio.c)
+ *   Heap                        (src/heap.c)
+ *   File-I/O shim (fopen_cyg)   (storage HAL: platform/sdl/file_host.c, ps2)
  *   Inventory + HUD             (src/hud)
  *   Sound queue                 (src/audio/sound_queue.c)
  *   Pointer-slot intern         (src/actor/intern.c) */

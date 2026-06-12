@@ -141,8 +141,8 @@ int platform_ps2_mount_usb(void)
  * (relative) mode so the per-frame delta folds into the same virtual cursor
  * the pad drives — an idle mouse contributes nothing, so the two coexist.
  * Buttons are edge-detected into single clicks (BTN1 = left = walk/interact,
- * BTN2 = right = toggle actor). platform_portmaster.c calls this from
- * platform_pad_read_motion. Returns 1 once the mouse stack is up. */
+ * BTN2 = right = toggle actor). plat_pad_read_extra() (below) folds it into
+ * the gamepad cursor read. Returns 1 once the mouse stack is up. */
 static int      s_mouse_state = -1;  /* -1 untried, 0 unavailable, 1 ready */
 static uint32_t s_mouse_btn   = 0;   /* previous button mask (edge detect) */
 

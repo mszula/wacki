@@ -78,7 +78,7 @@ runs all 41 suites. Exit code 0 if every test passes. Output:
 | `archive_lifecycle` | 4 | OpenDtaArchiveFile dwa razy z różnymi archives → second replaces first (lookup miss/hit flip), same path twice idempotent, **case-fold basename retry** (lowercase path → fopen fail → uppercase retry succeeds), no-uppercase fallback path | `src/archive.c` |
 | `pe_loader_lifecycle` | 6 | Free clears Loaded/Read/ContainsVA state, multiple Free safe (no double-free), **second Init replaces first** (VA range flips), Init without Free works (visible state replaced), **failed Init keeps previous mapping** (conservative), 3-cycle Free/Init alternation | `src/pe_loader.c` |
 | `save_io_extended` | 6 | All 10 slots writable independently + readable, **all WackiSettings fields** persist (video_mode/sound/music/voice/subtitles/dialogues/pad), settings+slots roundtrip together, repeated Writes preserve last-written, entity_state + scene_snapshot per-slot, file size remains WACKI_SAVE_SIZE across writes | `src/save.c` |
-| `heap_cygio`       | 8 | xmalloc/xfree/xcalloc (zero-init flag), fopen_cyg roundtrip read/write/seek SEEK_SET/SEEK_END/tell, fclose_cyg NULL safety | `src/heap.c` + `src/cygio.c` |
+| `heap_cygio`       | 8 | xmalloc/xfree/xcalloc (zero-init flag), fopen_cyg roundtrip read/write/seek SEEK_SET/SEEK_END/tell, fclose_cyg NULL safety | `src/heap.c` + `src/platform/sdl/file_host.c` |
 
 ### What's NOT covered
 
@@ -180,7 +180,8 @@ tests should too.
 
 The test binary links 12 engine TUs:
 ```
-depack.c  archive.c  graphics.c  pe_loader.c  heap.c  cygio.c
+depack.c  archive.c  graphics.c  pe_loader.c  heap.c
+platform/sdl/file_host.c  (the stdio fopen_cyg shim)
 assets.c  font.c     save.c      binary_data.c  timer.c
 script.c  ← linked via tests/sdl_stub/SDL.h (declares only SDL_Delay)
 ```

@@ -9,7 +9,7 @@
  *
  *   desktop / handheld  src/platform/sdl/system_sdl.c  (Win32 stderr→logfile,
  *                                                       macOS app-support cwd)
- *   PS2                 src/platform_ps2.c             (IOP fileio bring-up;
+ *   PS2                 src/platform/ps2/system_ps2.c             (IOP fileio bring-up;
  *                                                       park the EE on exit)
  */
 #ifndef WACKI_PLATFORM_SYSTEM_H

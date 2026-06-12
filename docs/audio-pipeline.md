@@ -26,7 +26,7 @@ flowchart TB
     G -- nie --> I{Start-frame match?}
     I -- tak --> J[Random pool pick<br/>WackiRand]
     J --> K[PlaySfxLoopAndGetChannel<br/>→ mixer_assign]
-    K --> L[SDL audio callback<br/>mixer_callback]
+    K --> L[SDL audio callback<br/>mixer_pull]
     H --> L
     L --> M[SDL audio device<br/>22050 Hz S16]
 ```
@@ -230,7 +230,7 @@ mixer'a — parser i state machine są w pełni testowalne bez SDL audio.
 - **Parser**: `src/audio/sfx.c::ParseSamplTagsForKomnata`
 - **Trigger**: `src/audio/sfx.c::TriggerFrameSfx` + `sfx_handle_end_frames`
 - **Per-komnata wiring**: `src/scene/komnata.c::parse_komnata_sampl_tags`
-- **Mixer callback**: `src/audio.c::mixer_callback`
+- **Mixer callback**: `src/audio.c::mixer_pull`
 - **Pozycyjny pan**: `src/audio/sound_queue.c::SoundQueueMixForListener`
 - **Tests**: `tests/test_sampl_parser.c` (10 cases pokrywające trzy
   kształty tupli + edge cases)

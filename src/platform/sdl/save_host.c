@@ -6,7 +6,7 @@
  * Desktop + handheld implementation of plat_save_read/write: the save is a
  * file (WACKI_SAVE_FILE), written atomically via tmp + rename so a crash
  * mid-write can never leave a zero-byte save (a truncating fopen("wb")
- * would). The PS2 memory-card implementation lives in platform_ps2.c. */
+ * would). The PS2 memory-card implementation lives in src/platform/ps2/storage_ps2.c. */
 
 #include "wacki.h"
 #include "wacki/log.h"

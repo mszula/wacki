@@ -5,7 +5,8 @@
 # The PS2 BIOS browser renders a save's 3D icon (icon.ico) with a 128x128
 # texture in BGR555 (bit layout: X BBBBB GGGGG RRRRR, little-endian u16).
 # This bakes assets/icons/wacki.ico down to that and emits a C array that
-# platform_ps2.c embeds + writes to the card. Re-run when the art changes.
+# src/platform/ps2/storage_ps2.c embeds + writes to the card. Re-run when the
+# art changes.
 #
 #   python3 tools/gen-ps2-icon.py
 #

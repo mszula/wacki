@@ -4,7 +4,7 @@
  * dta-extract.c — standalone extractor for Cygert's .dta archives.
  *
  * Build:  i686-w64-mingw32-gcc -O2 -o dta-extract dta-extract.c
- *         ../src/depack.c ../src/cygio.c ../src/heap.c
+ *         ../src/depack.c ../src/platform/sdl/file_host.c ../src/heap.c
  *
  * Usage:  dta-extract <Dane_XX.dta> [out_dir]
  *

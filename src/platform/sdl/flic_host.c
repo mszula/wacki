@@ -9,7 +9,7 @@
  * decoder's many small per-chunk reads coalesce into a few big sequential
  * block reads — best case for SD/eMMC. The PS2 backend (a background ring-fill
  * thread, since fileXio RPCs are costly and would starve audsrv) lives in
- * platform_ps2.c. */
+ * src/platform/ps2/storage_ps2.c. */
 
 #include "wacki/platform/storage.h"
 

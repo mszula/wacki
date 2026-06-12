@@ -196,6 +196,11 @@ interfaces (reusing `sdl/` where the platform has SDL2) plus one
 
 ## Directory reorg + the per-target hooks model
 
+> Note: the step entries above are a chronological log and refer to the
+> then-monolithic `platform_ps2.c` / flat `platform_*.c` files. They were
+> *later* relocated + split as described here — `platform_ps2.c` →
+> `src/platform/ps2/{system,storage,audio,video}_ps2.c`, etc.
+
 The flat `src/platform_*.c` files are gone — everything platform-specific
 lives under `src/platform/<family>/`:
 

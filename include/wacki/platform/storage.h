@@ -11,7 +11,7 @@
  *
  * Implementations:
  *   desktop / handheld  src/platform/sdl/save_host.c  (a file + atomic rename)
- *   PS2                 src/platform_ps2.c            (the memory card, libmc)
+ *   PS2                 src/platform/ps2/storage_ps2.c            (the memory card, libmc)
  */
 #ifndef WACKI_PLATFORM_STORAGE_H
 #define WACKI_PLATFORM_STORAGE_H
@@ -61,7 +61,7 @@ int plat_prompt_data_folder(int (*probe)(const char *root));
  * defined by the per-platform implementation:
  *
  *   desktop / handheld  src/platform/sdl/file_host.c  (newlib stdio)
- *   PS2                 src/platform_ps2.c            (fileXio — newlib fopen
+ *   PS2                 src/platform/ps2/storage_ps2.c            (fileXio — newlib fopen
  *                                                     reaches no device) */
 typedef struct CygFile CygFile;
 
@@ -80,7 +80,7 @@ int32_t  ftell_cyg (CygFile *);
  *
  *   desktop / handheld  src/platform/sdl/flic_host.c  (a setvbuf'd stdio FILE
  *                                                      — 1 MiB read-ahead)
- *   PS2                 src/platform_ps2.c            (a background thread
+ *   PS2                 src/platform/ps2/storage_ps2.c            (a background thread
  *                                                      filling a ring; a flood
  *                                                      of tiny fileXio RPCs
  *                                                      would starve audsrv) */

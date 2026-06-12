@@ -7,10 +7,10 @@
  * an SDL window + accelerated renderer + streaming ARGB8888 texture. The
  * engine's 8-bpp shadow buffer is expanded through the palette LUT straight
  * into the locked texture each frame. The PS2 backend (gsKit hardware-palette
- * present) lives in platform_ps2.c.
+ * present) lives in src/platform/ps2/video_ps2.c.
  *
  * The cross-platform input/event pump + the public Platform* entry points
- * stay in src/platform_sdl.c, which calls into this HAL. */
+ * stay in src/platform/sdl/platform_sdl.c, which calls into this HAL. */
 
 #include "wacki.h"
 #include "wacki/log.h"

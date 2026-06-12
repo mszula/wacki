@@ -9,7 +9,7 @@
  * zero-init flag, or fseek_cyg flips SEEK_END semantics).
  *
  * Reference: src/heap.c, src/platform/sdl/file_host.c (the stdio backend
- * the host tests link; the PS2 fileXio backend is in platform_ps2.c).
+ * the host tests link; the PS2 fileXio backend is in src/platform/ps2/storage_ps2.c).
  */
 
 #include "test.h"
@@ -70,7 +70,7 @@ TEST(xfree_null_is_safe)
     ASSERT_TRUE(1);
 }
 
-/* ---- cygio.c roundtrip ------------------------------------------------ */
+/* ---- cygio file-shim roundtrip ---------------------------------------- */
 
 static const char kTmpCyg[] = "/tmp/wacki-test-cygio.bin";
 
