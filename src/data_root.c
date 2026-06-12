@@ -296,6 +296,25 @@ static int scan_handheld_card(void)
             return 1;
         }
     }
+
+#ifdef WACKI_PS2
+    /* Real-hardware last resort: host: (PCSX2 HostFS) and cdfs: (a disc)
+     * don't exist when booted from a USB stick via uLaunchELF — the data
+     * sits on the same stick at mass:/wacki/data/. Bring up the USB FAT
+     * stack (lazily, so PCSX2/disc boots skip it) and probe mass:. */
+    extern int platform_ps2_mount_usb(void);
+    if (platform_ps2_mount_usb()) {
+        const char *usb[] = {
+            "mass:/wacki/data", "mass:/wacki", "mass:/DATA", "mass:", NULL
+        };
+        for (int i = 0; usb[i]; ++i) {
+            if (try_root(usb[i])) {
+                LOG_INFO("data-root", "matched on %s (USB)", usb[i]);
+                return 1;
+            }
+        }
+    }
+#endif
     return 0;
 }
 #endif

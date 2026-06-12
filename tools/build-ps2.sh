@@ -110,6 +110,11 @@ docker run --rm --platform linux/amd64 \
         # USB host driver + HID mouse driver (cursor via a USB mouse).
         bin2c $PS2DEV/ps2sdk/iop/irx/usbd.irx     /tmp/embed/usbd_irx.c     usbd_irx
         bin2c $PS2DEV/ps2sdk/iop/irx/ps2mouse.irx /tmp/embed/ps2mouse_irx.c ps2mouse_irx
+        # USB mass storage (BDM FAT stack) — load game data off a USB stick on
+        # real hardware (mass:/wacki/data/), loaded lazily if host:/cdfs: miss.
+        bin2c $PS2DEV/ps2sdk/iop/irx/bdm.irx         /tmp/embed/bdm_irx.c         bdm_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/bdmfs_fatfs.irx /tmp/embed/bdmfs_fatfs_irx.c bdmfs_fatfs_irx
+        bin2c $PS2DEV/ps2sdk/iop/irx/usbmass_bd.irx  /tmp/embed/usbmass_bd_irx.c  usbmass_bd_irx
         # Wipe host-built artefacts so the cross-build doesn't link against
         # leftover x86_64 .o files or a stale generated PE source.
         rm -rf dist src/embedded_wacki_pe.c

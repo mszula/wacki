@@ -48,11 +48,16 @@
 #include "mcserv_irx.c"
 #include "usbd_irx.c"
 #include "ps2mouse_irx.c"
+#include "bdm_irx.c"
+#include "bdmfs_fatfs_irx.c"
+#include "usbmass_bd_irx.c"
 
 /* Hand-declared to dodge ps2sdk's guarded fileXio_rpc.h ("don't mix
  * fio/fileXio with the newlib port"): the engine uses ONLY fileXio for
  * file access (cygio.c), never newlib fopen, so this is safe. */
 extern int fileXioInit(void);
+extern int fileXioDopen(const char *name);   /* USB mount-ready probe */
+extern int fileXioDclose(int fd);
 
 /* ---- bring-up trace (read over PINE) ----------------------------- */
 
@@ -119,6 +124,38 @@ void platform_ps2_io_init(void)
      * SDL_InitSubSystem(GAMECONTROLLER) brings the pad up itself (loads
      * padman), and loading it a second time here conflicts and kills pad
      * input entirely. The pad already works via SDL. */
+}
+
+/* ---- USB mass storage (game data off a USB stick on real HW) ------ *
+ *
+ * On PCSX2 the data lives on HostFS (host:) or the ISO (cdfs:). On a real
+ * console booted from USB (uLaunchELF → mass:/wacki.elf) neither exists —
+ * the data sits on the same stick under mass:/wacki/data/. The IOP reset in
+ * io_init drops uLaunchELF's USB driver, so bring our own BDM FAT stack up
+ * (usbd is already loaded for the mouse) and wait for the drive to
+ * re-enumerate + mount mass:. Lazy + cached: FindDataRoot only calls this
+ * after host:/cdfs: miss, so PCSX2 / disc boots never pay the cost. */
+int platform_ps2_mount_usb(void)
+{
+    static int s_usb = -1;            /* -1 untried, 0 absent, 1 mounted */
+    if (s_usb >= 0) return s_usb;
+
+    int ret;
+    SifExecModuleBuffer(bdm_irx,         size_bdm_irx,         0, NULL, &ret);
+    SifExecModuleBuffer(bdmfs_fatfs_irx, size_bdmfs_fatfs_irx, 0, NULL, &ret);
+    SifExecModuleBuffer(usbmass_bd_irx,  size_usbmass_bd_irx,  0, NULL, &ret);
+
+    /* The stack enumerates + mounts mass: asynchronously a beat later. Poll
+     * the root dir until it opens (each fileXioDopen is a SIF RPC, and the
+     * crude inner delay stretches the wait to a few seconds before giving
+     * up — enough for USB enumeration on real hardware). */
+    for (int i = 0; i < 1000; ++i) {
+        int fd = fileXioDopen("mass:/");
+        if (fd >= 0) { fileXioDclose(fd); s_usb = 1; return 1; }
+        for (volatile int d = 0; d < 300000; ++d) { /* ~ms-scale spin */ }
+    }
+    s_usb = 0;
+    return 0;
 }
 
 /* ---- USB HID mouse ----------------------------------------------- *
