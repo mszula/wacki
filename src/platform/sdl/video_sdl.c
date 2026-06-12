@@ -49,45 +49,11 @@ unsigned plat_video_sdl_init_flags(void)
 
 int plat_video_init(int w, int h, const char *title)
 {
-#ifndef WACKI_HANDHELD
-    /* First launch (no wacki.cfg yet) and the player didn't force a display
-     * mode on the command line / env — ask once which mode they want, then
-     * persist the choice so we never ask again. A standalone message box
-     * (NULL parent) is fine before any window exists. Handheld skips this —
-     * Miyoo is always full-screen and has no pointer to click dialog
-     * buttons. */
-    extern int  g_config_first_run;
-    extern void ConfigSave(void);
-    if (g_config_first_run && g_fullscreen == 0 && g_scale_factor == 0) {
-        /* Raw UTF-8 literals — the source file is UTF-8, SDL message boxes
-         * take UTF-8, and every toolchain we build with uses a UTF-8
-         * execution charset. */
-        const SDL_MessageBoxButtonData btns[] = {
-            { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Pełny ekran" },
-            { 0,                                       1, "Okno 2×" },
-            { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Okno 1×" },
-        };
-        const SDL_MessageBoxData mbd = {
-            SDL_MESSAGEBOX_INFORMATION, NULL,
-            "Wacki — tryb wyświetlania",
-            "Jak chcesz grać?\n\n"
-            "Możesz to później zmienić:\n"
-            "  • F11 — przełącz pełny ekran\n"
-            "  • rozciągnij okno za róg, aby zmienić zoom",
-            (int)SDL_arraysize(btns), btns, NULL
-        };
-        int choice = -1;
-        if (SDL_ShowMessageBox(&mbd, &choice) == 0) {
-            switch (choice) {
-            case 0: g_fullscreen = 1;                     break;
-            case 1: g_fullscreen = 0; g_scale_factor = 2; break;
-            case 2: g_fullscreen = 0; g_scale_factor = 1; break;
-            default: break;   /* closed without picking → defaults */
-            }
-        }
-        ConfigSave();
-    }
-#endif
+    /* Platform display prefs, before any sizing (it sets g_fullscreen /
+     * g_scale_factor that the sizing below reads): on the desktop this shows
+     * the first-run mode picker (fullscreen / window / scale); PortMaster
+     * forces fullscreen for its WM-less KMSDRM panel; Miyoo / PS2 no-op. */
+    plat_apply_video_prefs();
 
     /* T54 — HiDPI scaling. The framebuffer stays w×h; the SDL window can be
      * enlarged Nx and SDL_RenderSetLogicalSize handles the upscale via
@@ -98,11 +64,6 @@ int plat_video_init(int w, int h, const char *title)
     if (g_scale_mode && *g_scale_mode) {
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, g_scale_mode);
     }
-
-    /* Platform display prefs: PortMaster forces desktop-fullscreen here (its
-     * KMSDRM panel has no window manager); a no-op on desktop / Miyoo, which
-     * keep g_fullscreen as configured. */
-    plat_apply_video_prefs();
 
     Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
     if (g_fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -231,9 +192,11 @@ void plat_video_shutdown(void)
     if (s_win) { SDL_DestroyWindow  (s_win); s_win = NULL; }
 }
 
+/* F11 / macOS-menu fullscreen toggle. Reachable only on the desktop in
+ * practice (handhelds map no button to SDLK_F11, and have no menu), so it
+ * needs no platform guard — on a handheld it's simply never called. */
 void plat_video_toggle_fullscreen(void)
 {
-#ifndef WACKI_HANDHELD
     if (!s_win) return;
     g_fullscreen = !g_fullscreen;
     SDL_SetWindowFullscreen(s_win,
@@ -241,7 +204,6 @@ void plat_video_toggle_fullscreen(void)
     LOG_INFO("platform", "fullscreen=%d", g_fullscreen);
     extern void ConfigSave(void);
     ConfigSave();
-#endif
 }
 
 void plat_video_message_box(const char *title, const char *body)

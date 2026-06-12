@@ -404,13 +404,13 @@ void PlatformPumpEvents(void)
              * clicks [×]. Treat both as a quit request so the main
              * loop unwinds + flushes saves. */
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) s_quit = 1;
-#ifndef WACKI_HANDHELD
-            /* Player dragged the window edge to rescale — remember the
-             * nearest integer zoom so the next launch reopens at this
-             * size. The live rescale itself is free (RenderSetLogical
-             * Size letterboxes the 640×480 canvas at any window size);
-             * we only persist the bucket. Skipped while fullscreen
-             * (the resize there reports the whole display). */
+            /* Player dragged the window edge to rescale — remember the nearest
+             * integer zoom so the next launch reopens at this size. The live
+             * rescale itself is free (RenderSetLogicalSize letterboxes the
+             * 640×480 canvas at any window size); we only persist the bucket.
+             * Skipped while fullscreen (the resize there reports the whole
+             * display). Inert on handhelds — a WM-less fullscreen panel never
+             * dispatches WINDOWEVENT_RESIZED. */
             else if (ev.window.event == SDL_WINDOWEVENT_RESIZED &&
                      !g_fullscreen && s_w > 0)
             {
@@ -423,7 +423,6 @@ void PlatformPumpEvents(void)
                     ConfigSave();
                 }
             }
-#endif
             break;
         case SDL_KEYDOWN:
             handle_keydown(&ev);
@@ -456,19 +455,8 @@ void PlatformPumpEvents(void)
 
 int PlatformShouldQuit(void) { return s_quit; }
 
-/* Input capability (wacki/platform/input.h). The handhelds alias hardware
- * buttons onto unpredictable keysyms and the PS2 has no keyboard, so gameplay
- * keybindings beyond ESC gate on this. (A WACKI_HANDHELD branch is fine here —
- * this IS the SDL platform layer; what mattered was keeping the decision out
- * of core scene code.) */
-int plat_input_has_keyboard(void)
-{
-#ifdef WACKI_HANDHELD
-    return 0;
-#else
-    return 1;
-#endif
-}
+/* plat_input_has_keyboard() is provided by the per-target hooks file
+ * (hooks_desktop.c = 1; the handhelds + PS2 = 0). */
 
 /* ---- message box ------------------------------------------------- */
 

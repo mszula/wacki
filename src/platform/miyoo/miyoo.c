@@ -248,6 +248,8 @@ int plat_handle_platform_key(int sym)
 }
 
 /* The Miyoo has a fixed fullscreen display and no SDL_GameController / USB
- * mouse, so these platform hooks are no-ops here. */
+ * mouse, so these platform hooks are no-ops here. Its hardware buttons arrive
+ * as unpredictable firmware keysyms, so it reports no usable keyboard. */
 void plat_apply_video_prefs(void)              { }
 void plat_pad_read_extra(float *ax, float *ay) { (void)ax; (void)ay; }
+int  plat_input_has_keyboard(void)             { return 0; }

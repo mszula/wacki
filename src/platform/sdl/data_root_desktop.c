@@ -1,24 +1,22 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/platform/sdl/data_root_host.c — data-root discovery (storage HAL),
- * desktop + handheld implementation.
+ * src/platform/sdl/data_root_desktop.c — data-root discovery (storage HAL),
+ * desktop implementation.
  *
  * The portable part of the search (env var, cwd, binary-adjacent) lives in
- * data_root.c. This file supplies the two platform hooks for the SDL family
- * of targets:
+ * data_root.c. This file supplies the two SDL-family hooks for the desktop:
  *
- *   plat_data_roots()        — external media (desktop: /Volumes, drive
- *                              letters, /media + /mnt mounts; plus the macOS
- *                              .app-neighbor folder) or the SD-card layout
- *                              (handheld: /mnt/SDCARD + PortMaster /roms).
- *   plat_prompt_data_folder()— the native folder picker (desktop only;
- *                              osascript / PowerShell / zenity / kdialog).
+ *   plat_data_roots()        — external media: /Volumes (macOS), A:..Z:
+ *                              (Windows), /media + /mnt mounts (Linux), plus
+ *                              the macOS .app-neighbor folder.
+ *   plat_prompt_data_folder()— the native folder picker (osascript /
+ *                              PowerShell / zenity / kdialog).
  *
- * The PS2 equivalents live in src/platform/ps2/storage_ps2.c (fileXio
- * devices) + system_ps2.c (the USB-mass mount).
- * The OS `#ifdef`s that remain here are intrinsic to one SDL backend
- * spanning macOS / Windows / Linux / handheld — the engine core stays clean. */
+ * The handheld counterpart (SD-card list, no picker) is data_root_handheld.c;
+ * PS2 lives in src/platform/ps2/storage_ps2.c (fileXio devices) + system_ps2.c
+ * (the USB-mass mount). The `#ifdef`s that remain here are OS variants
+ * (macOS / Windows / Linux) intrinsic to one desktop SDL backend. */
 
 #include "wacki.h"
 #include "wacki/log.h"
@@ -30,50 +28,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__APPLE__) || defined(__linux__) || defined(WACKI_HANDHELD)
+#if defined(__APPLE__) || defined(__linux__)
 #include <dirent.h>
 #include <sys/stat.h>
 #endif
 
 #define DATA_ROOT_SCAN_PATH_BYTES   1024
-
-/* ================================================================= *
- *  Handheld — canonical SD-card data locations
- * ================================================================= */
-
-#ifdef WACKI_HANDHELD
-/* The normal case is already covered by data_root.c's cwd + SDL_GetBasePath
- * probes (OnionOS' launch_standalone and PortMaster both cd into the game dir
- * before exec), so this is a belt-and-suspenders fallback: the Miyoo SD root
- * and the common PortMaster ports folders (/roms/ports, /roms2/ports) used
- * across Anbernic firmwares (muOS, ROCKNIX, ArkOS, Knulli, Batocera...). */
-int plat_data_roots(int (*probe)(const char *root))
-{
-    static const char *const paths[] = {
-        /* Miyoo / OnionOS */
-        "/mnt/SDCARD",
-        "/mnt/SDCARD/data",
-        "/mnt/SDCARD/wacki",
-        "/mnt/SDCARD/wacki/data",
-        "/mnt/SDCARD/Roms/PORTS/Games/Wacki",
-        "/mnt/SDCARD/Roms/PORTS/Games/Wacki/data",
-        /* PortMaster (Anbernic & friends) */
-        "/roms/ports/Wacki",
-        "/roms/ports/Wacki/data",
-        "/roms2/ports/Wacki",
-        "/roms2/ports/Wacki/data",
-        NULL
-    };
-    for (int i = 0; paths[i]; ++i) {
-        if (probe(paths[i])) {
-            LOG_INFO("data-root", "matched on %s", paths[i]);
-            return 1;
-        }
-    }
-    return 0;
-}
-
-#else  /* ================ Desktop ================ */
 
 /* ---- macOS .app neighbor ----------------------------------------- */
 
@@ -212,22 +172,9 @@ int plat_data_roots(int (*probe)(const char *root))
 #endif
 }
 
-#endif /* WACKI_HANDHELD / desktop */
-
 /* ================================================================= *
- *  Native folder picker (desktop only)
+ *  Native folder picker
  * ================================================================= */
-
-#ifdef WACKI_HANDHELD
-/* No keyboard / native picker on a handheld, and the launcher would have
- * refused to start without the data present. */
-int plat_prompt_data_folder(int (*probe)(const char *root))
-{
-    (void)probe;
-    return 0;
-}
-
-#else  /* ================ Desktop ================ */
 
 /* Run the supplied shell command and read one line of stdout. Returns 1 on a
  * non-empty line trimmed into `out`, 0 otherwise. */
@@ -323,5 +270,3 @@ int plat_prompt_data_folder(int (*probe)(const char *root))
                              "Wacki — brak danych", msg, NULL);
     return 0;
 }
-
-#endif /* WACKI_HANDHELD / desktop */

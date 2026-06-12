@@ -24,3 +24,4 @@ void plat_apply_video_prefs(void)
 void plat_restore_system_volume(void)            { }
 int  plat_handle_platform_key(int sym)           { (void)sym; return 0; }
 void plat_pad_read_extra(float *ax, float *ay)   { (void)ax; (void)ay; }
+int  plat_input_has_keyboard(void)               { return 0; }   /* pad only */
