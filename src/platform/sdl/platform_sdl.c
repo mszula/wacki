@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/platform_sdl.c — portable platform layer (SDL2).
+ * src/platform/sdl/platform_sdl.c — portable platform layer (SDL2):
+ * the Platform* entry points + the cross-platform input/event pump.
  *
  * Replaces the original DirectDraw / WndProc / WaitMessage stack. The
  * engine renders into a flat 8-bpp uint8_t shadow buffer; this layer

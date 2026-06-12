@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/platform_macos.m — macOS menu-bar polish.
+ * src/platform/macos/macos.m — macOS menu-bar polish.
  *
  *   1. Polish-localise SDL's stock menu bar. SDL builds the default
  *      Cocoa menu (App / Window / View) with hardcoded English titles

@@ -1,14 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/platform_portmaster.c — PortMaster (Anbernic & friends) gamepad glue.
+ * src/platform/sdl/gamepad_sdl.c — SDL_GameController → cursor glue.
  *
- * On these handhelds standard SDL2 exposes the controls as a real
- * SDL_GameController (PortMaster's launcher feeds the per-device button
- * map via SDL_GAMECONTROLLERCONFIG). This module owns the controller
- * handle and maps it onto the engine's existing software-cursor + click
- * model — the PortMaster counterpart of platform_miyoo.c, which does the
- * equivalent for the Miyoo's keysym-based buttons.
+ * Shared by every pad-driven target — PortMaster (Anbernic & friends), the
+ * PS2's DualShock, the Vita — wherever standard SDL2 exposes the controls as
+ * a real SDL_GameController. This module owns the controller handle and maps
+ * it onto the engine's existing software-cursor + click model (the keysym-
+ * button counterpart for the Miyoo lives in miyoo/miyoo.c).
  *
  *   left stick / d-pad   → move the software cursor
  *   A (south)            → left click   (walk / interact)
@@ -18,8 +17,8 @@
  *
  * platform_sdl.c calls platform_pad_open() once at init, routes
  * SDL_CONTROLLER* events through platform_pad_handle_event(), and folds
- * platform_pad_read_motion() into its per-frame virtual-cursor poll.
- * Linked only for TARGET=portmaster (see Makefile). */
+ * platform_pad_read_motion() into its per-frame virtual-cursor poll. Linked
+ * for the pad targets (see Makefile); not desktop or miyoo. */
 
 #include "wacki.h"
 #include "wacki/log.h"

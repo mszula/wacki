@@ -8,7 +8,7 @@
 #define _GNU_SOURCE
 #endif
 
-/* src/platform_miyoo.c — Miyoo Mini Plus / OnionOS specific glue.
+/* src/platform/miyoo/miyoo.c — Miyoo Mini Plus / OnionOS specific glue.
  *
  * Linked into the binary only when building with TARGET=miyoo (see
  * Makefile). Keeps platform_sdl.c portable; anything that touches

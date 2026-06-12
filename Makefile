@@ -275,7 +275,7 @@ ENGINE_SRCS = \
 	src/save.c    src/font.c      src/flic.c   src/flic/decoder.c \
 	src/heap.c     src/timer.c     src/stubs.c                    \
 	src/binary_data.c src/pe_loader.c src/log.c                  \
-	src/platform_sdl.c src/vm/script_obj.c src/vm/parser.c       \
+	src/platform/sdl/platform_sdl.c src/vm/script_obj.c src/vm/parser.c \
 	src/util/rng.c                                               \
 	src/hud/panel.c src/hud/inventory.c src/hud/items.c          \
 	src/scene/click_queue.c src/scene/hit_test.c src/scene/mask_list.c \
@@ -295,32 +295,30 @@ ENGINE_SRCS = \
 	src/menu/options.c        src/menu/menu_loop.c                   \
 	src/menu/main_menu.c      src/menu/port_attribution.c
 
-# Platform-specific glue is appended only for the matching TARGET.
-# src/platform_miyoo.c carries the OnionOS/MStar bits (MI_AO volume
-# restore) and pulls in libdl — kept out of desktop builds because
-# desktop linkers wouldn't find dlsym + libmi_ao.so doesn't exist.
-# src/platform_portmaster.c carries the Anbernic SDL_GameController →
-# cursor/click input glue.
 # Platform HAL implementations, composed per TARGET (see docs/platform-hal.md).
-# The SDL family (desktop + the handhelds) shares the SDL/stdio HAL impls:
-# storage (save file + atomic rename, data-root discovery + folder picker,
-# stdio file I/O) and audio (SDL_OpenAudioDevice). PS2 provides those same
-# interfaces from platform_ps2.c (libmc save + fileXio devices/I/O + audsrv
-# audio), so it omits SDL_PLATFORM_SRCS.
+# Each lives under src/platform/<family>/; the Makefile links exactly one set
+# per target so the core never #ifdefs on a platform.
+#
+# SDL_PLATFORM_SRCS = the SDL2/stdio HAL impls shared by desktop + the
+# handhelds: storage (save file + atomic rename, data-root + folder picker,
+# stdio file I/O), audio (SDL_OpenAudioDevice), video, system. The PS2 brings
+# its own equivalents (libmc / fileXio / gsKit / audsrv) so it omits this set.
+#
+# src/platform/sdl/gamepad_sdl.c is the SDL_GameController → cursor glue,
+# shared by every pad-driven target (PortMaster, the PS2's DualShock, Vita) —
+# NOT desktop (mouse) or miyoo (firmware keysym buttons).
 SDL_PLATFORM_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c \
                     src/platform/sdl/file_host.c src/platform/sdl/audio_sdl.c \
                     src/platform/sdl/flic_host.c src/platform/sdl/video_sdl.c \
                     src/platform/sdl/system_sdl.c
 ifeq ($(TARGET),miyoo)
-    ENGINE_SRCS += src/platform_miyoo.c $(SDL_PLATFORM_SRCS)
+    # miyoo/miyoo.c carries the OnionOS/MStar bits (MI_AO volume restore +
+    # keysym button map) and pulls in libdl — kept out of desktop builds.
+    ENGINE_SRCS += src/platform/miyoo/miyoo.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),portmaster)
-    ENGINE_SRCS += src/platform_portmaster.c $(SDL_PLATFORM_SRCS)
+    ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c $(SDL_PLATFORM_SRCS)
 else ifeq ($(TARGET),ps2)
-    # Shared SDL_GameController glue: the DualShock 2 reaches the cursor
-    # through the same pad path as PortMaster/Vita. platform_ps2.c adds the
-    # PS2 device glue + the bring-up trace breadcrumbs read over PINE, and
-    # the storage + audio HAL impls (libmc save + fileXio I/O + audsrv).
-    ENGINE_SRCS += src/platform_portmaster.c src/platform_ps2.c
+    ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c src/platform_ps2.c
 else
     ENGINE_SRCS += $(SDL_PLATFORM_SRCS)
 endif
@@ -338,7 +336,7 @@ endif
 ifeq ($(TARGET),)
 ifneq ($(OS),Windows_NT)
 ifeq ($(shell uname -s 2>/dev/null),Darwin)
-    ENGINE_SRCS      += src/platform_macos.m
+    ENGINE_SRCS      += src/platform/macos/macos.m
     MACOS_FRAMEWORKS := -framework Cocoa -framework Security
 endif
 endif
