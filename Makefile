@@ -301,15 +301,22 @@ ENGINE_SRCS = \
 # desktop linkers wouldn't find dlsym + libmi_ao.so doesn't exist.
 # src/platform_portmaster.c carries the Anbernic SDL_GameController →
 # cursor/click input glue.
+# Platform HAL implementations, composed per TARGET (see docs/platform-hal.md).
+# The storage HAL save impl is file-based (src/platform/sdl/save_host.c) for
+# every target EXCEPT ps2, which provides plat_save_* via libmc in
+# platform_ps2.c — so save_host.c is added everywhere but the ps2 branch.
 ifeq ($(TARGET),miyoo)
-    ENGINE_SRCS += src/platform_miyoo.c
+    ENGINE_SRCS += src/platform_miyoo.c src/platform/sdl/save_host.c
 else ifeq ($(TARGET),portmaster)
-    ENGINE_SRCS += src/platform_portmaster.c
+    ENGINE_SRCS += src/platform_portmaster.c src/platform/sdl/save_host.c
 else ifeq ($(TARGET),ps2)
     # Shared SDL_GameController glue: the DualShock 2 reaches the cursor
     # through the same pad path as PortMaster/Vita. platform_ps2.c adds the
-    # PS2 device glue + the bring-up trace breadcrumbs read over PINE.
+    # PS2 device glue + the bring-up trace breadcrumbs read over PINE, and
+    # the libmc plat_save_* storage impl.
     ENGINE_SRCS += src/platform_portmaster.c src/platform_ps2.c
+else
+    ENGINE_SRCS += src/platform/sdl/save_host.c
 endif
 
 # macOS desktop gets a small Objective-C helper that re-titles SDL's
@@ -374,6 +381,7 @@ TEST_ENGINE_SRCS = \
 	src/depack.c    src/archive.c  src/graphics.c \
 	src/pe_loader.c src/heap.c     src/cygio.c    \
 	src/assets.c    src/font.c     src/save.c     \
+	src/platform/sdl/save_host.c                   \
 	src/binary_data.c src/timer.c  src/vm/main.c  src/log.c \
 	src/vm/script_obj.c src/vm/parser.c          \
 	src/util/rng.c                                \

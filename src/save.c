@@ -14,29 +14,10 @@
 
 #include "wacki.h"
 #include "wacki/log.h"
+#include "wacki/platform/storage.h"   /* plat_save_read / plat_save_write */
 #include <string.h>
-#include <stdio.h>
 
-/* Windows rename() refuses to overwrite an existing destination, which
- * breaks the tmp+rename atomic-write pattern below. MoveFileExA with
- * MOVEFILE_REPLACE_EXISTING is the correct equivalent of POSIX rename. */
-#ifndef WACKI_PS2   /* PS2 saves to the memory card (libmc), no tmp+rename */
-#ifdef _WIN32
-#  define WIN32_LEAN_AND_MEAN
-#  include <windows.h>
-static int atomic_replace(const char *from, const char *to)
-{
-    return MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING) ? 0 : -1;
-}
-#else
-static int atomic_replace(const char *from, const char *to)
-{
-    return rename(from, to);
-}
-#endif
-#endif
-
-WackiSaveFile g_save;       /* in-memory image, paged to disk by WriteSaveFile */
+WackiSaveFile g_save;       /* in-memory image, paged to storage by WriteSaveFile */
 
 /* World-state default template — copied into every fresh slot at
  * first launch so loading slot N right after install doesn't see
@@ -56,22 +37,11 @@ void LoadSaveStateOrInitialize(void)
 {
     int loaded = 0;
 
-#ifdef WACKI_PS2
-    /* PS2 saves live on the memory card (mc0:) via libmc — stdio reaches
-     * no device. See platform_ps2.c::platform_ps2_save_read(). */
-    extern int platform_ps2_save_read(void *buf, int size);
-    if (platform_ps2_save_read(&g_save, (int)sizeof g_save) == (int)sizeof g_save &&
+    /* The save image is read through the storage HAL — a file on desktop/
+     * handheld, the memory card (libmc) on PS2. */
+    if (plat_save_read(&g_save, (int)sizeof g_save) == (int)sizeof g_save &&
         g_save.magic == WACKI_SAVE_MAGIC)
         loaded = 1;
-#else
-    FILE *fp = fopen(WACKI_SAVE_FILE, "rb");
-    if (fp) {
-        if (fread(&g_save, 1, sizeof g_save, fp) == sizeof g_save &&
-            g_save.magic == WACKI_SAVE_MAGIC)
-            loaded = 1;
-        fclose(fp);
-    }
-#endif
 
     if (!loaded) {
         memset(&g_save, 0, sizeof g_save);
@@ -132,39 +102,12 @@ int LoadSaveSlot(uint16_t idx)
  * Originally embedded in RunGameStageLoop; extracted here. */
 void WriteSaveFile(void)
 {
-    /* T131 — atomic write via tmp + rename. The original Win32 build
-     * (and the earlier port) did naive `fopen("Wacki.sav", "wb")`,
-     * which TRUNCATES immediately; a crash between open and fwrite
-     * leaves a zero-byte Wacki.sav and the next launch silently
-     * resets to defaults. We write to `Wacki.sav.tmp` first, fflush,
-     * then rename over the real file. */
+    /* Written through the storage HAL — an atomic tmp+rename file commit on
+     * desktop/handheld, the memory card (libmc) on PS2. Either way the engine
+     * never observes a half-written save. */
     g_save.magic = WACKI_SAVE_MAGIC;
-#ifdef WACKI_PS2
-    /* PS2 saves go to the memory card via libmc (see platform_ps2.c). The
-     * Win32 tmp+rename atomicity below doesn't apply — libmc has no rename
-     * and the card write is the commit. */
-    extern int platform_ps2_save_write(const void *buf, int size);
-    if (!platform_ps2_save_write(&g_save, (int)sizeof g_save))
-        LOG_INFO("save", "memory-card write failed — save not persisted");
-    return;
-#else
-    const char *tmp_path = WACKI_SAVE_FILE ".tmp";
-    FILE *fp = fopen(tmp_path, "wb");
-    if (!fp) return;
-    size_t written = fwrite(&g_save, 1, sizeof g_save, fp);
-    if (written != sizeof g_save) {
-        fclose(fp);
-        remove(tmp_path);
-        LOG_INFO("save", "short write (%lu/%lu) — keeping previous save",
-                 (unsigned long)written, (unsigned long)sizeof g_save);
-        return;
-    }
-    fflush(fp);
-    fclose(fp);
-    if (atomic_replace(tmp_path, WACKI_SAVE_FILE) != 0) {
-        LOG_INFO("save", "rename(%s → %s) failed — keeping tmp", tmp_path, WACKI_SAVE_FILE);
-    }
-#endif
+    if (!plat_save_write(&g_save, (int)sizeof g_save))
+        LOG_INFO("save", "save write failed — not persisted");
 }
 
 /* ---- T53 quicksave / quickload (port extension) ------------------ *

@@ -40,6 +40,8 @@
 #include <ps2mouse.h>       /* mouse_data + PS2MOUSE_* constants */
 #include <libmouse.h>       /* PS2MouseInit / PS2MouseRead / ... */
 
+#include "wacki/platform/storage.h"   /* plat_save_read/write contract */
+
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
 #include "cdfs_irx.c"
@@ -362,8 +364,9 @@ static void ps2_write_icons(void)
                   s_wacki_icon_tex, (int)sizeof s_wacki_icon_tex);
 }
 
-/* Write `size` bytes to the card save. Returns 1 on full success. */
-int platform_ps2_save_write(const void *buf, int size)
+/* Storage HAL (include/wacki/platform/storage.h): the save lives on the
+ * memory card via libmc. Write `size` bytes; returns 1 on full success. */
+int plat_save_write(const void *buf, int size)
 {
     if (!ps2_mc_ensure()) return 0;
     mcMkDir(0, 0, MC_SAVE_DIR); mc_block();           /* ok if it exists */
@@ -385,9 +388,9 @@ int platform_ps2_save_write(const void *buf, int size)
     return total == size;
 }
 
-/* Read up to `size` bytes from the card save. Returns bytes read (0 if the
- * save is absent / unreadable). */
-int platform_ps2_save_read(void *buf, int size)
+/* Storage HAL: read up to `size` bytes from the card save. Returns bytes
+ * read (0 if the save is absent / unreadable). */
+int plat_save_read(void *buf, int size)
 {
     if (!ps2_mc_ensure()) return 0;
     mcOpen(0, 0, MC_SAVE_PATH, MC_O_RDONLY);
