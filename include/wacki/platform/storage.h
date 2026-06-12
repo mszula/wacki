@@ -29,4 +29,26 @@ int plat_save_read(void *buf, int size);
  * save). Returns 1 on success, 0 on failure. */
 int plat_save_write(const void *buf, int size);
 
+/* ---- data-root discovery ----------------------------------------- *
+ *
+ * The engine's portable search (env var, cwd, binary-adjacent) lives in
+ * data_root.c; everything platform-specific about *where else* the game
+ * data can live is delegated here. Both entry points are driven by a
+ * core-supplied `probe(root)` callback that tests a candidate directory
+ * for the data archive and, on a hit, commits it as the data root —
+ * returning non-zero. The platform stops at the first non-zero probe. */
+
+/* Probe the platform's built-in candidate data roots in priority order:
+ * external media (desktop), the SD-card layout (handheld), or the PS2
+ * storage devices plus a lazy USB-mass mount. Returns the probe's non-zero
+ * value on the first match, or 0 if none matched. */
+int plat_data_roots(int (*probe)(const char *root));
+
+/* Last-resort interactive fallback: ask the user to point at the data
+ * folder via the OS's native directory picker (desktop only). The picked
+ * path is handed to `probe`; returns its non-zero value on a valid pick, or
+ * 0 when no picker is available (handheld / PS2), the user cancelled, or the
+ * run is headless. */
+int plat_prompt_data_folder(int (*probe)(const char *root));
+
 #endif /* WACKI_PLATFORM_STORAGE_H */

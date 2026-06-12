@@ -105,7 +105,13 @@ the Makefile. The core is untouched.
 - [x] Plan written.
 - [x] Step 1a — save storage behind `storage.h` (PoC; pattern + build
       composition established).
-- [ ] Step 1b — data-root.
+- [x] Step 1b — data-root. `data_root.c` is now platform-`#ifdef`-free
+      (23 → 0): the portable search stays in core; external media / SD-card /
+      PS2 devices + the native folder picker moved behind
+      `plat_data_roots()` / `plat_prompt_data_folder()`
+      (`platform/sdl/data_root_host.c` + the PS2 impl in `platform_ps2.c`).
+      The file-existence probe routes through the existing `cygio` shim, so
+      it needed no new interface.
 - [ ] Step 1c — file I/O.
 - [ ] Step 2 — audio device.
 - [ ] Step 3 — FLIC reader.
