@@ -153,11 +153,10 @@ the Makefile. The core is untouched.
       bring-up, Win32 stderr→logfile, macOS app-support cwd, the PS2 exit
       park) are routed through a system HAL (wacki/platform/system.h):
       `plat_system_early_init` / `plat_system_exit`
-      (`platform/sdl/system_sdl.c` + `platform_ps2.c`). The only conditionals
-      left in main.c are the `WK_PS2_MARK` bring-up-trace macro (a no-op
-      elsewhere — kept deliberately for the PS2 PINE debug rig) and the
-      `WACKI_VERSION` build-string fallback; no platform lifecycle `#ifdef`
-      blocks remain.
+      (`platform/sdl/system_sdl.c` + `platform_ps2.c`). The bring-up trace
+      (`ps2_mark`) is now `plat_trace_mark()` too, so the only conditional left
+      in main.c is the `WACKI_VERSION` build-string fallback (not a platform
+      `#ifdef`).
 
 ## Outcome
 

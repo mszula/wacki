@@ -55,3 +55,7 @@ void plat_system_exit(int rc)
     /* Desktop/handheld: nothing to do — main() returns rc to the OS. */
     (void)rc;
 }
+
+/* Desktop/handheld caches are coherent and there's no PINE trace buffer. */
+void plat_dcache_flush(void *p, unsigned int n) { (void)p; (void)n; }
+void plat_trace_mark(unsigned int code)         { (void)code; }

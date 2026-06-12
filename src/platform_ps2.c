@@ -1069,4 +1069,10 @@ void plat_system_exit(int rc)
     ps2_spin_forever();
 }
 
+/* The EE data cache sits in front of fileXio's DMA into EE RAM; flush the
+ * span the producer wrote so the audio feeder thread reads fresh bytes. */
+void plat_dcache_flush(void *p, unsigned int n) { SyncDCache(p, (uint8_t *)p + n); }
+
+void plat_trace_mark(unsigned int code) { ps2_mark(code); }
+
 #endif /* WACKI_PS2 */

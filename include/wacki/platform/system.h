@@ -33,4 +33,16 @@ void plat_system_early_init(void);
  * returned main() reboots PCSX2 to the BIOS browser); it never returns there. */
 void plat_system_exit(int rc);
 
+/* Flush `n` bytes at `p` from the data cache so another core/thread reads the
+ * just-written bytes rather than a stale cached copy. A no-op where the
+ * platform is cache-coherent (everything but the PS2, whose EE data cache
+ * sits in front of fileXio's DMA into EE RAM — the audio feeder thread would
+ * otherwise read stale ring bytes). */
+void plat_dcache_flush(void *p, unsigned int n);
+
+/* Leave a bring-up breadcrumb in the platform's trace buffer — read over PINE
+ * on the PS2, where ps2sdk's stderr never reaches the emulator/TV. A no-op on
+ * every other target. */
+void plat_trace_mark(unsigned int code);
+
 #endif /* WACKI_PLATFORM_SYSTEM_H */
