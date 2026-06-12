@@ -1,22 +1,29 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * audio.c — SDL audio mixer + music/sfx/dialog dispatch.
+ * audio.c — channel mixer + music/sfx/dialog dispatch.
+ *
+ * The mixer is platform-agnostic: it mixes N channels into one interleaved
+ * S16 stream through a single pull callback (mixer_pull) and knows nothing
+ * about the output device. Opening / closing / locking that device lives
+ * behind the audio HAL (wacki/platform/audio.h) — SDL_OpenAudioDevice on
+ * desktop/handheld, audsrv on PS2.
  *
  * The cutscene playback shim (PlaySceneCutsceneAvi + InitializeDirect
  * Sound) lives in src/audio/cutscene.c — it's the AVI/FLIC entry point
  * and has no direct dependency on the mixer below.
  *
- * What stays here (for now):
- *   - The SDL_AudioDevice mixer core + per-channel WAV loader
+ * What stays here:
+ *   - The channel mixer core (mixer_pull) + per-channel WAV loader
  *   - Music API   (PlayMenuMusic / StopMenuMusic / TickMenuMusic)
  *   - SFX dispatch (Wacky.scr [sampl] parser + TriggerFrameSfx +
  *                   PlaySfx / PlaySfxLoopAndGetChannel / ...)
  *   - Dialog line (PlayDialogLine)
  *   - The per-flag gates (g_audio_music_enabled, _sfx_enabled, etc.)
  *
- * Pulled-apart split into src/audio/{mixer,music,sfx}.c is feasible
- * but blocked on exposing the s_mix array + helpers across TUs. */
+ * NOTE: the WAV *file read* (load_wav_via_cyg) still #ifdefs on WACKI_PS2 —
+ * that's a storage concern (it routes WAV bytes through the cygio shim on
+ * PS2); folding it behind the storage HAL is a follow-up. */
 
 #include "wacki.h"
 #include "wacki/log.h"
@@ -43,19 +50,17 @@
  * TickMenuMusic, TickSfx all keep their signatures + semantics).
  * New: PlayDialogLine — dedicated channel for per-line dialog audio.
  * ------------------------------------------------------------------------- */
-/* MIX_CHANNEL_COUNT, MIX_CHAN_*, MixChannel, s_mix[], and s_mix_dev
- * are declared in audio/mixer_internal.h so src/audio/sfx.c can read
- * the channel array for its replay-guard check. */
+/* MIX_CHANNEL_COUNT, MIX_CHAN_*, MixChannel and s_mix[] are declared in
+ * audio/mixer_internal.h so src/audio/sfx.c can read the channel array for
+ * its replay-guard check. */
 #include "audio/mixer_internal.h"
 #include "audio/music_stream.h"
+#include "wacki/platform/audio.h"
 
 /* MIX_OUT_* output-spec macros live in mixer_internal.h (shared with the
  * music-stream TU). */
 #define MIX_GAIN_IDENTITY     128        /* per-channel gain: 128 = unity */
-#define MIX_OPEN_SAMPLES      2048       /* device buffer in frames */
 
-SDL_AudioDeviceID s_mix_dev = 0;
-static SDL_AudioSpec     s_mix_spec;
 struct MixChannel s_mix[MIX_CHANNEL_COUNT];
 
 /* Some embedded SDL2 backends (notably mmiyoo on Miyoo Mini Plus)
@@ -67,13 +72,13 @@ struct MixChannel s_mix[MIX_CHANNEL_COUNT];
 static int      s_dev_chans = MIX_OUT_CHANS;
 static int16_t  s_mix_tmp[MIX_MAX_FRAMES_PER_CB * MIX_OUT_CHANS];
 
-/* Audio callback — fires on SDL's audio thread. Mix all active channels
- * into a stereo intermediate, then write to the device buffer either
- * as stereo (memcpy) or mono (L+R downmix) depending on what the
- * backend gave us. */
-static void mixer_callback(void *userdata, Uint8 *stream, int len)
+/* The mixer's pull callback (registered with the audio HAL) — invoked on the
+ * platform's audio thread (SDL's callback thread, or the PS2 audsrv feeder).
+ * Mix all active channels into a stereo intermediate, then write to the
+ * device buffer either as stereo (memcpy) or mono (L+R downmix) depending on
+ * what the backend gave us. */
+static void mixer_pull(void *stream, int len)
 {
-    (void)userdata;
     /* len is in bytes. Convert to per-device-frame count given the
      * actual channel count we negotiated. */
     int dev_chans = s_dev_chans > 0 ? s_dev_chans : MIX_OUT_CHANS;
@@ -147,95 +152,39 @@ static void mixer_callback(void *userdata, Uint8 *stream, int len)
     }
 }
 
-#ifdef WACKI_PS2
-/* Pulled by the audsrv audio thread (platform_ps2.c) to fill one chunk of
- * mixed PCM — wraps the static SDL-style callback. The caller holds the
- * channel mutex (g_ps2_audio_sema) around this. */
-void mixer_fill_ps2(void *buf, int len)
-{
-    mixer_callback(NULL, (Uint8 *)buf, len);
-}
-#endif
-
-/* Ensure the mixer device + spec is open. Idempotent. */
+/* Ensure the audio output is up and pulling from the mixer. Idempotent. The
+ * device specifics (SDL vs audsrv) live behind the audio HAL; the mixer just
+ * registers mixer_pull and records the channel count it got (the backend may
+ * hand back mono, which mixer_pull downmixes to). */
 int mixer_ensure_open(void)
 {
-    if (s_mix_dev) return 1;
-#ifdef WACKI_PS2
-    /* PS2: no SDL audio device (opening one wedges the IOP). Audio is
-     * driven by the native audsrv thread (platform_ps2.c) which pulls
-     * mixer_callback via mixer_fill_ps2(). Report "open" in stereo so the
-     * SFX/music paths populate channels; s_mix_dev stays 0 and the channel
-     * mutex is the audsrv semaphore (MIX_DEV_LOCK). */
-    s_dev_chans = MIX_OUT_CHANS;
-    return 1;
-#endif
-    SDL_AudioSpec want;
-    SDL_memset(&want, 0, sizeof want);
-    want.freq     = MIX_OUT_FREQ;
-    want.format   = MIX_OUT_FORMAT;
-    want.channels = MIX_OUT_CHANS;
-    want.samples  = MIX_OPEN_SAMPLES;
-    want.callback = mixer_callback;
-    want.userdata = NULL;
-    /* SDL_AUDIO_ALLOW_CHANNELS_CHANGE + SAMPLES_CHANGE — embedded SDL2
-     * backends (mmiyoo on Miyoo Mini Plus) only do mono S16 at a fixed
-     * buffer size. With allowed_changes=0 SDL2 silently fails to set
-     * up its stereo→mono conversion stream and leaves the backend
-     * wedged in "device-already-open" state, so every subsequent
-     * SFX play retries and bounces off it. Allowing the channel +
-     * sample count to flex means we just take whatever we got; the
-     * callback downmixes if we ended up mono. Frequency stays pinned
-     * because every WAV is pre-converted to 22 050 Hz. */
-    s_mix_dev = SDL_OpenAudioDevice(NULL, 0, &want, &s_mix_spec,
-                                    SDL_AUDIO_ALLOW_CHANNELS_CHANGE |
-                                    SDL_AUDIO_ALLOW_SAMPLES_CHANGE);
-    if (!s_mix_dev) {
-        /* Log only the first attempt — on Miyoo / OnionOS the
-         * audioserver kill is async, so the first dozen-ish attempts
-         * race the dying process and fail with "Audio device already
-         * open". Repeating the line each frame just floods wacki.log. */
-        static int s_logged_open_failure = 0;
-        if (!s_logged_open_failure) {
-            LOG_INFO("mixer", "SDL_OpenAudioDevice failed: %s "
-                              "(will retry silently on next play)",
-                     SDL_GetError());
-            s_logged_open_failure = 1;
-        }
-        return 0;
-    }
-    s_dev_chans = s_mix_spec.channels;
-    SDL_PauseAudioDevice(s_mix_dev, 0);   /* unpause */
-    LOG_INFO("mixer", "opened: %d Hz, %d ch, %d-bit, %d samples",
-             s_mix_spec.freq, s_mix_spec.channels,
-             SDL_AUDIO_BITSIZE(s_mix_spec.format), s_mix_spec.samples);
-#ifdef WACKI_MIYOO
-    /* mmiyoo SDL2 backend resets the kernel mixer to driver-default
-     * (max) on every SDL_OpenAudioDevice — re-apply the user's saved
-     * OnionOS volume now so SFX/music doesn't blast at full volume
-     * until the user mashes Vol+/- to wake the firmware handler. */
-    extern void platform_restore_system_volume(void);
-    platform_restore_system_volume();
-#endif
+    /* Always call plat_audio_open — it's idempotent, and on PS2 the audsrv
+     * feeder thread is brought up eagerly (so the output is already "open"),
+     * yet this is what registers mixer_pull with it. Short-circuiting on
+     * plat_audio_is_open() would leave the PS2 feeder with no pull → silence. */
+    int chans = plat_audio_open(MIX_OUT_FREQ, MIX_OUT_CHANS, mixer_pull);
+    if (chans <= 0) return 0;
+    s_dev_chans = chans;
     return 1;
 }
 
-/* Tear down the SDL mixer device so the mmiyoo single-slot audio
- * hardware is free for an AVI playback. Pauses + closes the device,
- * marks all channels inactive (so any lingering refs don't think
- * playback is still happening) and zeroes s_mix_dev. The next
- * mixer_ensure_open call re-opens lazily on the first SFX/music
- * play after the AVI returns.
+/* Release the mixer's hold on the audio output so a single-slot backend can
+ * hand the hardware to an AVI playback. Marks all channels inactive + frees
+ * their buffers (so lingering refs don't think playback continues), then asks
+ * the audio HAL to release the device (plat_audio_close). The next
+ * mixer_ensure_open re-opens lazily on the first play after the AVI returns.
  *
- * Needed on mmiyoo specifically: the backend wraps a single hardware
- * audio-out slot and refuses a second SDL_OpenAudioDevice with
- * "Audio device already open". Without this, replaying the intro or
- * Credits cutscene from the menu silently dropped audio because the
- * mixer was holding the slot. */
+ * Needed on mmiyoo specifically: the backend wraps a single hardware audio-out
+ * slot and refuses a second SDL_OpenAudioDevice with "Audio device already
+ * open". Without this, replaying the intro or Credits cutscene from the menu
+ * silently dropped audio because the mixer was holding the slot. (On PS2
+ * plat_audio_close is a no-op — audsrv is shared with the cutscene audio.) */
 void mixer_release(void)
 {
-    if (!s_mix_dev) return;
-    SDL_PauseAudioDevice(s_mix_dev, 1);
+    if (!plat_audio_is_open()) return;
+    /* Silence + free every channel under the pull lock first (so the callback
+     * never reads a half-freed buffer), then let the platform release its
+     * hold on the device. */
     MIX_DEV_LOCK();
     for (int i = 0; i < MIX_CHANNEL_COUNT; ++i) {
         s_mix[i].active = 0;
@@ -244,9 +193,7 @@ void mixer_release(void)
         s_mix[i].pos = 0;
     }
     MIX_DEV_UNLOCK();
-    SDL_CloseAudioDevice(s_mix_dev);
-    s_mix_dev = 0;
-    LOG_INFO("mixer", "released (next play re-opens lazily)");
+    plat_audio_close();
 }
 
 /* Load a WAV (from filesystem or DTA) and convert to output spec.
@@ -476,7 +423,7 @@ void StopMenuMusic(void)
     /* Tear down any active stream first (so the producer won't touch the
      * ring), then stop the channel — which frees the ring it owns. */
     music_stream_stop();
-    if (s_mix_dev) mixer_stop_channel(MIX_CHAN_MUSIC);
+    if (plat_audio_is_open()) mixer_stop_channel(MIX_CHAN_MUSIC);
 }
 
 void PlayMenuMusic(const char *dta_name, int loop)
@@ -540,7 +487,7 @@ void AudioSetVoiceEnabled(int on)
 {
     int was = g_audio_voice_enabled;
     g_audio_voice_enabled = on ? 1 : 0;
-    if (was && !on && s_mix_dev) mixer_stop_channel(MIX_CHAN_DIALOG);
+    if (was && !on && plat_audio_is_open()) mixer_stop_channel(MIX_CHAN_DIALOG);
 }
 
 /* Global sound mute — kills both music + SFX while clear,
@@ -587,33 +534,21 @@ uint32_t PlayDialogLine(const char *wav_name)
     return len;
 }
 
-/* "Is the mixer up?" On desktop that's the SDL device handle; on PS2 there is
- * no SDL device (audsrv drives the mixer, opening an SDL one wedges the IOP)
- * so s_mix_dev stays 0 even though the mixer runs the whole session.
- * Functions that gate on "mixer open" — the lip-sync poll, SFX cleanup, the
- * dialog stop — MUST use this, not s_mix_dev, or they silently no-op on PS2
- * (which is why mouths never animated while a line played). */
-static inline int mixer_is_open(void)
-{
-#ifdef WACKI_PS2
-    return 1;
-#else
-    return s_mix_dev != 0;
-#endif
-}
-
-/* StopDialogLine — used to cancel mid-line (e.g. user click-to-skip). */
+/* StopDialogLine — used to cancel mid-line (e.g. user click-to-skip). The
+ * "is the mixer up?" gate is plat_audio_is_open() — the audio HAL knows
+ * whether output is live on every platform (the old s_mix_dev check read 0 on
+ * PS2's audsrv path, which is why these gates silently no-op'd there). */
 void StopDialogLine(void)
 {
-    if (!mixer_is_open()) return;
+    if (!plat_audio_is_open()) return;
     mixer_stop_channel(MIX_CHAN_DIALOG);
 }
 
 /* IsDialogLinePlaying — for lip-sync polling; the mouth animates while the
- * dialog channel is active. (Was gated on s_mix_dev = always 0 on PS2.) */
+ * dialog channel is active. */
 int IsDialogLinePlaying(void)
 {
-    return mixer_is_open() && s_mix[MIX_CHAN_DIALOG].active;
+    return plat_audio_is_open() && s_mix[MIX_CHAN_DIALOG].active;
 }
 
 /* TickSfx — collect drained channels. Callback already sets active=0
@@ -621,7 +556,7 @@ int IsDialogLinePlaying(void)
  * state during audio callback. */
 void TickSfx(void)
 {
-    if (!mixer_is_open()) return;
+    if (!plat_audio_is_open()) return;
     for (int i = MIX_CHAN_SFX_START; i < MIX_CHANNEL_COUNT; ++i) {
         MIX_DEV_LOCK();
         if (!s_mix[i].active && s_mix[i].buf) {

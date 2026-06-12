@@ -326,7 +326,7 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
  * Our port keys per `(asset, frame, wav)` tuple in g_sfx_state[]; the
  * `channel` field mirrors byte+3 by storing the mixer channel the WAV
  * was last assigned to. "Drained" is detected via s_mix[channel].active
- * flipping to 0 in mixer_callback.
+ * flipping to 0 in the mixer pull.
  * ====================================================================== */
 
 #define SFX_STATE_MAX           256

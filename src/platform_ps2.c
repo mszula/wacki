@@ -43,6 +43,7 @@
 #include <libmouse.h>       /* PS2MouseInit / PS2MouseRead / ... */
 
 #include "wacki/platform/storage.h"   /* plat_save_read/write contract */
+#include "wacki/platform/audio.h"     /* plat_audio_* contract */
 
 #include "iomanX_irx.c"
 #include "fileXio_irx.c"
@@ -533,11 +534,12 @@ int32_t ftell_cyg(CygFile *f)
 /* ---- native audsrv audio ----------------------------------------- *
  *
  * SDL2-PS2's audio backend wedges the IOP, so audio goes through audsrv
- * directly. The engine's SDL-style pull mixer (audio.c mixer_callback) is
- * driven from a dedicated EE thread that fills a chunk and pushes it with
- * audsrv_play_audio() (which blocks when audsrv's ring is full — natural
- * pacing). g_ps2_audio_sema guards the channel array against the game
- * thread's SFX assigns (mixer_assign/release take it on PS2). */
+ * directly. The engine's pull mixer (registered via plat_audio_open as
+ * mixer_pull) is driven from a dedicated EE thread that fills a chunk and
+ * pushes it with audsrv_play_audio() (which blocks when audsrv's ring is
+ * full — natural pacing). g_ps2_audio_sema is the audio HAL's channel lock
+ * (plat_audio_lock/unlock), guarding the channel array against the game
+ * thread's SFX assigns. */
 
 /* audsrv's internal ring is only ~4700 bytes (~53 ms). wait_audio(CHUNK)
  * refills whenever CHUNK bytes are free, so a small CHUNK keeps the ring
@@ -547,12 +549,17 @@ int32_t ftell_cyg(CygFile *f)
  * repeats its last buffer (the "looping sample" glitch). 1024 B = 256 frames
  * = ~12 ms feed granularity, ~86 SIF feeds/s. */
 #define PS2_AUD_CHUNK 1024                 /* 256 stereo S16 frames */
-int g_ps2_audio_sema = -1;                 /* shared with audio.c */
+int g_ps2_audio_sema = -1;                 /* the audio HAL channel lock */
 static char s_aud_buf[PS2_AUD_CHUNK]   __attribute__((aligned(64)));
 static char s_aud_stack[16 * 1024]     __attribute__((aligned(16)));
 static volatile int s_aud_run = 0;
 
-extern void mixer_fill_ps2(void *buf, int len);   /* audio.c */
+/* The mixer's pull, registered via plat_audio_open. NULL until the mixer
+ * attaches (the feeder thread starts eagerly for the intro cutscene, which
+ * routes through the AVI ring below — so the mixer branch outputs silence
+ * until a first SFX/music play registers the pull). */
+static plat_audio_pull_fn s_audio_pull = NULL;
+
 extern void SDL_Delay(unsigned int ms);           /* SDL2 */
 
 /* AVI cutscene audio. audsrv stays at 22050/16/stereo; the cutscene's PCM
@@ -594,10 +601,12 @@ static void ps2_audio_thread(void *arg)
     while (s_aud_run) {
         if (s_avi_audio_on) {                 /* a cutscene is playing */
             avi_ring_pull((uint8_t *)s_aud_buf, PS2_AUD_CHUNK);
-        } else {
+        } else if (s_audio_pull) {
             WaitSema(g_ps2_audio_sema);
-            mixer_fill_ps2(s_aud_buf, PS2_AUD_CHUNK);
+            s_audio_pull(s_aud_buf, PS2_AUD_CHUNK);
             SignalSema(g_ps2_audio_sema);
+        } else {
+            memset(s_aud_buf, 0, PS2_AUD_CHUNK);   /* mixer not attached yet */
         }
         /* Pace to the SPU2 drain rate: wait_audio() blocks until the ring
          * has room for the whole chunk, then play_audio() queues it in full.
@@ -840,6 +849,35 @@ void platform_ps2_audio_init(void)
     th.option           = 0;
     int tid = CreateThread(&th);
     if (tid >= 0) StartThread(tid, NULL);
+}
+
+/* ---- audio-output HAL (storage.h sibling: audio.h) --------------- *
+ *
+ * The audsrv feeder thread is brought up eagerly (platform_ps2_audio_init,
+ * called from platform_sdl.c) so the intro cutscene's audio works before any
+ * SFX/music. plat_audio_open just registers the mixer's pull (and starts the
+ * thread if it somehow isn't up yet). plat_audio_close is a no-op: audsrv is
+ * shared with the cutscene audio path, so it must stay alive. */
+int plat_audio_open(int freq, int channels, plat_audio_pull_fn pull)
+{
+    (void)freq;
+    s_audio_pull = pull;
+    if (!s_aud_run) platform_ps2_audio_init();
+    return channels;                       /* audsrv is fixed 22050/16/stereo */
+}
+
+void plat_audio_close(void) { /* audsrv stays up — shared with AVI cutscenes */ }
+
+int  plat_audio_is_open(void) { return s_aud_run; }
+
+void plat_audio_lock(void)
+{
+    if (g_ps2_audio_sema >= 0) WaitSema(g_ps2_audio_sema);
+}
+
+void plat_audio_unlock(void)
+{
+    if (g_ps2_audio_sema >= 0) SignalSema(g_ps2_audio_sema);
 }
 
 /* ---- native gsKit video (hardware palette) ----------------------- *

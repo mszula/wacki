@@ -94,7 +94,6 @@ int  PlatformShouldQuit(void) { return g_stub_should_quit; }
 
 #include "../src/audio/mixer_internal.h"
 
-SDL_AudioDeviceID  s_mix_dev = 0;
 struct MixChannel  s_mix[MIX_CHANNEL_COUNT];
 
 /* Defined in audio.c, used by sfx.c gates. With mixer_ensure_open
@@ -112,8 +111,11 @@ void mixer_assign(int idx, Uint8 *buf, Uint32 len, int loop,
 { (void)idx; (void)buf; (void)len; (void)loop; (void)name; }
 void mixer_stop_channel(int idx)                      { (void)idx; }
 
-void SDL_LockAudioDevice  (SDL_AudioDeviceID d)       { (void)d; }
-void SDL_UnlockAudioDevice(SDL_AudioDeviceID d)       { (void)d; }
+/* Audio-output HAL — sfx.c's MIX_DEV_LOCK routes here now (was the SDL
+ * device lock). No real device under tests, so they're inert. */
+int  plat_audio_is_open(void)                         { return 0; }
+void plat_audio_lock(void)                            { }
+void plat_audio_unlock(void)                          { }
 
 void StopMenuMusic(void)                              {}
 uint32_t PlayDialogLine(const char *wav)              { (void)wav; return 0; }
