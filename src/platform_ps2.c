@@ -410,6 +410,46 @@ int plat_save_read(void *buf, int size)
     return total;
 }
 
+/* ---- data-root discovery (storage HAL) --------------------------- *
+ *
+ * The probe callback (data_root.c::try_root_and_data) opens through the
+ * cygio shim, which on PS2 is fileXio — so here we only supply the PS2
+ * device list and bring up the USB-mass FAT stack lazily. */
+int plat_data_roots(int (*probe)(const char *root))
+{
+    /* host: — PCSX2 HostFS, rooted at the booted ELF's folder (a bare ELF
+     *         next to ./data). cdfs: — the ISO9660 disc; DATA/ holds the
+     *         archives (upper-case, forward-slash, no ';1' suffix — the
+     *         cygio normalizer handles the case fold). Both confirmed on
+     *         PCSX2. */
+    static const char *const dev[] = {
+        "host:data", "host:", "cdfs:/DATA", "cdfs:", NULL
+    };
+    for (int i = 0; dev[i]; ++i)
+        if (probe(dev[i])) return 1;
+
+    /* Real-hardware last resort: host:/cdfs: don't exist when booted from a
+     * USB stick via uLaunchELF — the data sits on the same stick at
+     * mass:/wacki/data/. Bring up the USB FAT stack (lazily, so PCSX2/disc
+     * boots skip it) and probe mass:. */
+    if (platform_ps2_mount_usb()) {
+        static const char *const usb[] = {
+            "mass:/wacki/data", "mass:/wacki", "mass:/DATA", "mass:", NULL
+        };
+        for (int i = 0; usb[i]; ++i)
+            if (probe(usb[i])) return 1;
+    }
+    return 0;
+}
+
+/* No native folder picker on the PS2 — the data location is fixed by the
+ * boot device (disc / HostFS / USB stick). */
+int plat_prompt_data_folder(int (*probe)(const char *root))
+{
+    (void)probe;
+    return 0;
+}
+
 /* ---- native audsrv audio ----------------------------------------- *
  *
  * SDL2-PS2's audio backend wedges the IOP, so audio goes through audsrv

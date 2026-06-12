@@ -302,21 +302,23 @@ ENGINE_SRCS = \
 # src/platform_portmaster.c carries the Anbernic SDL_GameController →
 # cursor/click input glue.
 # Platform HAL implementations, composed per TARGET (see docs/platform-hal.md).
-# The storage HAL save impl is file-based (src/platform/sdl/save_host.c) for
-# every target EXCEPT ps2, which provides plat_save_* via libmc in
-# platform_ps2.c — so save_host.c is added everywhere but the ps2 branch.
+# The SDL family (desktop + the handhelds) shares the stdio/SDL storage impls
+# — save (file + atomic rename) and data-root discovery (external media / SD
+# card + the native folder picker). PS2 provides those same interfaces from
+# platform_ps2.c (libmc save + fileXio devices), so it omits SDL_STORAGE_SRCS.
+SDL_STORAGE_SRCS = src/platform/sdl/save_host.c src/platform/sdl/data_root_host.c
 ifeq ($(TARGET),miyoo)
-    ENGINE_SRCS += src/platform_miyoo.c src/platform/sdl/save_host.c
+    ENGINE_SRCS += src/platform_miyoo.c $(SDL_STORAGE_SRCS)
 else ifeq ($(TARGET),portmaster)
-    ENGINE_SRCS += src/platform_portmaster.c src/platform/sdl/save_host.c
+    ENGINE_SRCS += src/platform_portmaster.c $(SDL_STORAGE_SRCS)
 else ifeq ($(TARGET),ps2)
     # Shared SDL_GameController glue: the DualShock 2 reaches the cursor
     # through the same pad path as PortMaster/Vita. platform_ps2.c adds the
     # PS2 device glue + the bring-up trace breadcrumbs read over PINE, and
-    # the libmc plat_save_* storage impl.
+    # the storage HAL impls (libmc save + fileXio data-root discovery).
     ENGINE_SRCS += src/platform_portmaster.c src/platform_ps2.c
 else
-    ENGINE_SRCS += src/platform/sdl/save_host.c
+    ENGINE_SRCS += $(SDL_STORAGE_SRCS)
 endif
 
 # macOS desktop gets a small Objective-C helper that re-titles SDL's
