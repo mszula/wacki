@@ -153,7 +153,17 @@ int plat_data_roots(int (*probe)(const char *root))
      * external-media scan. */
     char *base = SDL_GetBasePath();
     if (base) {
-        char *neighbor = macos_dirname_of_app(base);
+        /* A quarantined, Finder-launched bundle (downloaded / AirDropped) runs
+         * under Gatekeeper App Translocation: SDL_GetBasePath points at a random
+         * read-only AppTranslocation mount whose neighbor holds no user files.
+         * Resolve the bundle's real on-disk path first so the probe looks where
+         * the user actually dropped data/. No-op (NULL, keep base) when not
+         * translocated. PlatformMacUntranslocatePath lives in macos/macos.m and
+         * links via -framework Security (see mk/desktop.mk). */
+        extern char *PlatformMacUntranslocatePath(const char *);
+        char *real_base = PlatformMacUntranslocatePath(base);
+        char *neighbor = macos_dirname_of_app(real_base ? real_base : base);
+        free(real_base);
         SDL_free(base);
         if (neighbor) {
             int hit = probe(neighbor);
