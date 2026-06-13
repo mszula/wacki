@@ -19,37 +19,25 @@
 # Usage:
 #   ./tools/build-portmaster.sh                 # both arches
 #   ./tools/build-portmaster.sh aarch64         # one arch
+#   WACKI_STRIP=1 ./tools/build-portmaster.sh   # strip (release); default keeps symbols
 #
 # Requires Docker with linux/arm64 + linux/arm/v7 emulation (Docker
 # Desktop on Apple Silicon runs arm64 natively, arm/v7 under qemu).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. tools/lib/common.sh
 
-if [ ! -f data/WACKI.EXE ]; then
-    echo "error: data/WACKI.EXE missing — needed for the embedded PE blob." >&2
-    exit 1
-fi
+require_data_exe
+require_docker
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker not found." >&2
-    exit 1
-fi
-
-VER="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)"
+VER="$(wacki_version)"
 OUT="dist/portmaster"
 mkdir -p "$OUT"
 
-# data/ is usually a symlink to the real (uncommitted) game files. Inside
-# the container that absolute target dangles, so the Makefile can't see
-# data/WACKI.EXE for the embedded blob. Mount the target at the same
-# absolute path so the in-tree symlink resolves — without touching the
-# working tree. (If data/ is a real dir it's already under the /src mount.)
-DATA_MOUNT=()
-DATA_TARGET="$(readlink data 2>/dev/null || true)"
-case "$DATA_TARGET" in
-    /*) DATA_MOUNT=(-v "$DATA_TARGET":"$DATA_TARGET":ro) ;;
-esac
+# Mount the local-dev data/ symlink target so the in-tree symlink resolves
+# inside the container (see tools/lib/common.sh).
+wacki_data_mount
 
 build_one() {
     plat="$1"; arch="$2"; image="$3"
@@ -58,7 +46,8 @@ build_one() {
     # deterministic even when Docker's --platform selection is flaky.
     docker run --rm --platform "$plat" \
         -e "WACKI_VERSION=$VER" \
-        "${DATA_MOUNT[@]}" \
+        -e "WACKI_STRIP=${WACKI_STRIP:-0}" \
+        "${WACKI_DATA_MOUNT[@]}" \
         -v "$PWD":/src -w /src \
         "$image" sh -euc '
             export DEBIAN_FRONTEND=noninteractive
@@ -66,7 +55,10 @@ build_one() {
             apt-get install -y -qq --no-install-recommends \
                 build-essential libsdl2-dev xxd ca-certificates >/dev/null
             make engine TARGET=portmaster STATIC_SDL2=0 DIST=dist/pm-build
-            strip --strip-all dist/pm-build/wacki
+            if [ "${WACKI_STRIP:-0}" = 1 ]; then
+                echo "[portmaster] WACKI_STRIP=1 — stripping release binary"
+                strip --strip-all dist/pm-build/wacki
+            fi
             install -D dist/pm-build/wacki "/src/'"$OUT"'/wacki.'"$arch"'"
             rm -rf dist/pm-build
         '

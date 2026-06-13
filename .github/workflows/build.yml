@@ -4,14 +4,12 @@
 #
 # Each runner needs `data/WACKI.EXE` at build time — its .rdata +
 # .data sections get embedded into the binary by tools/embed-pe-data.
-# The EXE is fetched at job start from a URL provided via the
-# `WACKI_EXE_URL` secret (a private server you own). The URL serves a
-# ZIP holding WACKI.EXE; the fetch step extracts it (and still
-# accepts a raw EXE via a magic-byte sniff). The fetched file lives
-# only inside the runner's workspace; nothing copyrighted ends up in
-# artifacts (the embedded slice table inside the engine binary is a
-# transformation, but the source bytes themselves are never
-# re-uploaded).
+# The EXE is fetched at job start by the local ./.github/actions/
+# fetch-wacki-exe composite action (one place, used by every job),
+# from a URL provided via the `WACKI_EXE_URL` secret (a private server
+# you own). Nothing copyrighted ends up in artifacts — the embedded
+# slice table inside the engine binary is a transformation; the source
+# bytes themselves are never re-uploaded.
 #
 # Each build statically links SDL2 (STATIC_SDL2=1) so the released
 # artefacts have no runtime dependency on libSDL2 / SDL2.dll. The
@@ -21,7 +19,10 @@ name: build
 
 on:
   push:
-    branches: [master, main]
+    # port/ps2 is included so the experimental PS2 port (and the shared
+    # build system it leans on) gets CI on every push to the working
+    # branch, not just at merge time.
+    branches: [master, main, port/ps2]
     tags: ['v*']
   pull_request:
     branches: [master, main]
@@ -162,46 +163,9 @@ jobs:
 
       # ---- fetch the build-time data dependency --------------------
       - name: Fetch WACKI.EXE
-        env:
-          WACKI_EXE_URL: ${{ secrets.WACKI_EXE_URL }}
-        run: |
-          if [ -z "${WACKI_EXE_URL:-}" ]; then
-            echo "::error::WACKI_EXE_URL secret is empty"
-            exit 1
-          fi
-          mkdir -p data
-          curl -fsSL --retry 3 --retry-delay 2 \
-               "$WACKI_EXE_URL" -o data/_wacki_dl
-          # The secret URL serves a ZIP containing WACKI.EXE. Sniff the
-          # magic bytes (ZIP starts with "PK") and extract the EXE if so;
-          # tolerate a raw EXE too in case the URL is ever switched back
-          # to an unpacked file. unzip is present on the macOS + Linux
-          # runners; 7z is the fallback for Windows Git Bash where unzip
-          # isn't guaranteed.
-          if [ "$(head -c 2 data/_wacki_dl)" = "PK" ]; then
-            echo "[fetch] archive detected — extracting WACKI.EXE"
-            mkdir -p data/_unzip
-            if command -v unzip >/dev/null 2>&1; then
-              unzip -o -q data/_wacki_dl -d data/_unzip
-            elif command -v 7z >/dev/null 2>&1; then
-              7z x -y -odata/_unzip data/_wacki_dl >/dev/null
-            else
-              echo "::error::no unzip / 7z available to extract the archive"
-              exit 1
-            fi
-            exe=$(find data/_unzip -iname 'WACKI.EXE' | head -1)
-            [ -n "$exe" ] || exe=$(find data/_unzip -iname '*.exe' | head -1)
-            if [ -z "$exe" ]; then
-              echo "::error::no .exe found inside the downloaded archive"
-              find data/_unzip -type f
-              exit 1
-            fi
-            cp "$exe" data/WACKI.EXE
-            rm -rf data/_unzip data/_wacki_dl
-          else
-            mv data/_wacki_dl data/WACKI.EXE
-          fi
-          ls -la data/WACKI.EXE
+        uses: ./.github/actions/fetch-wacki-exe
+        with:
+          url: ${{ secrets.WACKI_EXE_URL }}
 
       # ---- build + test --------------------------------------------
       - name: Build + test (POSIX, static SDL2)
@@ -219,40 +183,22 @@ jobs:
           make test STATIC_SDL2=1
 
       # ---- smoke: confirm the binary actually boots --------------
-      # Run the just-built engine headless for a few seconds with the
-      # null SDL drivers. Without the Dane_*.dta archive the engine
-      # logs a 'data root not found' error and exits cleanly — but
-      # crucially without segfaulting, hanging, or aborting on a
-      # static-init/SDL_Init failure. Catches linker regressions and
-      # platform-init bugs that 'make test' (468 logic-only tests)
+      # Run the just-built engine headless for a few seconds with no
+      # data present. The shared tools/smoke-runner.sh --boot-only mode
+      # asserts the binary starts and exits cleanly (incl. the rc=1
+      # "data root not found" path) without segfaulting, hanging, or
+      # aborting on a static-init / SDL_Init failure. Catches linker
+      # regressions + platform-init bugs that the logic-only unit tests
       # can't see. Linux only — fastest runner, cheapest signal.
       - name: Smoke (Linux only — binary boots cleanly)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # Remove the WACKI.EXE we fetched earlier so the engine
-          # really does see 'no data'. The embedded PE blob inside
-          # the binary still satisfies PeLoaderRead — only the
-          # external Dane_*.dta lookup fails.
+          # Remove the data so the engine really does see "no data". The
+          # embedded PE blob inside the binary still satisfies
+          # PeLoaderRead — only the external Dane_*.dta lookup fails.
           rm -f data/WACKI.EXE
           rm -rf data/Dane_*.dta data/DANE_*.DTA
-          # 5 s budget. Accepted exit codes:
-          #   0   — clean exit (somehow found data and ran)
-          #   1   — clean "no data found" exit (expected here — main()
-          #         returns 1 after FindDataRoot fails; --headless
-          #         skips the GUI folder picker so it bails fast)
-          #   124 — timeout killed it (made it into the main loop)
-          # A real startup crash shows up as a signal code: 134
-          # (SIGABRT / sanitizer), 139 (SIGSEGV), etc. — those fail.
-          set +e
-          timeout 5 ./dist/wacki --headless >smoke.log 2>&1
-          rc=$?
-          set -e
-          echo "exit code: $rc"
-          tail -20 smoke.log
-          case "$rc" in
-            0|1|124) echo "[smoke] OK (rc=$rc)" ;;
-            *) echo "::error::engine crashed at startup (rc=$rc)"; exit 1 ;;
-          esac
+          tools/smoke-runner.sh --boot-only -d 5
 
       # ---- confirm zero external SDL2 dependency in the binary -----
       - name: Verify no dynamic SDL2 linkage (macOS)
@@ -365,48 +311,16 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch WACKI.EXE
-        env:
-          WACKI_EXE_URL: ${{ secrets.WACKI_EXE_URL }}
-        run: |
-          if [ -z "${WACKI_EXE_URL:-}" ]; then
-            echo "::error::WACKI_EXE_URL secret is empty"
-            exit 1
-          fi
-          mkdir -p data
-          curl -fsSL --retry 3 --retry-delay 2 \
-               "$WACKI_EXE_URL" -o data/_wacki_dl
-          # The secret URL serves a ZIP containing WACKI.EXE. Sniff the
-          # magic bytes (ZIP starts with "PK") and extract the EXE if so;
-          # tolerate a raw EXE too in case the URL is ever switched back
-          # to an unpacked file. unzip is present on the macOS + Linux
-          # runners; 7z is the fallback for Windows Git Bash where unzip
-          # isn't guaranteed.
-          if [ "$(head -c 2 data/_wacki_dl)" = "PK" ]; then
-            echo "[fetch] archive detected — extracting WACKI.EXE"
-            mkdir -p data/_unzip
-            if command -v unzip >/dev/null 2>&1; then
-              unzip -o -q data/_wacki_dl -d data/_unzip
-            elif command -v 7z >/dev/null 2>&1; then
-              7z x -y -odata/_unzip data/_wacki_dl >/dev/null
-            else
-              echo "::error::no unzip / 7z available to extract the archive"
-              exit 1
-            fi
-            exe=$(find data/_unzip -iname 'WACKI.EXE' | head -1)
-            [ -n "$exe" ] || exe=$(find data/_unzip -iname '*.exe' | head -1)
-            if [ -z "$exe" ]; then
-              echo "::error::no .exe found inside the downloaded archive"
-              find data/_unzip -type f
-              exit 1
-            fi
-            cp "$exe" data/WACKI.EXE
-            rm -rf data/_unzip data/_wacki_dl
-          else
-            mv data/_wacki_dl data/WACKI.EXE
-          fi
-          ls -la data/WACKI.EXE
+        uses: ./.github/actions/fetch-wacki-exe
+        with:
+          url: ${{ secrets.WACKI_EXE_URL }}
 
       - name: Build engine (Docker / union-miyoomini-toolchain)
+        # WACKI_STRIP=1 → build-miyoo.sh strips the release binary inside
+        # the toolchain container (right cross `strip`), so no separate
+        # strip step is needed here.
+        env:
+          WACKI_STRIP: 1
         run: |
           ./tools/build-miyoo.sh
           # Docker writes as root-in-container; on Linux runners that
@@ -414,21 +328,8 @@ jobs:
           # step can't create siblings under dist/. Reset ownership.
           sudo chown -R "$USER:$USER" dist src/embedded_wacki_pe.c 2>/dev/null || true
 
-      - name: Strip + log size
-        run: |
-          # Use the same toolchain image for `strip` so the ARM ELF is
-          # parsed correctly (host `strip` rejects unknown arch). Bin
-          # isn't in PATH so call by full path; image default keeps
-          # in sync with tools/build-miyoo.sh.
-          IMG="${MIYOO_DOCKER_IMAGE:-bqcuongas/sdl2-miyoo:latest}"
-          before=$(wc -c < dist/wacki-miyoo | tr -d ' ')
-          docker run --rm --platform linux/amd64 \
-            -v "$PWD:/root/workspace" -w /root/workspace "$IMG" \
-            /opt/mmiyoo/bin/arm-linux-gnueabihf-strip --strip-all dist/wacki-miyoo
-          sudo chown -R "$USER:$USER" dist 2>/dev/null || true
-          after=$(wc -c < dist/wacki-miyoo | tr -d ' ')
-          printf '[size] dist/wacki-miyoo: %s -> %s bytes\n' "$before" "$after"
-          ls -lh dist/wacki-miyoo
+      - name: Log size
+        run: ls -lh dist/wacki-miyoo
 
       - name: Package .pak
         run: ./tools/pack-miyoo.sh dist/wacki-miyoo.zip
@@ -465,44 +366,15 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Fetch WACKI.EXE
-        env:
-          WACKI_EXE_URL: ${{ secrets.WACKI_EXE_URL }}
-        run: |
-          if [ -z "${WACKI_EXE_URL:-}" ]; then
-            echo "::error::WACKI_EXE_URL secret is empty"
-            exit 1
-          fi
-          mkdir -p data
-          curl -fsSL --retry 3 --retry-delay 2 \
-               "$WACKI_EXE_URL" -o data/_wacki_dl
-          # The secret URL serves a ZIP containing WACKI.EXE — sniff the
-          # "PK" magic and extract; tolerate a raw EXE too.
-          if [ "$(head -c 2 data/_wacki_dl)" = "PK" ]; then
-            echo "[fetch] archive detected — extracting WACKI.EXE"
-            mkdir -p data/_unzip
-            if command -v unzip >/dev/null 2>&1; then
-              unzip -o -q data/_wacki_dl -d data/_unzip
-            elif command -v 7z >/dev/null 2>&1; then
-              7z x -y -odata/_unzip data/_wacki_dl >/dev/null
-            else
-              echo "::error::no unzip / 7z available to extract the archive"
-              exit 1
-            fi
-            exe=$(find data/_unzip -iname 'WACKI.EXE' | head -1)
-            [ -n "$exe" ] || exe=$(find data/_unzip -iname '*.exe' | head -1)
-            if [ -z "$exe" ]; then
-              echo "::error::no .exe found inside the downloaded archive"
-              find data/_unzip -type f
-              exit 1
-            fi
-            cp "$exe" data/WACKI.EXE
-            rm -rf data/_unzip data/_wacki_dl
-          else
-            mv data/_wacki_dl data/WACKI.EXE
-          fi
-          ls -la data/WACKI.EXE
+        uses: ./.github/actions/fetch-wacki-exe
+        with:
+          url: ${{ secrets.WACKI_EXE_URL }}
 
       - name: Build engines (Docker / Debian bullseye, aarch64 + armhf)
+        # WACKI_STRIP=1 → build-portmaster.sh strips each release ELF
+        # inside its arch container.
+        env:
+          WACKI_STRIP: 1
         run: |
           ./tools/build-portmaster.sh all
           # Docker writes as root-in-container; reset ownership so the
@@ -519,10 +391,54 @@ jobs:
           path: dist/wacki-portmaster.zip
           if-no-files-found: error
 
+  # ---- PlayStation 2 (EE / ps2dev) --------------------------------
+  # Builds dist/wacki-ps2.elf inside the ps2dev Docker image. Coverage
+  # only: the experimental PS2 ELF is uploaded as a CI artifact but NOT
+  # attached to GitHub Releases (no .pak/.iso release archive yet, and
+  # the release job doesn't depend on this one). Keeps the port building
+  # on every push to port/ps2 so a backend or Makefile change can't
+  # silently break it.
+  ps2:
+    name: PlayStation 2 (EE)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch WACKI.EXE
+        uses: ./.github/actions/fetch-wacki-exe
+        with:
+          url: ${{ secrets.WACKI_EXE_URL }}
+
+      - name: Build ELF (Docker / ps2dev)
+        # WACKI_STRIP=1 → build-ps2.sh strips the release ELF; default
+        # local builds keep symbols for PINE/PCSX2 debugging.
+        env:
+          WACKI_STRIP: 1
+        run: |
+          ./tools/build-ps2.sh
+          sudo chown -R "$USER:$USER" dist src/embedded_wacki_pe.c 2>/dev/null || true
+
+      - name: Log size
+        run: ls -lh dist/wacki-ps2.elf
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wacki-ps2
+          path: dist/wacki-ps2.elf
+          if-no-files-found: error
+
   # ---- release -----------------------------------------------------
   # Only fires on tag push (`v*`). Pulls the per-platform archives
   # from the matrix build + the Miyoo and PortMaster jobs and attaches
-  # them to a GitHub Release named after the tag.
+  # them to a GitHub Release named after the tag. (The ps2 job runs on
+  # tags too but isn't a dependency — the experimental ELF isn't a
+  # release asset yet.)
   release:
     name: GitHub Release
     needs: [build, miyoo, portmaster]

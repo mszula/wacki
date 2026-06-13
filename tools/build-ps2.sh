@@ -14,38 +14,25 @@
 # Local usage:    ./tools/build-ps2.sh   (or: make ps2)
 #
 # Override the image with PS2_DOCKER_IMAGE if you fork.
+# WACKI_STRIP=1 strips the release ELF; the default keeps symbols for
+# PINE/PCSX2 debugging.
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. tools/lib/common.sh
 
 IMAGE="${PS2_DOCKER_IMAGE:-ps2dev/ps2dev:latest}"
 
-if [ ! -f data/WACKI.EXE ]; then
-    echo "error: data/WACKI.EXE missing — required for the embedded PE blob." >&2
-    echo "       Drop the file in ./data/ before building." >&2
-    exit 1
-fi
-
-if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker not installed — install Docker Desktop / docker.io first." >&2
-    exit 1
-fi
+require_data_exe
+require_docker
 
 echo "[ps2] using image: $IMAGE"
 docker pull --platform linux/amd64 "$IMAGE" >/dev/null
 
-# If ./data is a symlink (the local-dev layout that keeps the proprietary
-# game data outside the repo), Docker won't follow it into the host — the
-# link target sits outside the mount. Mount the resolved target too.
-extra_mounts=()
-if [ -L data ]; then
-    data_target="$(cd "$(dirname "$(readlink data)")" && pwd)/$(basename "$(readlink data)")"
-    if [ -d "$data_target" ]; then
-        extra_mounts+=(-v "$data_target:$data_target")
-        echo "[ps2] data/ is a symlink — mounting target $data_target"
-    fi
-fi
+# Mount the local-dev data/ symlink target so the in-tree symlink resolves
+# inside the container (see tools/lib/common.sh).
+wacki_data_mount
 
 # SDL2-PS2 build flags. The image's mips64r5900el-ps2-elf-pkg-config is a
 # wrapper around a host pkg-config that Alpine doesn't ship, so we spell
@@ -69,10 +56,9 @@ SDL_CFLAGS="-I$PORTS/include -I$PORTS/include/SDL2 -I/tmp/embed \
 SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
 -lSDL2 -lfileXio -lcdvd -lpatches -lgskit -ldmakit -lgskit_toolkit -laudsrv -lpadx -lmtap -lmc -lmouse -lps2_drivers -lm"
 
-# Resolve the build version on the HOST (the container has no git, so the
-# Makefile's `git describe` would fall back to "unknown" — which is what the
-# menu/build string showed). Pass it into the container's make explicitly.
-WACKI_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)"
+# Resolve the build version on the HOST (the container's git would fall back to
+# "unknown"); pass it into the container's make explicitly. See common.sh.
+WACKI_VERSION="$(wacki_version)"
 echo "[ps2] version: $WACKI_VERSION"
 
 # Optional video-mode test flags (NTSC 640x448i is the default).
@@ -96,7 +82,7 @@ fi
 # builds embed-pe-data, which runs on the build host, not the PS2).
 docker run --rm --platform linux/amd64 \
     -v "$(pwd):/work" -w /work \
-    "${extra_mounts[@]}" \
+    "${WACKI_DATA_MOUNT[@]}" \
     "$IMAGE" \
     sh -c "
         set -e
@@ -134,6 +120,15 @@ bin=dist/wacki-ps2.elf
 if [ ! -f "$bin" ]; then
     echo "error: $bin not produced" >&2
     exit 1
+fi
+
+# WACKI_STRIP=1 (release path) strips the ELF in a second container pass so the
+# right cross 'strip' is used; the default keeps symbols for PINE/PCSX2 debug.
+if [ "${WACKI_STRIP:-0}" = 1 ]; then
+    echo "[ps2] WACKI_STRIP=1 — stripping release ELF"
+    docker run --rm --platform linux/amd64 \
+        -v "$(pwd):/work" -w /work "$IMAGE" \
+        mips64r5900el-ps2-elf-strip --strip-all "$bin"
 fi
 
 echo "[ps2] built $bin"

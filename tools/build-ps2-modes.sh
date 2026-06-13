@@ -12,6 +12,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. tools/lib/common.sh
 
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
@@ -35,8 +36,7 @@ mkdir -p dist
 rm -f dist/wacki-ps2.elf
 mv "$stage"/wacki-ps2-*.elf dist/
 if [ -L data ]; then
-    real_data="$(cd "$(dirname "$(readlink data)")" && pwd)/$(basename "$(readlink data)")"
-    ln -sfn "$real_data" dist/data
+    ln -sfn "$(wacki_data_dir)" dist/data
 fi
 
 echo

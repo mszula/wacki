@@ -1,0 +1,57 @@
+name: Fetch WACKI.EXE
+description: >-
+  Download WACKI.EXE into data/WACKI.EXE — the build-time dependency whose
+  .rdata/.data sections tools/embed-pe-data bakes into the binary. The source
+  URL serves a ZIP holding the EXE (a raw EXE is also tolerated via a magic-byte
+  sniff). Nothing copyrighted ends up in artifacts — only the transformed slice
+  table inside the engine binary. Requires actions/checkout to have run first
+  (this is a local `./.github/actions` composite action).
+
+inputs:
+  url:
+    description: URL serving the WACKI.EXE ZIP (or a raw EXE). Pass the WACKI_EXE_URL secret.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        WACKI_EXE_URL: ${{ inputs.url }}
+      run: |
+        if [ -z "${WACKI_EXE_URL:-}" ]; then
+          echo "::error::WACKI_EXE_URL is empty (set the WACKI_EXE_URL secret)"
+          exit 1
+        fi
+        mkdir -p data
+        curl -fsSL --retry 3 --retry-delay 2 \
+             "$WACKI_EXE_URL" -o data/_wacki_dl
+        # The URL serves a ZIP containing WACKI.EXE. Sniff the magic bytes (ZIP
+        # starts with "PK") and extract the EXE if so; tolerate a raw EXE too in
+        # case the URL is ever switched back to an unpacked file. unzip is
+        # present on the macOS + Linux runners; 7z is the fallback for Windows
+        # Git Bash where unzip isn't guaranteed.
+        if [ "$(head -c 2 data/_wacki_dl)" = "PK" ]; then
+          echo "[fetch] archive detected — extracting WACKI.EXE"
+          mkdir -p data/_unzip
+          if command -v unzip >/dev/null 2>&1; then
+            unzip -o -q data/_wacki_dl -d data/_unzip
+          elif command -v 7z >/dev/null 2>&1; then
+            7z x -y -odata/_unzip data/_wacki_dl >/dev/null
+          else
+            echo "::error::no unzip / 7z available to extract the archive"
+            exit 1
+          fi
+          exe=$(find data/_unzip -iname 'WACKI.EXE' | head -1)
+          [ -n "$exe" ] || exe=$(find data/_unzip -iname '*.exe' | head -1)
+          if [ -z "$exe" ]; then
+            echo "::error::no .exe found inside the downloaded archive"
+            find data/_unzip -type f
+            exit 1
+          fi
+          cp "$exe" data/WACKI.EXE
+          rm -rf data/_unzip data/_wacki_dl
+        else
+          mv data/_wacki_dl data/WACKI.EXE
+        fi
+        ls -la data/WACKI.EXE

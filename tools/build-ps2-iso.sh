@@ -22,13 +22,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. tools/lib/common.sh
 
 IMAGE="${PS2_DOCKER_IMAGE:-ps2dev/ps2dev:latest}"
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker not installed." >&2
-    exit 1
-fi
+require_docker
 
 # 1. Ensure the ELF exists (build it if missing or forced).
 if [ ! -f dist/wacki-ps2.elf ] || [ "${FORCE_ELF:-0}" = 1 ]; then
@@ -37,11 +35,8 @@ if [ ! -f dist/wacki-ps2.elf ] || [ "${FORCE_ELF:-0}" = 1 ]; then
 fi
 
 # Resolve the real data directory (follow the local-dev symlink so Docker
-# can see the archives).
-data_dir=data
-if [ -L data ]; then
-    data_dir="$(cd "$(dirname "$(readlink data)")" && pwd)/$(basename "$(readlink data)")"
-fi
+# can see the archives — see tools/lib/common.sh).
+data_dir="$(wacki_data_dir)"
 if ! ls "$data_dir"/[Dd][Aa][Nn][Ee]_02.[Dd][Tt][Aa] >/dev/null 2>&1; then
     echo "error: no Dane_02 archive under $data_dir" >&2
     exit 1
