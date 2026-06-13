@@ -101,7 +101,6 @@ typedef struct {
     uint16_t  audio_channels;
     uint16_t  audio_bits;
     uint32_t  audio_samples_per_sec;
-    int       need_downmix;      /* stereo source → mono device */
     uint32_t  cushion_bytes;     /* AUDIO_CUSHION_MS in device-rate bytes */
 
     /* reusable scratch for the current audio chunk */
@@ -113,21 +112,51 @@ typedef struct {
     int       r_head, r_tail, r_count;
 } AviStream;
 
-/* SDL audio device, opened on demand and reused across cutscenes. */
+/* SDL audio device, opened on demand and reused across cutscenes.
+ * s_audio_spec_cur is the *obtained* spec — i.e. the device's real
+ * hardware rate/format, which on Windows/WASAPI is usually NOT the
+ * AVI's rate. */
 static SDL_AudioDeviceID s_audio_dev = 0;
 static SDL_AudioSpec     s_audio_spec_cur;
 static int               s_audio_open = 0;
 
+/* The AVI's source PCM spec the device was last opened for. The device
+ * may negotiate something else (hardware mix rate / mono), so the reuse
+ * check keys off the source — not the obtained spec. */
+static int             s_audio_src_freq  = 0;
+static uint16_t        s_audio_src_chans = 0;
+static SDL_AudioFormat s_audio_src_fmt   = 0;
+
+/* Explicit resampler: source PCM → obtained device spec. Built only when
+ * the two differ. We queue its output, which is already at the device's
+ * rate, so SDL never has to convert at queue time. See audio_ensure for
+ * why we don't lean on SDL's implicit queue-time conversion. NULL when
+ * the device opened at exactly the source spec (no conversion needed). */
+static SDL_AudioStream *s_audio_cvt     = NULL;
+static uint8_t         *s_cvt_out       = NULL;
+static int              s_cvt_out_cap   = 0;
+
+static void audio_cvt_free(void)
+{
+    if (s_audio_cvt) { SDL_FreeAudioStream(s_audio_cvt); s_audio_cvt = NULL; }
+    free(s_cvt_out);
+    s_cvt_out = NULL;
+    s_cvt_out_cap = 0;
+}
+
 static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
 {
+    SDL_AudioFormat src_fmt = (bits == 8) ? AUDIO_U8 : AUDIO_S16LSB;
+
+    /* Reuse the open device when the SOURCE spec is unchanged. */
     if (s_audio_open &&
-        s_audio_spec_cur.freq == (int)sample_rate &&
-        s_audio_spec_cur.channels == channels &&
-        s_audio_spec_cur.format ==
-            (SDL_AudioFormat)(bits == 8 ? AUDIO_U8 : AUDIO_S16LSB))
+        s_audio_src_freq  == (int)sample_rate &&
+        s_audio_src_chans == channels &&
+        s_audio_src_fmt   == src_fmt)
         return;
 
     if (s_audio_open) { SDL_CloseAudioDevice(s_audio_dev); s_audio_open = 0; }
+    audio_cvt_free();
 
     /* mmiyoo holds a single audio device slot — close the SFX/music
      * mixer if it's up so SDL_OpenAudioDevice below doesn't bounce
@@ -138,7 +167,7 @@ static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
 
     SDL_AudioSpec want = {0};
     want.freq     = (int)sample_rate;
-    want.format   = (bits == 8) ? AUDIO_U8 : AUDIO_S16LSB;
+    want.format   = src_fmt;
     want.channels = (Uint8)channels;
     /* 4096-frame buffer (~185 ms at 22 kHz) keeps the device fed
      * between AVI audio chunks, which arrive every video frame —
@@ -147,24 +176,47 @@ static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
      * through every gap → audible chopping. Larger is safer on the
      * Miyoo/mmiyoo backend which can't switch buffers on the fly. */
     want.samples  = 4096;
-    /* CHANNELS + SAMPLES may flex (mmiyoo: mono-only, fixed buffer).
-     * NOT frequency: we queue PCM verbatim with no resampler, so the
-     * device must run at the AVI's rate. Windows/WASAPI can't change
-     * its mix rate and would replay our 22 kHz bytes ~2x too fast
-     * ("sped up, then silence"); omitting the flag lets SDL resample
-     * for us. Same reason the audio.c mixer pins its frequency. */
+    /* Let the device pick its own rate/channels/buffer; we adapt to
+     * whatever it returns. Windows/WASAPI shared mode can only run at
+     * the system mix rate (44.1/48 kHz), never the AVI's 22 kHz — and
+     * SDL's implicit conversion of *queued* audio doesn't kick in on
+     * that backend (the callback-based mixer in audio.c converts fine,
+     * but the SDL_QueueAudio path here played our 22 kHz bytes ~2x too
+     * fast: "sped up, then silence" on a loop). So we resample
+     * explicitly below into the obtained spec instead of trusting SDL
+     * to do it for us. */
     s_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &s_audio_spec_cur,
+                                      SDL_AUDIO_ALLOW_FREQUENCY_CHANGE |
                                       SDL_AUDIO_ALLOW_CHANNELS_CHANGE |
                                       SDL_AUDIO_ALLOW_SAMPLES_CHANGE);
     if (!s_audio_dev) {
         LOG_INFO("audio", "SDL_OpenAudioDevice (avi): %s", SDL_GetError());
         return;
     }
-    s_audio_open = 1;
+    s_audio_open      = 1;
+    s_audio_src_freq  = (int)sample_rate;
+    s_audio_src_chans = channels;
+    s_audio_src_fmt   = src_fmt;
+
+    /* Build the resampler whenever the device didn't hand us back the
+     * exact source spec. This also subsumes the old stereo→mono downmix
+     * (mmiyoo): the stream folds channels for us. */
+    if (s_audio_spec_cur.freq != (int)sample_rate ||
+        s_audio_spec_cur.channels != channels ||
+        s_audio_spec_cur.format != src_fmt) {
+        s_audio_cvt = SDL_NewAudioStream(src_fmt, (Uint8)channels, (int)sample_rate,
+                                         s_audio_spec_cur.format,
+                                         s_audio_spec_cur.channels,
+                                         s_audio_spec_cur.freq);
+        if (!s_audio_cvt)
+            LOG_INFO("audio", "SDL_NewAudioStream failed: %s", SDL_GetError());
+    }
+
     SDL_PauseAudioDevice(s_audio_dev, 0);
-    LOG_INFO("audio", "AVI audio: %d Hz, %d ch, %d samples",
+    LOG_INFO("audio", "AVI audio: src %u Hz %u ch %u-bit -> device %d Hz %d ch %d samples%s",
+             sample_rate, channels, bits,
              s_audio_spec_cur.freq, s_audio_spec_cur.channels,
-             s_audio_spec_cur.samples);
+             s_audio_spec_cur.samples, s_audio_cvt ? " [resampling]" : "");
 #ifdef WACKI_MIYOO
     /* mmiyoo resets kernel mixer on each SDL_OpenAudioDevice — re-apply
      * the OnionOS-saved volume so the AVI doesn't blast at max. */
@@ -173,15 +225,44 @@ static void audio_ensure(uint32_t sample_rate, uint16_t channels, uint16_t bits)
 #endif
 }
 
+/* Push one AVI audio chunk to the device, resampling through s_audio_cvt
+ * first when the device rate/format differs from the source. */
+static void audio_queue_chunk(const uint8_t *data, uint32_t sz)
+{
+    if (!s_audio_cvt) {                       /* device matches source */
+        SDL_QueueAudio(s_audio_dev, data, sz);
+        return;
+    }
+    if (SDL_AudioStreamPut(s_audio_cvt, data, (int)sz) < 0)
+        return;
+    for (;;) {
+        int avail = SDL_AudioStreamAvailable(s_audio_cvt);
+        if (avail <= 0) break;
+        if (avail > s_cvt_out_cap) {
+            uint8_t *n = (uint8_t *)realloc(s_cvt_out, (size_t)avail);
+            if (!n) return;                   /* OOM — drop the tail */
+            s_cvt_out     = n;
+            s_cvt_out_cap = avail;
+        }
+        int got = SDL_AudioStreamGet(s_audio_cvt, s_cvt_out, avail);
+        if (got <= 0) break;
+        SDL_QueueAudio(s_audio_dev, s_cvt_out, (Uint32)got);
+    }
+}
+
 /* Release the AVI audio device. Called at end of playback so the
  * mixer (audio.c) can take the single mmiyoo hardware slot. On a
  * desktop with proper multi-device SDL this is just hygiene. */
 static void audio_release(void)
 {
+    audio_cvt_free();
     if (!s_audio_open) return;
     SDL_CloseAudioDevice(s_audio_dev);
-    s_audio_open = 0;
-    s_audio_dev = 0;
+    s_audio_open      = 0;
+    s_audio_dev       = 0;
+    s_audio_src_freq  = 0;
+    s_audio_src_chans = 0;
+    s_audio_src_fmt   = 0;
 }
 
 /* ---- RIFF / AVI FourCCs ------------------------------------------- */
@@ -382,11 +463,9 @@ static int avi_open_stream(AviStream *s, const char *path)
     if (s->audio_samples_per_sec) {
         audio_ensure(s->audio_samples_per_sec, s->audio_channels, s->audio_bits);
         if (s_audio_open) {
-            /* Source stereo but device negotiated mono (mmiyoo only
-             * outputs mono and passes ALLOW_CHANNELS_CHANGE). */
-            s->need_downmix = (s->audio_channels == 2 &&
-                               s_audio_spec_cur.channels == 1 &&
-                               s->audio_bits == 16);
+            /* Cushion is measured against the device FIFO, so size it in
+             * the obtained (device) rate/format — that's also what we
+             * queue, since audio_queue_chunk resamples to it. */
             int bytes_per_sample = SDL_AUDIO_BITSIZE(s_audio_spec_cur.format) / 8;
             uint32_t bps = (uint32_t)s_audio_spec_cur.freq *
                            s_audio_spec_cur.channels * (uint32_t)bytes_per_sample;
@@ -440,20 +519,7 @@ static int stream_pump_one(AviStream *s)
         }
         if (fread(s->ascratch, 1, sz, s->fp) != sz) { s->eof = 1; return 0; }
         if (pad) fseek(s->fp, 1, SEEK_CUR);
-        if (s->need_downmix && (sz & 3) == 0) {
-            /* Fold L+R → (L+R)/2 in place before queuing; otherwise the
-             * mono device reads stereo bytes as a mono stream and plays
-             * at double speed with channel-alternation garble. */
-            int16_t *a = (int16_t *)s->ascratch;
-            uint32_t frames = sz / 4;
-            for (uint32_t i = 0; i < frames; ++i) {
-                int v = (int)a[i * 2] + (int)a[i * 2 + 1];
-                a[i] = (int16_t)(v / 2);
-            }
-            SDL_QueueAudio(s_audio_dev, s->ascratch, frames * 2);
-        } else {
-            SDL_QueueAudio(s_audio_dev, s->ascratch, sz);
-        }
+        audio_queue_chunk(s->ascratch, sz);    /* resamples if needed */
         s->pos = next;
         return 1;
     }
@@ -532,6 +598,7 @@ int PlayFlicAviFile(const char *path)
             if (s_audio_open) {
                 SDL_PauseAudioDevice(s_audio_dev, 1);
                 SDL_ClearQueuedAudio(s_audio_dev);
+                if (s_audio_cvt) SDL_AudioStreamClear(s_audio_cvt);
                 SDL_PauseAudioDevice(s_audio_dev, 0);
             }
             skipped = 1;
