@@ -1,267 +1,87 @@
-# Makefile — builds the reconstructed Wacki engine (SDL2 portable) + tools.
+# Makefile — builds the reconstructed Wacki engine + tools.
+#
+# Per-target config is chopped out into mk/<target>.mk — one file per platform,
+# mirroring src/platform/<family>/. This top file holds only what's COMMON
+# (toolchain, base flags, the platform-agnostic source lists, the generic
+# recipes); it then `include`s exactly one mk/<target>.mk based on $(TARGET),
+# which sets that platform's CFLAGS / BIN_NAME / size opts / PLATFORM_SRCS.
+#
+# Adding a platform = a new src/platform/<plat>/ dir + a new mk/<plat>.mk; no
+# edits to this file. Build a non-default target with `make TARGET=<plat>`
+# (in practice via the tools/build-<plat>.sh Docker wrappers).
 
 CC       ?= cc
 SDL2_CFG ?= sdl2-config
 
-# ---- cross-compile knobs ------------------------------------------------- *
-#
-# TARGET=miyoo cross-compiles for Miyoo Mini Plus and pin-compatible
-# handhelds (Cortex-A7 armv7l, hardfloat, NEON). Used together with a
-# CROSS_COMPILE prefix:
-#
-#   make TARGET=miyoo CROSS_COMPILE=arm-linux-gnueabihf-
-#
-# In practice you run it through tools/build-miyoo.sh which sets up the
-# union-miyoomini-toolchain Docker image with the right sdl2-config.
+# ---- cross-compile toolchain --------------------------------------------- *
+# A CROSS_COMPILE prefix retargets the engine compiler (e.g. arm-linux-
+# gnueabihf- for Miyoo). HOSTCC stays native — it builds the embed-pe-data code
+# generator, which MUST run on the build machine, not the target.
 TARGET         ?=
 CROSS_COMPILE  ?=
-# HOSTCC is the compiler for build-time tools (embed-pe-data) which
-# MUST run on the build machine, not the target. When cross-compiling
-# we still need a host gcc/cc to produce a runnable code generator;
-# default to whatever cc resolved to before CROSS_COMPILE overrode it.
 HOSTCC         ?= cc
 ifneq ($(CROSS_COMPILE),)
     CC := $(CROSS_COMPILE)gcc
 endif
 
-# Default build: release-ish with all warnings. -Wpedantic enabled —
-# the two GNU extensions we use intentionally (typeof, statement-exprs)
-# are suppressed via -Wno-language-extension-token so the build stays
-# clean. Any NEW warning surfaces.
+# Base CFLAGS: release-ish with all warnings. -Wpedantic stays on — the two GNU
+# extensions we use intentionally (typeof, statement-exprs) are suppressed via
+# -Wno-language-extension-token so any NEW warning still surfaces. mk/<target>.mk
+# appends its arch + -D switches on top.
+#
+# -fno-strict-aliasing is REQUIRED, not cosmetic: the Entity struct is accessed
+# through multiple type-punned aliases — script writes `*(int32_t *)(eb + 0x48)`
+# and the same memory is read as `*(int16_t *)(eb + 0x4A)` (upper 16 bits).
+# Under strict-aliasing the compiler may reorder these → the walker step loop
+# misses the target-reached comparison and overshoots 1px/tick → cascading
+# "actor walks past target" bugs (Fjej weź-kwiatka, Ebek climb glitches).
 CFLAGS   ?= -O2 -Wall -Wextra -Wpedantic \
             -Wno-unused-parameter -Wno-pointer-sign \
             -Wno-language-extension-token \
             -fno-strict-aliasing \
             -std=gnu99 -I include
 
-# Version string baked into the binary's startup banner. Defaults to
-# git describe so dev builds carry "<last-tag>-<n>-g<sha>[-dirty]";
-# users running a release can read it back from the wacki.log + paste
-# it into bug reports. Falls back to "unknown" if we're outside a git
-# checkout (release tarball extracted somewhere weird, etc.).
+# Version string baked into the startup banner. Defaults to git describe so dev
+# builds carry "<last-tag>-<n>-g<sha>[-dirty]" (users paste it into bug reports);
+# falls back to "unknown" outside a git checkout (extracted release tarball).
 WACKI_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
 CFLAGS        += -DWACKI_VERSION='"$(WACKI_VERSION)"'
 
-# Handheld build profiles. WACKI_HANDHELD is the generic "this is a
-# handheld" switch (fullscreen, no display-mode picker, gamepad → cursor
-# input, SD-card data paths). WACKI_MIYOO layers the Miyoo Mini Plus
-# device specifics on top (the mmiyoo SDL2 fork's MI_AO volume restore +
-# its keysym button mapping in platform_miyoo.c).
-#
-#   TARGET=miyoo       Cortex-A7 + NEON + hardfloat, mmiyoo SDL2.
-#                      Don't enable LTO — the Miyoo toolchain's ld has
-#                      mis-emitted thumb thunks under -flto; -Os + section
-#                      GC still gets ~90% of the size win.
-#   TARGET=portmaster  Anbernic & friends (PortMaster). Standard SDL2,
-#                      stereo ALSA audio, real SDL_GameController input.
-#                      Arch flags (aarch64 / armhf) come from the build
-#                      environment (tools/build-portmaster.sh), so this
-#                      profile stays architecture-agnostic.
-ifeq ($(TARGET),miyoo)
-    CFLAGS  += -mcpu=cortex-a7 -mfpu=neon -mfloat-abi=hard \
-               -DWACKI_HANDHELD -DWACKI_MIYOO
-    BIN_NAME := wacki-miyoo
-else ifeq ($(TARGET),portmaster)
-    CFLAGS  += -DWACKI_HANDHELD -DWACKI_PORTMASTER
-    BIN_NAME := wacki
-else ifeq ($(TARGET),ps2)
-    # PlayStation 2 via the ps2dev toolchain (mips64r5900el-ps2-elf-gcc,
-    # run inside the ps2dev Docker image). WACKI_HANDHELD: fullscreen, no
-    # display-mode picker, no GUI folder-picker. WACKI_PS2: device
-    # specifics. The SDL2-PS2 include/lib flags (ports + gsKit + ee lib
-    # paths and the SDL2 dependency chain) are supplied by
-    # tools/build-ps2.sh as SDL_CFG / SDL_LIB overrides.
-    CFLAGS  += -DWACKI_HANDHELD -DWACKI_PS2
-    BIN_NAME := wacki-ps2.elf
-else
-    BIN_NAME := wacki
-endif
-# NOTE: -fno-strict-aliasing is REQUIRED. The Entity struct is accessed
-# through multiple type-punned aliases — script writes `*(int32_t *)(eb +
-# 0x48)` and same memory is read as `*(int16_t *)(eb + 0x4A)` (upper 16
-# bits of the int32). Under strict-aliasing the compiler may reorder
-# these → walker step loop misses the target-reached comparison and
-# overshoots by 1px per tick → cascading "actor walks past target"
-# bugs (Fjej weź-kwiatka overshoot, Ebek climb glitches).
-SDL_CFG  := $(shell $(SDL2_CFG) --cflags 2>/dev/null)
-
-# STATIC_SDL2=1 selects a fully self-contained engine binary: SDL2 +
-# its transitive system links are baked into the binary so the user
-# doesn't need libSDL2 installed. CI release builds set this; the
-# default (=0) keeps the developer build dynamic for fast iteration
-# + easier debugging.
-#
-# `SDL_LIB_DYN`  always dynamic — used by the sanitized debug build
-#                (ASan + static SDL2 don't mix).
-# `SDL_LIB`      tracks STATIC_SDL2 — used by the release engine.
-STATIC_SDL2 ?= 0
-SDL_LIB_DYN := $(shell $(SDL2_CFG) --libs 2>/dev/null)
-ifeq ($(STATIC_SDL2),1)
-    SDL_LIB := $(shell $(SDL2_CFG) --static-libs 2>/dev/null)
-else
-    SDL_LIB := $(SDL_LIB_DYN)
-endif
-
-# All built binaries land in $(DIST). The directory is gitignored —
-# build artefacts never sit at the repo root or alongside the source
-# files they're built from.
+# All built binaries land in $(DIST) — gitignored, so artefacts never sit at the
+# repo root or next to the sources they're built from.
 DIST     := dist
 $(DIST):
 	@mkdir -p $@
 
-# Windows (MSYS2/mingw) binaries need a `.exe` suffix. The `OS`
-# env var is set to "Windows_NT" by both mingw-make and GNU make
-# under MSYS2; all POSIX hosts leave it empty.
+# Windows (MSYS2/mingw) binaries need a `.exe` suffix. `OS` is "Windows_NT"
+# under both mingw-make and MSYS2 GNU make; POSIX hosts leave it empty.
 ifeq ($(OS),Windows_NT)
     EXE := .exe
 else
     EXE :=
 endif
 
-# Windows resource: assets/icons/wacki.rc references wacki.ico — the
-# multi-size (16/32/48/64/128/256) Win32 icon. windres compiles the
-# .rc into a COFF object that gets linked directly into the .exe so
-# Explorer + Alt-Tab + taskbar show the artwork even before the
-# binary starts (SDL_SetWindowIcon takes over once the window opens).
-# POSIX hosts skip this — there's no equivalent embed-file-icon-in-
-# ELF pattern.
-ifeq ($(OS),Windows_NT)
-    WACKI_RES := $(DIST)/wacki.res.o
-    WINDRES   ?= windres
-endif
+# SDL2 link flags. SDL_CFG (--cflags) + SDL_LIB_DYN (--libs) are the dynamic
+# defaults shared by every SDL-family target; SDL_LIB tracks them by default and
+# is overridden by mk/desktop.mk for STATIC_SDL2 release builds. TARGET=ps2
+# brings its own SDL2-PS2 and overrides SDL_CFG/SDL_LIB from tools/build-ps2.sh,
+# so these shell-outs (empty when sdl2-config is absent) don't matter there.
+STATIC_SDL2 ?= 0
+SDL_CFG     := $(shell $(SDL2_CFG) --cflags 2>/dev/null)
+SDL_LIB_DYN := $(shell $(SDL2_CFG) --libs 2>/dev/null)
+SDL_LIB     := $(SDL_LIB_DYN)
 
-# Extra link flags for fully-static Windows: drop the mingw gcc /
-# winpthread DLLs that linker pulls in by default. POSIX builds
-# don't need this — the static SDL2 already lists every system
-# library through `sdl2-config --static-libs`.
-ifeq ($(STATIC_SDL2),1)
-ifeq ($(OS),Windows_NT)
-    LDFLAGS_STATIC := -static -static-libgcc
-else
-    LDFLAGS_STATIC :=
-endif
-else
-    LDFLAGS_STATIC :=
-endif
+# Knobs mk/<target>.mk may set; default them empty here so a target that doesn't
+# care leaves them blank rather than referencing an undefined var.
+CFLAGS_SIZE      :=
+LDFLAGS_SIZE     :=
+LDFLAGS_STATIC   :=
+MACOS_FRAMEWORKS :=
+WACKI_RES        :=
 
-# Windows subsystem: -mwindows marks the .exe as IMAGE_SUBSYSTEM_
-# WINDOWS_GUI so Explorer launches it WITHOUT spawning a console
-# window — players double-click wacki.exe and only see the game.
-# Without this, the default mingw build emits a CUI (console)
-# subsystem binary and Windows pops up a cmd.exe-style black box
-# every launch.
-#
-# Entry point doesn't need a rewrite: SDL2 ships libSDL2main.a with
-# a WinMain that calls our int main() — sdl2-config --libs adds it
-# to the link line.
-#
-# We intentionally lose stderr/stdout output as a side-effect (no
-# attached console). For dev / CI runs that need the log, build
-# WACKI_WINDOWED=0 to skip -mwindows and keep the console.
-ifeq ($(OS),Windows_NT)
-WACKI_WINDOWED ?= 1
-ifeq ($(WACKI_WINDOWED),1)
-    LDFLAGS_STATIC += -mwindows
-endif
-endif
-
-# Size-optimisation knobs for the release artefact. -Os trades a few
-# % runtime perf for noticeably smaller code (fine for a 1997 point-
-# and-click). -ffunction-sections / -fdata-sections + the linker's
-# --gc-sections (Linux/mingw) or -dead_strip (macOS) drop unused
-# code paths inside statically-linked SDL2 — a big win since we
-# touch ~half of SDL2's API. -flto lets the linker see across TUs
-# for further dead-code elimination.
-#
-# Always on for STATIC_SDL2=1 (release path); never on for the
-# default dev build (faster compile, easier to debug).
-# Size opts apply to STATIC_SDL2=1 (release artefact) AND TARGET=miyoo
-# (always, since 128 MB RAM + ~16 MB free for app on Miyoo Mini Plus
-# means every kB counts even with dynamic SDL2). Miyoo also skips
-# -flto — the union toolchain's ld + linker plugins have been known
-# to mis-emit thumb thunks under -flto.
-ifeq ($(TARGET),miyoo)
-    CFLAGS_SIZE  := -Os -ffunction-sections -fdata-sections
-    # -ldl: platform_sdl.c uses dlsym(RTLD_DEFAULT, "MI_AO_SetVolume") to
-    # bind directly to the MStar audio API for OnionOS volume restore
-    # (alsa-style tinymix controls don't exist on MMP — kernel exposes
-    # MI_AO instead, which the mmiyoo SDL2 backend has already loaded).
-    LDFLAGS_SIZE := -Wl,--gc-sections -ldl
-else ifeq ($(TARGET),ps2)
-    # Keep the base -O2 — the 294 MHz Emotion Engine writes every blit
-    # pixel, so favour speed over size (assets ship on USB/DVD, not a
-    # tight cart). The ps2dev toolchain specs handle crt0/linkfile, so no
-    # extra LD glue is needed.
-    CFLAGS_SIZE  :=
-    LDFLAGS_SIZE :=
-else ifeq ($(STATIC_SDL2),1)
-    CFLAGS_SIZE := -Os -ffunction-sections -fdata-sections -flto
-    UNAME_S := $(shell uname -s 2>/dev/null)
-    ifeq ($(OS),Windows_NT)
-        LDFLAGS_SIZE := -flto -Wl,--gc-sections
-    else ifeq ($(UNAME_S),Linux)
-        LDFLAGS_SIZE := -flto -Wl,--gc-sections
-    else ifeq ($(UNAME_S),Darwin)
-        LDFLAGS_SIZE := -flto -Wl,-dead_strip
-    else
-        LDFLAGS_SIZE := -flto
-    endif
-else
-    CFLAGS_SIZE  :=
-    LDFLAGS_SIZE :=
-endif
-
-# T43 — debug build with AddressSanitizer + UBSan. Use `make debug` to
-# rebuild with sanitizers + frame pointer + no opt for actionable
-# backtraces. Crashes/leaks abort with a full stack.
-# -DWACKI_VERBOSE enables LOG_TRACE / LOG_DEBUG (compiled out in
-# release for zero overhead).
-DEBUG_CFLAGS = -O0 -g -fno-omit-frame-pointer \
-               -fsanitize=address -fsanitize=undefined \
-               -fno-strict-aliasing \
-               -Wall -Wextra -Wno-unused-parameter -Wno-pointer-sign \
-               -Wno-language-extension-token \
-               -DWACKI_VERBOSE \
-               -std=gnu99 -I include
-DEBUG_LDFLAGS = -fsanitize=address -fsanitize=undefined
-
-# ---- embedded WACKI.EXE data sections --------------------------------------
-# tools/embed-pe-data reads WACKI.EXE and emits a generated C source
-# with the .rdata + .data raw bytes as a const slice table + blob.
-# The engine PE-loader resolves original VAs against this table at
-# runtime — no PE parsing, no file I/O after build. Other sections
-# (.text x86 code, .idata, .rsrc) are skipped (we never reference
-# them). Build-time dep: data/WACKI.EXE must exist; generated file is
-# gitignored.
-EMBEDDED_PE_SRC = src/embedded_wacki_pe.c
-EMBEDDED_PE_BIN = data/WACKI.EXE
-EMBED_PE_TOOL   = $(DIST)/embed-pe-data$(EXE)
-
-# Built with HOSTCC because this tool runs at build time on the build
-# machine; cross-compiling it for the target would mean trying to
-# qemu it (or worse, run an ARM binary natively on x86_64) every
-# time the embedded PE source needs regenerating.
-$(EMBED_PE_TOOL): tools/embed-pe-data.c | $(DIST)
-	$(HOSTCC) -O2 -Wall -I include -o $@ $<
-
-$(EMBEDDED_PE_SRC): $(EMBEDDED_PE_BIN) $(EMBED_PE_TOOL)
-	$(EMBED_PE_TOOL) $(EMBEDDED_PE_BIN) $(EMBEDDED_PE_SRC)
-
-# Window icon: embed the 64×64 BMP from assets/icons/wacki-window.bmp
-# as a C byte array so SDL_SetWindowIcon can hand it to whichever
-# window system the user runs (macOS Dock / Linux taskbar / Windows
-# titlebar). Generator is plain `xxd -i` plus a hand-written SPDX
-# header; checked into git so contributors without xxd installed can
-# still build. Regenerate by running this target after changing the
-# BMP source. */
-EMBEDDED_ICON_SRC = src/embedded_icon.c
-EMBEDDED_ICON_BIN = assets/icons/wacki-window.bmp
-
-$(EMBEDDED_ICON_SRC): $(EMBEDDED_ICON_BIN)
-	@which xxd >/dev/null || { echo "xxd missing — install vim-common"; exit 1; }
-	@(printf '/* SPDX-License-Identifier: GPL-3.0-or-later\n * Copyright (C) 2026 Mateusz Szu\xc5\x82\x61\n *\n * src/embedded_icon.c — GENERATED from %s.\n * Loaded as an SDL_Surface via SDL_LoadBMP_RW and handed to\n * SDL_SetWindowIcon in PlatformInit so the engine'\''s window /\n * taskbar / dock entry carry the game artwork.\n */\n\n#include <stddef.h>\n\n' "$(EMBEDDED_ICON_BIN)"; xxd -i -n wacki_icon_bmp $(EMBEDDED_ICON_BIN)) > $@
-
-# ---- modules ----------------------------------------------------------------
+# ---- platform-agnostic engine sources --------------------------------------
+# The core engine — everything that is NOT platform-specific. mk/<target>.mk
+# appends its PLATFORM_SRCS (HAL impls + hooks provider) to this list.
 ENGINE_SRCS = \
 	$(EMBEDDED_PE_SRC) \
 	$(EMBEDDED_ICON_SRC) \
@@ -295,74 +115,81 @@ ENGINE_SRCS = \
 	src/menu/options.c        src/menu/menu_loop.c                   \
 	src/menu/main_menu.c      src/menu/port_attribution.c
 
-# Platform HAL implementations, composed per TARGET (see docs/platform-hal.md).
-# Each lives under src/platform/<family>/; the Makefile links exactly one set
-# per target so the core never #ifdefs on a platform.
-#
-# SDL_PLATFORM_SRCS = the SDL2/stdio HAL impls shared by desktop + the
-# handhelds: storage (save + data-root + file I/O), audio, video, system, and
-# the SDL_GameController glue (gamepad_sdl.c — harmless where no pad is
-# present, so linked everywhere SDL is). PS2 brings its own equivalents
-# (libmc / fileXio / gsKit / audsrv) so it omits this set, but still links
-# gamepad_sdl.c for the DualShock.
-#
-# Each target then links exactly ONE "hooks provider" — the small set of
-# platform-variant behaviors (firmware volume, keysym buttons, fullscreen
-# default, the PS2 analog/USB-mouse pad extras) the sdl/ core calls through.
-# That single-provider-per-target rule is what lets the sdl/ files stay free
-# of any WACKI_MIYOO / WACKI_PORTMASTER / WACKI_PS2 #ifdef.
-# data-root discovery differs desktop vs handheld (external-media scanners +
-# folder picker vs a fixed SD-card list), so each links its own data_root_*
-# file instead of one #ifdef'd file — see SDL_DATAROOT_* below.
+# Shared platform building blocks referenced by mk/{desktop,miyoo,portmaster}.mk
+# (see docs/platform-hal.md). SDL_PLATFORM_SRCS = the SDL2/stdio HAL impls
+# shared by desktop + the handhelds: storage (save + file I/O), audio, video,
+# system, and the SDL_GameController glue. data-root discovery differs
+# desktop-vs-handheld (external-media scanners + folder picker vs a fixed
+# SD-card list), so each target links its own data_root_* rather than one
+# #ifdef'd file. PS2 brings its own equivalents and pulls none of these.
 SDL_PLATFORM_SRCS = src/platform/sdl/save_host.c \
                     src/platform/sdl/file_host.c src/platform/sdl/audio_sdl.c \
                     src/platform/sdl/flic_host.c src/platform/sdl/video_sdl.c \
                     src/platform/sdl/system_sdl.c src/platform/sdl/gamepad_sdl.c
 SDL_DATAROOT_DESKTOP  = src/platform/sdl/data_root_desktop.c
 SDL_DATAROOT_HANDHELD = src/platform/sdl/data_root_handheld.c
-ifeq ($(TARGET),miyoo)
-    # miyoo/miyoo.c = the hooks provider (MI_AO volume + keysym buttons; pulls
-    # in libdl) — kept out of desktop builds.
-    ENGINE_SRCS += src/platform/miyoo/miyoo.c $(SDL_PLATFORM_SRCS) $(SDL_DATAROOT_HANDHELD)
-else ifeq ($(TARGET),portmaster)
-    ENGINE_SRCS += src/platform/portmaster/portmaster.c $(SDL_PLATFORM_SRCS) $(SDL_DATAROOT_HANDHELD)
-else ifeq ($(TARGET),ps2)
-    # PS2 backend split per HAL subsystem (src/platform/ps2/); system_ps2.c is
-    # also the hooks provider. gamepad_sdl.c is the shared DualShock glue.
-    ENGINE_SRCS += src/platform/sdl/gamepad_sdl.c \
-                   src/platform/ps2/system_ps2.c src/platform/ps2/storage_ps2.c \
-                   src/platform/ps2/audio_ps2.c  src/platform/ps2/video_ps2.c
-else
-    ENGINE_SRCS += src/platform/sdl/hooks_desktop.c $(SDL_PLATFORM_SRCS) $(SDL_DATAROOT_DESKTOP)
-endif
 
-# macOS desktop gets a small Objective-C helper that re-titles SDL's
-# default English menu bar (App / Window / View) into Polish. clang
-# compiles the .m as Objective-C from its extension even inside the
-# single mixed C/.m link command; AppKit is pulled in via -framework
-# Cocoa. -framework Security pulls in the SecTranslocate SPI used to undo
-# Gatekeeper App Translocation (see PlatformMacUntranslocatePath), so "drop
-# data/ next to Wacki.app" works for downloaded bundles. Desktop-only: gated
-# on an EMPTY TARGET so a cross-build hosted on a Mac (the Miyoo/PortMaster
-# toolchains, or a native ps2/vita build) doesn't drag the Cocoa helper +
-# frameworks into an ARM/MIPS link that can't use them.
-ifeq ($(TARGET),)
-ifneq ($(OS),Windows_NT)
-ifeq ($(shell uname -s 2>/dev/null),Darwin)
-    ENGINE_SRCS      += src/platform/macos/macos.m
-    MACOS_FRAMEWORKS := -framework Cocoa -framework Security
+# Select the active platform: include exactly one mk/<target>.mk. TARGET empty
+# → desktop. An unknown TARGET fails fast here with a clear message rather than
+# a confusing "missing symbol" link error later.
+TGT := $(or $(strip $(TARGET)),desktop)
+ifeq ($(wildcard mk/$(TGT).mk),)
+$(error Unknown TARGET '$(TARGET)' — no mk/$(TGT).mk (valid: desktop, miyoo, portmaster, ps2))
 endif
-endif
-endif
+include mk/$(TGT).mk
 
+# ---- debug build (sanitizers) ----------------------------------------------
+# `make debug` rebuilds desktop with ASan + UBSan + frame pointers + no opt for
+# actionable backtraces; -DWACKI_VERBOSE turns on LOG_TRACE/LOG_DEBUG (compiled
+# out of release). Separate binary; always dynamic SDL2 (ASan + static SDL2
+# don't mix).
+DEBUG_CFLAGS = -O0 -g -fno-omit-frame-pointer \
+               -fsanitize=address -fsanitize=undefined \
+               -fno-strict-aliasing \
+               -Wall -Wextra -Wno-unused-parameter -Wno-pointer-sign \
+               -Wno-language-extension-token \
+               -DWACKI_VERBOSE \
+               -std=gnu99 -I include
+DEBUG_LDFLAGS = -fsanitize=address -fsanitize=undefined
+
+# ---- embedded WACKI.EXE data sections --------------------------------------
+# tools/embed-pe-data reads WACKI.EXE and emits a generated C source with the
+# .rdata + .data raw bytes as a const slice table + blob. The PE-loader resolves
+# original VAs against it at runtime — no PE parsing, no file I/O after build.
+# Build-time dep: data/WACKI.EXE must exist; the generated file is gitignored.
+EMBEDDED_PE_SRC = src/embedded_wacki_pe.c
+EMBEDDED_PE_BIN = data/WACKI.EXE
+EMBED_PE_TOOL   = $(DIST)/embed-pe-data$(EXE)
+
+# Built with HOSTCC: this tool runs at build time on the build machine; cross-
+# compiling it would mean qemu-ing it every time the embedded PE source needs
+# regenerating.
+$(EMBED_PE_TOOL): tools/embed-pe-data.c | $(DIST)
+	$(HOSTCC) -O2 -Wall -I include -o $@ $<
+
+$(EMBEDDED_PE_SRC): $(EMBEDDED_PE_BIN) $(EMBED_PE_TOOL)
+	$(EMBED_PE_TOOL) $(EMBEDDED_PE_BIN) $(EMBEDDED_PE_SRC)
+
+# Window icon: embed the 64×64 BMP from assets/icons/ as a C byte array so
+# SDL_SetWindowIcon can hand it to the window system (Dock / taskbar / titlebar).
+# Generated with `xxd -i` + a hand-written SPDX header; checked into git so
+# contributors without xxd can still build. Regenerate via this target after
+# changing the BMP.
+EMBEDDED_ICON_SRC = src/embedded_icon.c
+EMBEDDED_ICON_BIN = assets/icons/wacki-window.bmp
+
+$(EMBEDDED_ICON_SRC): $(EMBEDDED_ICON_BIN)
+	@which xxd >/dev/null || { echo "xxd missing — install vim-common"; exit 1; }
+	@(printf '/* SPDX-License-Identifier: GPL-3.0-or-later\n * Copyright (C) 2026 Mateusz Szu\xc5\x82\x61\n *\n * src/embedded_icon.c — GENERATED from %s.\n * Loaded as an SDL_Surface via SDL_LoadBMP_RW and handed to\n * SDL_SetWindowIcon in PlatformInit so the engine'\''s window /\n * taskbar / dock entry carry the game artwork.\n */\n\n#include <stddef.h>\n\n' "$(EMBEDDED_ICON_BIN)"; xxd -i -n wacki_icon_bmp $(EMBEDDED_ICON_BIN)) > $@
+
+# ---- tools + tests (host-side, desktop config) -----------------------------
 TOOL_SRCS_EXTRACT = tools/dta-extract.c src/depack.c src/archive.c \
                     src/platform/sdl/file_host.c src/heap.c src/log.c
 TOOL_SRCS_PKV2    = tools/pkv2-depack.c src/depack.c src/log.c
 
-# ---- tests (no SDL) -----------------------------------------------------
-# Unit tests link only the SDL-free subset of the engine + small mocks
-# for symbols normally defined in stubs.c (which #includes SDL).
-# Coverage map + how to add a suite: see tests/README.md.
+# Unit tests link only the SDL-free subset of the engine + small mocks for
+# symbols normally defined in stubs.c (which #includes SDL). Coverage map + how
+# to add a suite: tests/README.md.
 TEST_SRCS = \
 	tests/test_main.c              tests/test_entity_layout.c \
 	tests/test_rng.c               tests/test_pkv2.c          \
@@ -415,11 +242,9 @@ TEST_ENGINE_SRCS = \
 	src/actor/render.c src/actor/alloc.c \
 	src/actor/walker.c src/anim/alpha_blit.c
 
-# Tests reuse the engine's CFLAGS but use a stub SDL.h (tests/sdl_stub)
-# instead of the system SDL2 headers. -I tests/sdl_stub MUST come first
-# so the stub is picked up by script.c's `#include <SDL.h>`. Bump to
-# gnu11 so `_Static_assert` is a first-class citizen (no
-# -Wc11-extensions noise).
+# Tests reuse the engine's warnings but use a stub SDL.h (tests/sdl_stub) instead
+# of the system SDL2 headers; -I tests/sdl_stub MUST come first so the stub wins
+# script.c's `#include <SDL.h>`. gnu11 makes _Static_assert first-class.
 TEST_CFLAGS = -O2 -Wall -Wextra -Wpedantic \
               -Wno-unused-parameter -Wno-pointer-sign \
               -Wno-language-extension-token \
@@ -439,29 +264,21 @@ $(WACKI_RES): assets/icons/wacki.rc assets/icons/wacki.ico | $(DIST)
 	$(WINDRES) --include-dir=assets/icons -i $< -o $@
 endif
 
-# Convenience target: build through the union-miyoomini-toolchain
-# Docker image so callers don't need a host-installed ARM cross compiler.
-# Inside the container sdl2-config is in PATH and points at the cross-
-# built static SDL2 the toolchain ships with.
+# Cross-target convenience wrappers — build through the per-platform Docker
+# image so callers don't need a host-installed cross toolchain. Each script
+# invokes `make TARGET=<plat> ...` (with the right sdl2-config / SDL overrides)
+# inside its container.
 miyoo:
 	./tools/build-miyoo.sh
 
-# Build the PS2 ELF through the ps2dev Docker image (mips64r5900el-ps2-
-# elf-gcc + SDL2-PS2). Produces dist/wacki-ps2.elf. Experiment: drop it
-# on a USB stick and launch via uLaunchELF, or run it in PCSX2.
 ps2:
 	./tools/build-ps2.sh
 
-# Build a bootable PS2 ISO (SYSTEM.CNF + ELF + game data) so it runs in
-# PCSX2 via "Boot ISO" with no HostFS config. Builds the ELF first if
-# needed. Produces dist/wacki-ps2.iso.
+# Bootable PS2 ISO (SYSTEM.CNF + ELF + game data) so PCSX2 runs it via "Boot
+# ISO" with no HostFS config. Builds the ELF first if needed.
 ps2-iso:
 	./tools/build-ps2-iso.sh
 
-# Debug build with sanitizers — separate binary so the release build
-# stays untouched. Run via $(DIST)/wacki-debug --headless for CI fuzz
-# runs. Sanitizers + static linking don't mix, so the debug build
-# always uses the dynamic SDL2.
 debug: $(DIST)/wacki-debug$(EXE)
 $(DIST)/wacki-debug$(EXE): $(ENGINE_SRCS) | $(DIST)
 	$(CC) $(DEBUG_CFLAGS) $(SDL_CFG) -o $@ $(ENGINE_SRCS) $(SDL_LIB_DYN) $(DEBUG_LDFLAGS) $(MACOS_FRAMEWORKS)
@@ -484,9 +301,8 @@ test: $(DIST)/run-tests$(EXE)
 $(DIST)/run-tests$(EXE): $(TEST_SRCS) $(TEST_ENGINE_SRCS) | $(DIST)
 	$(CC) $(TEST_CFLAGS) -o $@ $(TEST_SRCS) $(TEST_ENGINE_SRCS)
 
-# `clean` blows away the whole $(DIST) tree (every built artefact
-# lives there now). Also removes the generated embed source +
-# stray .o files left behind by ad-hoc compiles.
+# `clean` blows away the whole $(DIST) tree (every built artefact lives there),
+# the generated embed source, and stray .o files from ad-hoc compiles.
 clean:
 	rm -rf $(DIST)
 	rm -f $(EMBEDDED_PE_SRC)
