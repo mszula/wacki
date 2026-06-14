@@ -109,7 +109,6 @@ Wynik: `dist/wacki-ps2.zip` — bootowalny ELF z instrukcją uruchomienia
 w PCSX2). `WACKI_STRIP=1 ./tools/build-ps2.sh` usuwa symbole do wydania;
 domyślnie zostają (przydatne do debugowania przez PINE/PCSX2).
 
-Testy trybów wideo (NTSC / PAL / 480p / 576p): `WACKI_PS2_PAL=1
-./tools/build-ps2.sh` itd., albo `./tools/build-ps2-modes.sh` (buduje
-wszystkie cztery naraz). Bootowalny obraz ISO z danymi w środku — do
-PCSX2 bez konfiguracji HostFS — składa `./tools/build-ps2-iso.sh`.
+Tryb wideo (PAL / NTSC / 480p) wybiera się **w runtime** — ekranem wyboru
+przy starcie ELF-a (domyślnie NTSC). Bootowalny obraz ISO z danymi w środku —
+do PCSX2 bez konfiguracji HostFS — składa `./tools/build-ps2-iso.sh`.

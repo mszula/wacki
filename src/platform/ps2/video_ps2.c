@@ -44,19 +44,11 @@ static u32       s_clut[256] __attribute__((aligned(64)));
 
 /* ---- video mode: runtime, chosen by the boot-time picker --------- *
  *
- * The display mode used to be a compile-time WACKI_PS2_* #ifdef; it's now a
- * runtime choice (ps2_video_picker below). The WACKI_PS2_* build flags survive
- * only as the picker's PRESELECTED default, so the per-mode test builds still
- * land on "their" mode without touching the pad. */
+ * Pure runtime choice (ps2_video_picker below): the engine boots in NTSC and
+ * the picker switches the screen if the player picks PAL or 480p. */
 typedef enum { PS2_VIDEO_NTSC = 0, PS2_VIDEO_PAL, PS2_VIDEO_480P } ps2_video_mode_t;
 
-#if   defined(WACKI_PS2_PROGRESSIVE)
-static int s_video_mode = PS2_VIDEO_480P;
-#elif defined(WACKI_PS2_PAL)
-static int s_video_mode = PS2_VIDEO_PAL;
-#else
 static int s_video_mode = PS2_VIDEO_NTSC;
-#endif
 
 /* Set the gsGlobal mode + geometry for a picked mode. NTSC keeps gsKit's
  * auto-detected geometry (overriding it leaves MagV=-1 = top-half only); PAL
