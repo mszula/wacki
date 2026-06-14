@@ -208,6 +208,14 @@ void LoadKomnataScene(uint16_t id)
 {
     if (id == 0) return;
 
+    /* Hold the screen on the last good frame for the whole load: LoadKomnata's
+     * settling ticks (Step 3) paint the new room's entities while the shadow
+     * still holds the OLD background — the new BG isn't painted until Step 5.
+     * Presenting those ticks flashes "new entities on old background" for a
+     * frame or two (very visible at the PS2's vsync-locked 30 fps). The outer
+     * game tick presents the clean scene once we return. */
+    g_present_suppressed = 1;
+
     /* --- Step 1: reset both actors -------------------------------- */
     const uint8_t *sd = g_stage_va
                         ? (const uint8_t *)PeLoaderRead(g_stage_va)
@@ -222,6 +230,7 @@ void LoadKomnataScene(uint16_t id)
     /* --- Step 3: run the script-level load ----------------------- */
     const char *name = LoadKomnata(id);
     if (!name) {
+        g_present_suppressed = 0;
         LOG_TRACE("scene", "LoadKomnataScene(%u) — LoadKomnata failed", id);
         return;
     }
@@ -248,5 +257,8 @@ void LoadKomnataScene(uint16_t id)
     if (g_scene_bg_raw) paint_rawb_pic(g_scene_bg_raw, g_scene_bg_size, 0);
     PaintSceneBgAtlasIfAny();
 
+    /* New scene composited clean (new BG painted; the embedded entity paint is
+     * wiped and re-rendered by the outer tick) — resume presenting. */
+    g_present_suppressed = 0;
     LOG_TRACE("scene", "LoadKomnataScene(%u) → '%s'", id, name);
 }
