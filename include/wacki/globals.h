@@ -108,6 +108,10 @@ extern int16_t   g_mouse_y;
 
 extern int          g_headless;       /* --headless: skip window + present */
 extern int          g_no_pacing;      /* --test-cutscenes: skip frame sleeps */
+extern uint8_t      g_present_suppressed; /* hold the screen during a komnata load
+                                           * (the embedded settling ticks paint new
+                                           * entities on the old BG before the new
+                                           * one is loaded — don't present that) */
 extern int          g_scale_factor;   /* --scale N: window = 640×480 × N */
 extern const char  *g_scale_mode;     /* --scaler: nearest|linear|best */
 extern int          g_fullscreen;     /* --fullscreen / F11 */

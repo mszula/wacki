@@ -205,10 +205,20 @@ void FlipBuffersClearWith(uint8_t v)
     s_dirty_this_count = 1;
 }
 
+/* Set while a komnata is loading (see LoadKomnataScene). The load runs the
+ * enter-script's settling ticks, which paint the NEW room's entities into the
+ * shadow while it still holds the OLD background — the new BG is only loaded a
+ * couple of steps later. Presenting those intermediate ticks flashes "new
+ * entities on the old background" for a frame or two (very visible at the PS2's
+ * vsync-locked 30 fps). Hold the last good frame instead; the outer game tick
+ * presents the clean new scene once the load returns. */
+uint8_t g_present_suppressed = 0;
+
 /* ---- FlushFrameToPrimary ----------------------------------------- *
  * Sends the shadow to the screen via the platform layer. */
 void FlushFrameToPrimary(void)
 {
+    if (g_present_suppressed) return;   /* mid-load: don't present partial frames */
     ensure_shadow();
     if (g_back_shadow)
         PlatformPresent(g_back_shadow, g_palette_rgb, g_screen_w, g_screen_h);
