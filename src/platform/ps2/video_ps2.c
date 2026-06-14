@@ -50,6 +50,12 @@ typedef enum { PS2_VIDEO_NTSC = 0, PS2_VIDEO_PAL, PS2_VIDEO_480P } ps2_video_mod
 
 static int s_video_mode = PS2_VIDEO_NTSC;
 
+/* 480p (VGA) sits a touch high on PCSX2 — top clipped, black bar at the bottom.
+ * gsKit's default StartY for GS_MODE_VGA_640_60 is 25; nudge the displayed
+ * framebuffer down by this many scanlines (DISPLAY Y = StartY + offset, so a
+ * positive value moves it DOWN). Tune if a display clips / borders differently. */
+#define PS2_480P_YSHIFT   20
+
 /* Set the gsGlobal mode + geometry for a picked mode. NTSC keeps gsKit's
  * auto-detected geometry (overriding it leaves MagV=-1 = top-half only); PAL
  * and 480p set the FULL geometry, as the old per-mode #ifdef chain did. */
@@ -203,6 +209,8 @@ int platform_ps2_video_init(int w, int h)
         gsKit_init_screen(s_gs);
         gsKit_mode_switch(s_gs, GS_ONESHOT);
         gsKit_TexManager_init(s_gs);             /* re-init VRAM tracking for the new mode */
+        if (s_video_mode == PS2_VIDEO_480P)
+            gsKit_set_display_offset(s_gs, 0, PS2_480P_YSHIFT);  /* nudge down (PCSX2 VGA) */
     }
 
     s_fbtex.Width           = (u32)w;
