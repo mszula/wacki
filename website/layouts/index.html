@@ -1,7 +1,7 @@
 {{ define "head" }}
 <meta
   name="description"
-  content="Wierny, otwarty port polskiej gry przygodowej Wacki: Kosmiczna rozgrywka (1998). Przejdziesz ją w całości na PC i handheldach. Pobierz za darmo."
+  content="Wierny, otwarty port polskiej gry przygodowej Wacki: Kosmiczna rozgrywka (1998). Przejdziesz ją w całości na PC, handheldach i konsolach. Pobierz za darmo."
 />
 <link rel="canonical" href="{{ site.BaseURL }}" />
 
@@ -11,7 +11,7 @@
 <meta property="og:title" content="Wacki: Kosmiczna rozgrywka — darmowy port" />
 <meta
   property="og:description"
-  content="Wierny port polskiej gry przygodowej z 1998 r. Przejdziesz ją w całości na PC i handheldach. Pobierz za darmo."
+  content="Wierny port polskiej gry przygodowej z 1998 r. Przejdziesz ją w całości na PC, handheldach i konsolach. Pobierz za darmo."
 />
 <meta property="og:url" content="{{ site.BaseURL }}" />
 <meta property="og:image" content="{{ "assets/cover.png" | absURL }}" />
@@ -41,8 +41,9 @@
     <p class="hero__lead">
       Wierny, otwarty port silnika gry — odtworzony piksel po pikselu ze
       zdekompilowanej oryginalnej binarki. Gra się od intra do napisów
-      końcowych na <strong>macOS, Linux i Windows</strong>, a także na
-      <strong>Miyoo, Anbernic i dziesiątkach innych handheldów</strong>.
+      końcowych na <strong>macOS, Linux i Windows</strong>, na
+      <strong>Miyoo, Anbernic i dziesiątkach innych handheldów</strong>, a
+      nawet na <strong>konsolach</strong>.
     </p>
     <div class="hero__cta">
       <a class="btn btn--primary" id="hero-download" href="#pobierz"
@@ -188,7 +189,9 @@
         patrz <a href="#start">Jak grać</a>.
       </div>
 
-      <div class="cards" id="download-cards">
+      <div id="download-cards">
+        <h3 class="cards__group">Komputery</h3>
+        <div class="cards">
         <article
           class="card"
           data-platform="windows"
@@ -242,7 +245,10 @@
           ></a>
           <p class="card__file">wacki-linux-x86_64.tar.gz</p>
         </article>
+        </div>
 
+        <h3 class="cards__group">Handheldy</h3>
+        <div class="cards">
         <article
           class="card"
           data-platform="miyoo"
@@ -278,6 +284,28 @@
           ></a>
           <p class="card__file">wacki-portmaster.zip</p>
         </article>
+        </div>
+
+        <h3 class="cards__group">Konsole</h3>
+        <div class="cards">
+        <article
+          class="card"
+          data-platform="ps2"
+          data-asset="wacki-ps2.zip"
+        >
+          <div class="card__os">📀</div>
+          <h3>PlayStation 2</h3>
+          <p class="card__sub">FreeMcBoot / uLaunchELF · PCSX2</p>
+          <a
+            class="btn btn--dl"
+            href="https://github.com/mszula/wacki/releases/latest/download/wacki-ps2.zip"
+            data-umami-event="download"
+            data-umami-event-platform="ps2"
+            >Pobierz <span class="card__size"></span
+          ></a>
+          <p class="card__file">wacki-ps2.zip</p>
+        </article>
+        </div>
       </div>
 
       <p class="cards__foot">
@@ -571,7 +599,8 @@
           handheldach: Miyoo Mini / Mini Plus (OnionOS) oraz — przez
           PortMaster — Anbernic (RG35XX, RG40XX, RG353x i wiele innych),
           Powkiddy, TrimUI, RGB30, Miyoo Flip i dziesiątki kolejnych
-          urządzeń.
+          urządzeń. A na konsolach: PlayStation 2 (FreeMcBoot / uLaunchELF
+          albo emulator PCSX2).
         </p>
       </details>
 

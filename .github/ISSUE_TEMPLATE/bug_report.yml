@@ -30,6 +30,8 @@ body:
         - Windows 10/11
         - Miyoo Mini Plus / OnionOS
         - Miyoo Mini / OnionOS
+        - Anbernic / PortMaster
+        - PlayStation 2
         - Inne (opisz w polu poniżej)
     validations:
       required: true

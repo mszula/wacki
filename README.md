@@ -2,7 +2,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/mszula/wacki?sort=semver&style=flat-square&label=release&color=6f42c1)](../../releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/mszula/wacki/total?style=flat-square&label=downloads&color=44cc11&logo=github&logoColor=white)](../../releases)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20%C2%B7%20Miyoo%20%C2%B7%20PortMaster-1f6feb?style=flat-square)](../../releases)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20%C2%B7%20Miyoo%20%C2%B7%20PortMaster%20%C2%B7%20PS2-1f6feb?style=flat-square)](../../releases)
 [![Language](https://img.shields.io/badge/C99-SDL2-555555?style=flat-square&logo=c&logoColor=white)](#)
 [![License](https://img.shields.io/github/license/mszula/wacki?style=flat-square&label=license&color=blue)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/mszula/wacki?style=flat-square&label=stars&logo=github&logoColor=white)](../../stargazers)
@@ -10,8 +10,9 @@
 
 A faithful, cross-platform port of **Wacki: Kosmiczna rozgrywka**
 (1998) — a Polish point-and-click adventure — reconstructed from the
-decompiled `WACKI.EXE`. It runs on desktop (macOS / Linux / Windows)
-and on handhelds (Miyoo, plus Anbernic and dozens more via PortMaster).
+decompiled `WACKI.EXE`. It runs on desktop (macOS / Linux / Windows),
+on handhelds (Miyoo, plus Anbernic and dozens more via PortMaster),
+and on the PlayStation 2.
 The game is in Polish, set in Poland, and was made in Poland; for that
 reason the rest of this README is in Polish too.
 
@@ -314,11 +315,47 @@ wychył = precyzyjne celowanie), krzyżak — z przyspieszeniem.
 
 ---
 
+## 📀 Wersja na konsolę — PlayStation 2
+
+Wacki działa też na **PlayStation 2** — renderowanie sprzętowe gsKit,
+dźwięk przez audsrv, sterowanie DualShockiem (lewa gałka = kursor) lub
+myszą USB. Paczka `wacki-ps2.zip` zawiera bootowalny plik ELF.
+
+### Wymagania
+
+- PS2 z możliwością uruchamiania homebrew — **FreeMcBoot** /
+  **FreeDVDBoot** + `uLaunchELF` — albo emulator **PCSX2**.
+- Pendrive (FAT32) na pliki gry (na sprzęcie) lub HostFS (w PCSX2).
+- Oryginalne pliki `Dane_*.dta` (port ich nie zawiera).
+
+### Instalacja
+
+1. Rozpakuj `wacki-ps2.zip` — w środku jest folder `wacki/` z plikiem
+   `wacki-ps2.elf` i podkatalogiem `data/`.
+2. Skopiuj do `wacki/data/` pliki `Dane_*.dta` z oryginalnej płyty.
+3. Wrzuć cały folder `wacki/` na pendrive, tak by powstało
+   `mass:/wacki/wacki-ps2.elf` oraz `mass:/wacki/data/Dane_*.dta`.
+4. Uruchom `mass:/wacki/wacki-ps2.elf` przez `uLaunchELF`.
+
+W PCSX2: **System → Boot ELF** i wskaż `wacki-ps2.elf` (dane przez
+HostFS), albo zbuduj bootowalny obraz ISO — `./tools/build-ps2-iso.sh`.
+
+### Sterowanie
+
+| Czynność              | Przycisk              |
+|-----------------------|-----------------------|
+| Ruch kursora          | lewa gałka / mysz USB |
+| Kliknięcie lewe       | **✕**                 |
+| Kliknięcie prawe      | **○** (kółko)         |
+| Menu pauzy            | **START**             |
+
+---
+
 ## 🔨 Budowanie ze źródeł
 
 Wszystkie instrukcje — wymagania, instalacja SDL2, polecenia `make`
 i buildy w kontenerach Docker dla wszystkich platform (PC, Miyoo,
-Anbernic / PortMaster) — są w osobnym pliku:
+Anbernic / PortMaster, PlayStation 2) — są w osobnym pliku:
 
 ➡️ [**BUILDING.md**](BUILDING.md)
 

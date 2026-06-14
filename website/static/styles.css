@@ -558,10 +558,24 @@ code {
   color: var(--red-deep);
 }
 
+.cards__group {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 30px 0 14px;
+}
+.cards__group:first-child {
+  margin-top: 0;
+}
 .cards {
   display: grid;
   gap: 22px;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.cards + .cards__group {
+  margin-top: 34px;
 }
 .card {
   position: relative;
