@@ -21,6 +21,9 @@
 <meta property="og:image:alt" content="Wacki: Kosmiczna rozgrywka — okładka portu" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta property="twitter:image" content="{{ "assets/cover.png" | absURL }}" />
+
+{{- /* Cover is the LCP element above the fold — preload it. */}}
+<link rel="preload" as="image" href="assets/cover.png" />
 {{ end }}
 
 {{ define "main" }}

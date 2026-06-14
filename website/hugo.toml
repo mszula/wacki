@@ -5,9 +5,17 @@ title = "Wacki: Kosmiczna rozgrywka"
 # (matches the canonical links and avoids breaking inbound /stats.html links).
 uglyURLs = true
 
-# Two hand-authored pages — no taxonomies or feeds. Sitemap is kept (SEO).
+# Real <lastmod> in the sitemap, taken from each page's last git commit.
+# CI must checkout with fetch-depth: 0 for the full history (see pages.yml).
+enableGitInfo = true
+
+# Emit robots.txt (template in layouts/robots.txt).
+enableRobotsTXT = true
+
+# Two hand-authored pages — no taxonomies or feeds. Sitemap + robots stay (SEO).
+# (enableRobotsTXT above auto-adds the robots output to the home page.)
 disableKinds = ["taxonomy", "term", "RSS"]
 
-[outputs]
-home = ["HTML"]
-page = ["HTML"]
+[params]
+author = "Mateusz Szuła"
+description = "Wierny, otwarty port polskiej gry przygodowej Wacki: Kosmiczna rozgrywka (1998). Przejdziesz ją w całości na PC i handheldach."

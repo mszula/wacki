@@ -1,10 +1,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>{{ .Title }}</title>
+<title>{{ .Title | default site.Title }}</title>
+<meta name="author" content="{{ site.Params.author }}" />
 
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+<link rel="manifest" href="site.webmanifest" />
 <meta name="theme-color" content="#e8330d" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />

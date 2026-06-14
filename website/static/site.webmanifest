@@ -1,0 +1,15 @@
+{
+  "name": "Wacki: Kosmiczna rozgrywka",
+  "short_name": "Wacki",
+  "description": "Wierny, otwarty port polskiej gry przygodowej Wacki: Kosmiczna rozgrywka (1998) na PC i handheldy.",
+  "lang": "pl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff0db",
+  "theme_color": "#e8330d",
+  "icons": [
+    { "src": "assets/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

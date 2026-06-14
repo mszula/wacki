@@ -1,0 +1,38 @@
+{{- /* Structured data (schema.org JSON-LD). WebSite on every page; the rich
+       VideoGame entity only on the homepage. Built with dict+jsonify so all
+       escaping is handled by Hugo. */ -}}
+{{- $website := dict
+  "@context" "https://schema.org"
+  "@type" "WebSite"
+  "name" "Wacki: Kosmiczna rozgrywka"
+  "url" site.BaseURL
+  "inLanguage" "pl"
+  "description" site.Params.description
+-}}
+<script type="application/ld+json">{{ $website | jsonify | safeJS }}</script>
+{{- if .IsHome }}
+{{- $game := dict
+  "@context" "https://schema.org"
+  "@type" "VideoGame"
+  "name" "Wacki: Kosmiczna rozgrywka"
+  "alternateName" "Wacki"
+  "description" "Polska przygodowa gra point-and-click z 1998 roku — darmowy, otwarty port silnika na macOS, Linux, Windows oraz handheldy (Miyoo, Anbernic, PortMaster)."
+  "url" site.BaseURL
+  "image" (absURL "assets/cover.png")
+  "inLanguage" "pl"
+  "genre" "Przygodowa point-and-click"
+  "datePublished" "1998-07-01"
+  "applicationCategory" "Game"
+  "operatingSystem" "Windows, macOS, Linux"
+  "gamePlatform" (slice "Windows" "macOS" "Linux" "Miyoo" "Anbernic" "PortMaster")
+  "author" (dict "@type" "Organization" "name" "Seven Stars Multimedia")
+  "publisher" (dict "@type" "Organization" "name" "TopWare Interactive Polska")
+  "offers" (dict
+    "@type" "Offer"
+    "price" "0"
+    "priceCurrency" "PLN"
+    "availability" "https://schema.org/InStock"
+    "url" site.BaseURL)
+-}}
+<script type="application/ld+json">{{ $game | jsonify | safeJS }}</script>
+{{- end }}
