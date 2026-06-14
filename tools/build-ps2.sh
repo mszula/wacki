@@ -61,20 +61,22 @@ SDL_LIBS="-L$PORTS/lib -L$PS2DEV/gsKit/lib -L$PS2DEV/ps2sdk/ee/lib \
 WACKI_VERSION="$(wacki_version)"
 echo "[ps2] version: $WACKI_VERSION"
 
-# Optional video-mode test flags (NTSC 640x448i is the default).
-#   WACKI_PS2_PAL=1         → PAL 640x512 interlaced (region-authentic, 50 Hz)
-#   WACKI_PS2_PROGRESSIVE=1 → VGA 640x480p (needs a VGA/component display)
+# Video-mode PRESELECT flags. The ELF shows a runtime PAL/NTSC/480p picker at
+# boot (src/platform/ps2/video_ps2.c); these only change which entry starts
+# highlighted (NTSC if unset) — handy for the per-mode test ELFs.
+#   WACKI_PS2_PAL=1         → preselect PAL 640x512 interlaced (region-authentic, 50 Hz)
+#   WACKI_PS2_PROGRESSIVE=1 → preselect VGA 640x480p (needs a VGA/component display)
 if [ "${WACKI_PS2_PAL:-0}" = 1 ]; then
     SDL_CFLAGS="$SDL_CFLAGS -DWACKI_PS2_PAL"
-    echo "[ps2] video: PAL 640x512 (test build)"
+    echo "[ps2] video: PAL 640x512 (preselect)"
 fi
 if [ "${WACKI_PS2_PROGRESSIVE:-0}" = 1 ]; then
     SDL_CFLAGS="$SDL_CFLAGS -DWACKI_PS2_PROGRESSIVE"
-    echo "[ps2] video: progressive 640x480 (test build)"
+    echo "[ps2] video: progressive 640x480 (preselect)"
 fi
 if [ "${WACKI_PS2_576P:-0}" = 1 ]; then
     SDL_CFLAGS="$SDL_CFLAGS -DWACKI_PS2_576P"
-    echo "[ps2] video: PAL progressive 640x576 (test build)"
+    echo "[ps2] video: PAL progressive 640x576 (preselect)"
 fi
 
 # Run the unchanged Makefile inside the container. The ps2dev image is

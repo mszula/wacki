@@ -119,3 +119,43 @@ void platform_pad_read_motion(int *dx, int *dy, float *ax, float *ay)
      * added; a no-op elsewhere. */
     plat_pad_read_extra(ax, ay);
 }
+
+/* Edge-triggered menu navigation — see wacki/platform/input.h. Drives the PS2
+ * boot-time video-mode picker, which runs before the main event loop, so it
+ * refreshes the controller state itself (SDL_GameControllerUpdate) instead of
+ * relying on the per-frame event pump. */
+int plat_pad_menu_nav(int *up, int *down, int *confirm)
+{
+    *up = *down = *confirm = 0;
+    if (!s_pad) return 0;                      /* no pad — caller uses a default */
+
+    SDL_GameControllerUpdate();                /* poll fresh state, no event loop */
+
+    int sy = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY);
+    int u = SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_UP)
+            || sy < -PAD_ANALOG_DEADZONE;
+    int d = SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+            || sy >  PAD_ANALOG_DEADZONE;
+    int c = SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_A);
+
+    /* Fire on the press edge so a held direction/button advances once. */
+    static int p_u = 0, p_d = 0, p_c = 0;
+    if (u && !p_u) *up = 1;
+    if (d && !p_d) *down = 1;
+    if (c && !p_c) *confirm = 1;
+    p_u = u; p_d = d; p_c = c;
+    return 1;
+}
+
+/* Discard input queued during a pre-game modal — see wacki/platform/input.h.
+ * The picker polls the pad with SDL_GameControllerUpdate, which also POSTS the
+ * button events to the queue; the confirming X would otherwise reach the game's
+ * first pump as a click and skip the intro. Drop the whole queue + clear the
+ * click latches. */
+void plat_input_flush(void)
+{
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    g_lmb_clicked = 0;
+    g_rmb_clicked = 0;
+}

@@ -16,7 +16,10 @@
 #include <dmaKit.h>
 
 #include "wacki/platform/video.h"   /* plat_video_* */
+#include "wacki/platform/input.h"   /* plat_pad_menu_nav — picker input */
 #include "ps2_internal.h"           /* platform_ps2_audio_init (plat_video_init) */
+
+#include "font8x8.inc"              /* PS2_FONT8X8 — menu text as solid sprites */
 
 /* Frame profiling (read over PINE). exp = 8bpp->ARGB expansion + texture
  * update; draw = RenderClear/Copy/Present (GS + vsync); frame = full
@@ -39,50 +42,157 @@ static GSGLOBAL *s_gs = 0;
 static GSTEXTURE s_fbtex;
 static u32       s_clut[256] __attribute__((aligned(64)));
 
+/* ---- video mode: runtime, chosen by the boot-time picker --------- *
+ *
+ * The display mode used to be a compile-time WACKI_PS2_* #ifdef; it's now a
+ * runtime choice (ps2_video_picker below). The WACKI_PS2_* build flags survive
+ * only as the picker's PRESELECTED default, so the per-mode test builds still
+ * land on "their" mode without touching the pad. */
+typedef enum { PS2_VIDEO_NTSC = 0, PS2_VIDEO_PAL, PS2_VIDEO_480P } ps2_video_mode_t;
+
+#if   defined(WACKI_PS2_PROGRESSIVE)
+static int s_video_mode = PS2_VIDEO_480P;
+#elif defined(WACKI_PS2_PAL)
+static int s_video_mode = PS2_VIDEO_PAL;
+#else
+static int s_video_mode = PS2_VIDEO_NTSC;
+#endif
+
+/* Set the gsGlobal mode + geometry for a picked mode. NTSC keeps gsKit's
+ * auto-detected geometry (overriding it leaves MagV=-1 = top-half only); PAL
+ * and 480p set the FULL geometry, as the old per-mode #ifdef chain did. */
+static void apply_video_mode(GSGLOBAL *gs, int mode)
+{
+    switch (mode) {
+    case PS2_VIDEO_PAL:
+        /* PAL 640×512 interlaced — region-authentic for this Polish game; the
+         * 640×480 shadow letterboxes (16px bars) instead of squashing. 50 Hz
+         * vs the 30 fps present isn't a clean 2:1, so motion is a touch less
+         * smooth than NTSC. */
+        gs->Mode = GS_MODE_PAL; gs->Interlace = GS_INTERLACED; gs->Field = GS_FIELD;
+        gs->Width = 640; gs->Height = 512;
+        break;
+    case PS2_VIDEO_480P:
+        /* Progressive 640×480 (VGA 60 Hz) — 1:1, no interlace flicker. Needs a
+         * VGA/component display on real HW; PCSX2's VGA window may sit a little
+         * high (StartY needs interactive tuning). */
+        gs->Mode = GS_MODE_VGA_640_60; gs->Interlace = GS_NONINTERLACED; gs->Field = GS_FRAME;
+        gs->Width = 640; gs->Height = 480;
+        break;
+    case PS2_VIDEO_NTSC:
+    default:
+        /* gsKit auto NTSC (640×448 interlaced). Do NOT override geometry. */
+        break;
+    }
+}
+
+/* Draw an ASCII string from the embedded 8x8 font as solid GS sprites — the
+ * same primitive path as the highlight bar, so it renders with no texture or
+ * alpha (gsKit fontm's textured path drew blank here). `px` is the on-screen
+ * size of one font pixel; consecutive lit pixels in a row merge into one run
+ * sprite to keep the queue small. Advances 8*px per glyph. */
+static void draw_text(GSGLOBAL *gs, float x, float y, float px, int z,
+                      u64 color, const char *s)
+{
+    for (; *s; ++s) {
+        unsigned ch = (unsigned char)*s;
+        if (ch >= 0x20 && ch <= 0x7E) {
+            const unsigned char *g = PS2_FONT8X8[ch - 0x20];
+            for (int row = 0; row < 8; ++row) {
+                unsigned bits = (unsigned)g[row];
+                int col = 0;
+                while (bits) {
+                    if (bits & 1u) {
+                        int run = 1;
+                        while ((bits >> run) & 1u) ++run;      /* merge lit run */
+                        float gx = x + (float)col * px;
+                        float gy = y + (float)row * px;
+                        gsKit_prim_sprite(gs, gx, gy,
+                                          gx + (float)run * px, gy + px, z, color);
+                        col += run; bits >>= run;
+                    } else { ++col; bits >>= 1; }
+                }
+            }
+        }
+        x += 8.0f * px;
+    }
+}
+
+/* Centred variant — places the string's midpoint at screen-x `cx`, so lines
+ * stay on-screen regardless of length (avoids the hand-tuned-x clipping). */
+static void draw_text_c(GSGLOBAL *gs, float cx, float y, float px, int z,
+                        u64 color, const char *s)
+{
+    draw_text(gs, cx - 8.0f * px * (float)strlen(s) * 0.5f, y, px, z, color, s);
+}
+
+/* ---- boot-time mode picker --------------------------------------- *
+ *
+ * Drawn in the safe auto-NTSC screen platform_ps2_video_init brings up first
+ * (works on every TV + PCSX2). The DualShock D-pad/stick moves the selection,
+ * X confirms. With no pad we skip straight to the preselected default so a
+ * controller-less PCSX2 launch never soft-locks. Returns the chosen
+ * ps2_video_mode_t; the caller re-inits the screen if it differs from NTSC. */
+static int ps2_video_picker(GSGLOBAL *gs, int preselect)
+{
+    int sel = (preselect == PS2_VIDEO_PAL || preselect == PS2_VIDEO_480P)
+              ? preselect : PS2_VIDEO_NTSC;
+
+    int up, down, confirm;
+    if (!plat_pad_menu_nav(&up, &down, &confirm))
+        return sel;                              /* no pad — use the default */
+
+    static const char *const ITEMS[3] = {
+        "NTSC - 640x448, 60 Hz",
+        "PAL - 640x512, 50 Hz",
+        "480p - 640x480, progresywny"
+    };
+    /* "Wacki" palette — warm paper-and-ink: deep-brown ground, red-orange game
+     * title, cream heading, parchment options, a gold bar behind the pick.
+     * (Kept off a light background — that would clamp to white on the GS.) */
+    const u64 BG    = GS_SETREG_RGBAQ(0x22, 0x16, 0x10, 0x80, 0);  /* deep brown    */
+    const u64 TITLE = GS_SETREG_RGBAQ(0xE8, 0x46, 0x1A, 0x80, 0);  /* red-orange    */
+    const u64 HEAD  = GS_SETREG_RGBAQ(0xF2, 0xD9, 0x8C, 0x80, 0);  /* cream         */
+    const u64 ITEM  = GS_SETREG_RGBAQ(0xC9, 0xB8, 0x90, 0x80, 0);  /* parchment     */
+    const u64 SELT  = GS_SETREG_RGBAQ(0x22, 0x16, 0x10, 0x80, 0);  /* dark (on bar) */
+    const u64 BARC  = GS_SETREG_RGBAQ(0xF2, 0xC0, 0x33, 0x80, 0);  /* gold bar      */
+    const u64 HINT  = GS_SETREG_RGBAQ(0x9A, 0x82, 0x60, 0x80, 0);  /* muted warm    */
+
+    for (;;) {
+        plat_pad_menu_nav(&up, &down, &confirm);
+        if (up)      sel = (sel + 2) % 3;        /* +2 mod 3 == -1 */
+        if (down)    sel = (sel + 1) % 3;
+        if (confirm) break;
+
+        gsKit_clear(gs, BG);
+        draw_text_c(gs, 320.0f,  46.0f, 2.0f, 3, TITLE, "Wacki: Kosmiczna Rozgrywka");
+        draw_text_c(gs, 320.0f,  84.0f, 3.0f, 3, HEAD,  "Tryb video");
+        for (int i = 0; i < 3; ++i) {
+            float y = 162.0f + (float)i * 46.0f;
+            if (i == sel)
+                gsKit_prim_sprite(gs, 70.0f, y - 7.0f, 570.0f, y + 25.0f, 2, BARC);
+            draw_text_c(gs, 320.0f, y, 2.0f, 3, i == sel ? SELT : ITEM, ITEMS[i]);
+        }
+        draw_text_c(gs, 320.0f, 350.0f, 2.0f, 3, HINT,
+                    "Gora/Dol - wybor   X - zatwierdz");
+        gsKit_queue_exec(gs);
+        gsKit_sync_flip(gs);
+    }
+    /* Drop the confirming X (and any other queued pad input) so it doesn't reach
+     * the game's first pump as a click and skip the (click-skippable) intro. */
+    plat_input_flush();
+    return sel;
+}
+
 int platform_ps2_video_init(int w, int h)
 {
+    /* Bring the GS up in gsKit's auto NTSC first (safe on every display) so the
+     * picker has a screen to draw on; switch to the picked mode afterwards.
+     * Only the pixel format / buffering are tweaked here — NOT the geometry. */
     s_gs = gsKit_init_global();
-#ifdef WACKI_PS2_PROGRESSIVE
-    /* Progressive 640×480 (VGA 60 Hz) — full height, no interlace flicker,
-     * 1:1 with the engine framebuffer. Geometry is correct (PINE-confirmed
-     * 640×480, MagV=0, non-interlaced), but PCSX2's VGA display window sits
-     * a little high (top clipped, black bar at the bottom) — the StartY
-     * placement needs interactive tuning. Off by default until a startup
-     * mode picker lands; also needs a VGA/component display on real HW. */
-    s_gs->Mode           = GS_MODE_VGA_640_60;
-    s_gs->Interlace      = GS_NONINTERLACED;
-    s_gs->Field          = GS_FRAME;
-    s_gs->Width          = 640;
-    s_gs->Height         = 480;
-#elif defined(WACKI_PS2_576P)
-    /* PAL progressive 576p (640×576, 50 Hz) — test build: WACKI_PS2_576P=1.
-     * Region-authentic + no interlace flicker. The 640×480 shadow draws 1:1
-     * with a 48px letterbox bar top & bottom. Needs a 576p-capable (component/
-     * RGB) display on real HW. Full geometry like the others. */
-    s_gs->Mode           = GS_MODE_DTV_576P;
-    s_gs->Interlace      = GS_NONINTERLACED;
-    s_gs->Field          = GS_FRAME;
-    s_gs->Width          = 640;
-    s_gs->Height         = 576;
-#elif defined(WACKI_PS2_PAL)
-    /* PAL 640×512 interlaced — test build: WACKI_PS2_PAL=1 ./tools/build-ps2.sh.
-     * The 640×480 shadow scales to the taller PAL frame (less vertical squash
-     * than NTSC's 480→448) and is region-authentic for this Polish game.
-     * Caveat: 50 Hz vs the 30 fps present cadence isn't a clean 2:1, so motion
-     * is a touch less smooth than NTSC. Set the FULL geometry like the
-     * progressive path — a partial override leaves MagV=-1 (top-half only). */
-    s_gs->Mode           = GS_MODE_PAL;
-    s_gs->Interlace      = GS_INTERLACED;
-    s_gs->Field          = GS_FIELD;
-    s_gs->Width          = 640;
-    s_gs->Height         = 512;
-#endif
-    /* Default: gsKit's auto-detected mode (NTSC 640×448 interlaced) — full
-     * screen, correct MagV. Do NOT override its geometry (overriding left
-     * MagV=-1 = top-half). Only the pixel format / buffering are tweaked. */
-    s_gs->PSM            = GS_PSM_CT24;
-    s_gs->PSMZ           = GS_PSMZ_16S;
-    s_gs->ZBuffering     = GS_SETTING_OFF;
+    s_gs->PSM             = GS_PSM_CT24;
+    s_gs->PSMZ            = GS_PSMZ_16S;
+    s_gs->ZBuffering      = GS_SETTING_OFF;
     s_gs->DoubleBuffering = GS_SETTING_ON;
     s_gs->PrimAlphaEnable = GS_SETTING_OFF;
 
@@ -91,7 +201,17 @@ int platform_ps2_video_init(int w, int h)
     dmaKit_chan_init(DMA_CHANNEL_GIF);
     gsKit_init_screen(s_gs);
     gsKit_mode_switch(s_gs, GS_ONESHOT);
-    gsKit_TexManager_init(s_gs);
+    gsKit_TexManager_init(s_gs);                 /* before fontm (matches gsKit's example) */
+
+    /* Let the player choose PAL / NTSC / 480p, then re-init the screen if the
+     * pick isn't the NTSC we're already showing. */
+    s_video_mode = ps2_video_picker(s_gs, s_video_mode);
+    if (s_video_mode != PS2_VIDEO_NTSC) {
+        apply_video_mode(s_gs, s_video_mode);
+        gsKit_init_screen(s_gs);
+        gsKit_mode_switch(s_gs, GS_ONESHOT);
+        gsKit_TexManager_init(s_gs);             /* re-init VRAM tracking for the new mode */
+    }
 
     s_fbtex.Width           = (u32)w;
     s_fbtex.Height          = (u32)h;

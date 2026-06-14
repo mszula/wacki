@@ -35,4 +35,20 @@ int plat_handle_platform_key(int sym);
  * from the SDL gamepad read (gamepad_sdl.c). */
 void plat_pad_read_extra(float *ax, float *ay);
 
+/* Edge-triggered controller navigation for a simple on-device menu (the PS2
+ * boot-time video-mode picker). Writes 1 to *up / *down / *confirm on the press
+ * EDGE of D-pad up/down (or the left stick) and X (south button); held buttons
+ * fire once. Pumps the controller state itself, so it works before the main
+ * event loop is running. Returns 1 when a controller is connected, 0 when none
+ * — the caller then proceeds with a default instead of soft-locking. Generic
+ * (any pad target); implemented in gamepad_sdl.c. */
+int plat_pad_menu_nav(int *up, int *down, int *confirm);
+
+/* Discard any input queued during a pre-game modal (the PS2 video-mode picker)
+ * and clear the click latches. Without this the button that confirmed the modal
+ * (X) stays in the SDL event queue and the game's first pump reads it as a click
+ * — which skips the (click-skippable) intro cutscene straight to the menu.
+ * Implemented in gamepad_sdl.c. */
+void plat_input_flush(void);
+
 #endif /* WACKI_PLATFORM_INPUT_H */
