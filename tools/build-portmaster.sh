@@ -71,10 +71,13 @@ build_one() {
             export DEBIAN_FRONTEND=noninteractive
             dpkg --add-architecture "$DPKG_ARCH"
             apt-get update -qq
-            # crossbuild-essential-<arch> = the $TRIPLET-{gcc,strip} toolchain
-            # plus build-essential (make + native cc for the HOSTCC embed tool).
+            # build-essential = native cc/make for the HOSTCC embed-pe-data tool
+            #   (crossbuild-essential only *recommends* it, so --no-install-
+            #   recommends would drop it → "make: cc: No such file or directory").
+            # crossbuild-essential-<arch> = the $TRIPLET-{gcc,strip} cross toolchain.
             # libsdl2-dev:<arch> = ARM headers + .so + sdl2.pc via multiarch.
             apt-get install -y -qq --no-install-recommends \
+                build-essential \
                 crossbuild-essential-"$DPKG_ARCH" \
                 "libsdl2-dev:$DPKG_ARCH" \
                 pkg-config xxd ca-certificates >/dev/null
