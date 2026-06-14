@@ -18,7 +18,8 @@
     { key: "mac",        match: ["macos", "darwin", "osx"],    icon: "🍎", label: "macOS",              kind: "pc",       color: "#e0431a" },
     { key: "linux",      match: ["linux"],                     icon: "🐧", label: "Linux",              kind: "pc",       color: "#ff7b08" },
     { key: "miyoo",      match: ["miyoo", "onion"],            icon: "🕹️", label: "Miyoo",              kind: "handheld", color: "#14a84a" },
-    { key: "portmaster", match: ["portmaster"],                icon: "🎮", label: "Anbernic / PortMaster", kind: "handheld", color: "#b8330f" }
+    { key: "portmaster", match: ["portmaster"],                icon: "🎮", label: "Anbernic / PortMaster", kind: "handheld", color: "#b8330f" },
+    { key: "ps2",        match: ["ps2", "playstation"],         icon: "📀", label: "PlayStation 2",         kind: "console",  color: "#1d3b8b" }
   ];
   var OTHER = { key: "other", icon: "📦", label: "Inne", kind: "pc", color: "#6b5a3e" };
 
@@ -42,7 +43,7 @@
 
   function aggregate(releases) {
     var perPlatform = {};
-    var byKind = { pc: 0, handheld: 0 };
+    var byKind = { pc: 0, handheld: 0, console: 0 };
     var perRelease = [];
     var total = 0;
     var firstAssetDate = null;
@@ -178,7 +179,8 @@
       );
     });
 
-    // desktop vs handheld split
+    // desktop vs handheld split (consoles like PS2 show in the per-platform
+    // bars + grand total, but not this binary PC↔handheld widget)
     var pc = data.byKind.pc, hh = data.byKind.handheld, sum = pc + hh;
     var pcPct = sum ? Math.round((pc / sum) * 100) : 0;
     var hhPct = sum ? 100 - pcPct : 0;

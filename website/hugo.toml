@@ -18,4 +18,4 @@ disableKinds = ["taxonomy", "term", "RSS"]
 
 [params]
 author = "Mateusz Szuła"
-description = "Wierny, otwarty port polskiej gry przygodowej Wacki: Kosmiczna rozgrywka (1998). Przejdziesz ją w całości na PC i handheldach."
+description = "Wierny, otwarty port polskiej gry przygodowej Wacki: Kosmiczna rozgrywka (1998). Przejdziesz ją w całości na PC, handheldach i konsolach."

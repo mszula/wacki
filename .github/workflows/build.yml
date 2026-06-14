@@ -392,12 +392,11 @@ jobs:
           if-no-files-found: error
 
   # ---- PlayStation 2 (EE / ps2dev) --------------------------------
-  # Builds dist/wacki-ps2.elf inside the ps2dev Docker image. Coverage
-  # only: the experimental PS2 ELF is uploaded as a CI artifact but NOT
-  # attached to GitHub Releases (no .pak/.iso release archive yet, and
-  # the release job doesn't depend on this one). Keeps the port building
-  # on every push to port/ps2 so a backend or Makefile change can't
-  # silently break it.
+  # Builds dist/wacki-ps2.elf inside the ps2dev Docker image and packages it
+  # as wacki-ps2.zip (the boot ELF + a how-to-run README). Attached to the
+  # GitHub Release like the handheld archives. Also keeps the port building on
+  # every push to port/ps2 so a backend or Makefile change can't silently
+  # break it.
   ps2:
     name: PlayStation 2 (EE)
     runs-on: ubuntu-latest
@@ -423,25 +422,23 @@ jobs:
           ./tools/build-ps2.sh
           sudo chown -R "$USER:$USER" dist src/embedded_wacki_pe.c 2>/dev/null || true
 
-      - name: Log size
-        run: ls -lh dist/wacki-ps2.elf
+      - name: Package .zip
+        run: ./tools/pack-ps2.sh dist/wacki-ps2.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: wacki-ps2
-          path: dist/wacki-ps2.elf
+          path: dist/wacki-ps2.zip
           if-no-files-found: error
 
   # ---- release -----------------------------------------------------
-  # Only fires on tag push (`v*`). Pulls the per-platform archives
-  # from the matrix build + the Miyoo and PortMaster jobs and attaches
-  # them to a GitHub Release named after the tag. (The ps2 job runs on
-  # tags too but isn't a dependency — the experimental ELF isn't a
-  # release asset yet.)
+  # Only fires on tag push (`v*`). Pulls the per-platform archives from the
+  # matrix build + the Miyoo, PortMaster and PS2 jobs and attaches them to a
+  # GitHub Release named after the tag.
   release:
     name: GitHub Release
-    needs: [build, miyoo, portmaster]
+    needs: [build, miyoo, portmaster, ps2]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

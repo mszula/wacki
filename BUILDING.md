@@ -91,3 +91,25 @@ Wynik: `dist/Wacki.zip` — gotowa paczka PortMaster (skrypt startowy,
 dynamicznie: binarka korzysta z biblioteki dostarczanej przez
 PortMaster w czasie uruchomienia (właściwy sterownik wyświetlania
 per-urządzenie).
+
+## Konsola — PlayStation 2
+
+Cross-build przez obraz Docker **ps2dev** (toolchain
+`mips64r5900el-ps2-elf` + SDL2-PS2). Na hoście wystarczy `docker`:
+
+```bash
+cp /sciezka/do/plyty/WACKI.EXE data/
+
+./tools/build-ps2.sh        # buduje dist/wacki-ps2.elf
+./tools/pack-ps2.sh         # składa dist/wacki-ps2.zip (ELF + README)
+```
+
+Wynik: `dist/wacki-ps2.zip` — bootowalny ELF z instrukcją uruchomienia
+(`uLaunchELF` na sprzęcie z FreeMcBoot/FreeDVDBoot, albo „Boot ELF"
+w PCSX2). `WACKI_STRIP=1 ./tools/build-ps2.sh` usuwa symbole do wydania;
+domyślnie zostają (przydatne do debugowania przez PINE/PCSX2).
+
+Testy trybów wideo (NTSC / PAL / 480p / 576p): `WACKI_PS2_PAL=1
+./tools/build-ps2.sh` itd., albo `./tools/build-ps2-modes.sh` (buduje
+wszystkie cztery naraz). Bootowalny obraz ISO z danymi w środku — do
+PCSX2 bez konfiguracji HostFS — składa `./tools/build-ps2-iso.sh`.
