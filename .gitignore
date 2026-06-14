@@ -44,8 +44,9 @@ ANALYSIS/
 /website/resources/
 /website/.hugo_build.lock
 
-# Editor / OS metadata
+# Editor / OS / tool metadata
 .DS_Store
 .idea/
 .vscode/
+.claude/
 *.swp
