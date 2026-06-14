@@ -317,6 +317,18 @@ struct CygFile { int fd; };           /* completes storage.h's opaque CygFile */
 CygFile *fopen_cyg(const char *name, const char *mode)
 {
     (void)mode;                       /* the engine opens archives read-only */
+
+    /* Every PS2 path needs a device prefix (host: / cdfs: / mass: / …). The
+     * portable asset search tries cwd-relative candidates too — a bare
+     * "Dane_01.dta" or "./data/fiacik.wav" — which are valid on desktop but can
+     * never open here. Reject them quietly: handing them to fileXioOpen only
+     * spams the IOP log with "Unknown device" and burns a SIF RPC per try. The
+     * caller then falls through to the next, device-prefixed candidate
+     * (g_data_root). A device prefix = a ':' that precedes the first '/'. */
+    const char *colon = strchr(name, ':');
+    const char *slash = strchr(name, '/');
+    if (!colon || (slash && slash < colon)) return NULL;
+
     char fixed[320];
     ps2_normalize_path(name, fixed, sizeof fixed);
     int fd = fileXioOpen(fixed, FIO_O_RDONLY);
