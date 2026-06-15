@@ -16,5 +16,11 @@ captures/
 # regenerates it on first sync. Keep the wrapper *properties* (committed).
 gradle/wrapper/gradle-wrapper.jar
 
+# Signing material — NEVER commit. Release keys live in CI secrets / your
+# ~/.gradle/gradle.properties, not the repo.
+*.jks
+*.keystore
+keystore.properties
+
 # Android Studio / IntelliJ
 .idea/

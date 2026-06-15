@@ -2,8 +2,17 @@ plugins {
     id 'com.android.application'
 }
 
+// Release signing material comes from the environment (CI secrets) or
+// ~/.gradle/gradle.properties — NEVER committed. If absent, the release build
+// stays unsigned (and debug builds always work via the auto debug keystore).
+// See android/README.md → "Wydanie produkcyjne".
+def releaseStore   = System.getenv('WACKI_KEYSTORE')          ?: findProperty('wacki.keystore')
+def releaseStorePw = System.getenv('WACKI_KEYSTORE_PASSWORD') ?: findProperty('wacki.keystore.password')
+def releaseAlias   = System.getenv('WACKI_KEY_ALIAS')         ?: findProperty('wacki.key.alias')
+def releaseKeyPw   = System.getenv('WACKI_KEY_PASSWORD')      ?: findProperty('wacki.key.password')
+
 android {
-    namespace 'pl.wacki'
+    namespace 'pl.mszula.wacki'
     compileSdk 34
     // Pinned so local (Android Studio) + CI builds use the same toolchain.
     // AGP 8.5's default NDK; Android Studio offers to install it on sync, CI
@@ -11,7 +20,7 @@ android {
     ndkVersion '26.1.10909125'
 
     defaultConfig {
-        applicationId 'pl.wacki'
+        applicationId 'pl.mszula.wacki'
         minSdk 24            // Android 7.0 — SAF (ACTION_OPEN_DOCUMENT_TREE) + DocumentFile
         targetSdk 34
         versionCode 1
@@ -46,16 +55,31 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            // Populated only when the keystore is provided (CI secrets / local
+            // gradle.properties); otherwise this config stays empty and the
+            // release build is left unsigned.
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword releaseStorePw
+                keyAlias releaseAlias
+                keyPassword releaseKeyPw
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            // Sideload-friendly: debuggable, no shrinking.
+            // Sideload-friendly test build, auto-signed with the debug keystore.
             applicationIdSuffix '.debug'
             versionNameSuffix '-debug'
         }
         release {
             minifyEnabled false
-            // Unsigned release for manual signing; debug builds are
-            // auto-signed with the debug keystore and install directly.
+            // Sign with the release key when configured; without a keystore the
+            // APK builds unsigned (you'd sign it manually later).
+            if (releaseStore) signingConfig signingConfigs.release
         }
     }
 
@@ -66,6 +90,6 @@ android {
 }
 
 dependencies {
-    // SAF directory tree traversal for the first-run asset import.
+    // SAF directory tree traversal + DocumentFile (read-in-place data access).
     implementation 'androidx.documentfile:documentfile:1.0.1'
 }

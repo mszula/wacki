@@ -10,7 +10,7 @@
  * The data archives are already in place by the time this activity starts:
  * SetupActivity imports them before launching us.
  */
-package pl.wacki;
+package pl.mszula.wacki;
 
 import org.libsdl.app.SDLActivity;
 

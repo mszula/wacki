@@ -59,8 +59,9 @@ APK jest malutkie — danych gry w nim nie ma. Po instalacji:
 
 > **Bez SAF (adb/menedżer):** zamiast wskazywać folder możesz wrzucić
 > `DANE_*.DTA` wprost do prywatnego katalogu aplikacji
-> `Android/data/pl.wacki.debug/files/data/` (release: `pl.wacki`) — silnik też
-> go tam znajdzie (`adb push DANE_01.DTA /sdcard/Android/data/pl.wacki.debug/files/data/`).
+> `Android/data/pl.mszula.wacki.debug/files/data/` (release: `pl.mszula.wacki`) —
+> silnik też go tam znajdzie
+> (`adb push DANE_01.DTA /sdcard/Android/data/pl.mszula.wacki.debug/files/data/`).
 
 Zapisy i `wacki.cfg` lądują w pamięci wewnętrznej aplikacji.
 
@@ -80,6 +81,61 @@ handheldach.
 klik zwykle nie jest przekazywany do apki — użyj **Tab** do zmiany postaci.
 Prawy przycisk myszy też zadziała, jeśli emulator go forwarduje (silnik mapuje
 PPM natywnie).
+
+## Wydanie produkcyjne (podpisywanie)
+
+To, co budowałeś dotąd (i CI na każdym pushu), to **debug APK** — podpisany
+automatycznym kluczem debugowym Androida (`...-debug`, `applicationId`
+`pl.mszula.wacki.debug`). Nadaje się tylko do testów/sideloadu; **na produkcję
+się nie nadaje** (Sklep Play go odrzuci, a klucz debug jest publiczny).
+
+Na produkcję potrzebujesz **własnego klucza** (keystore). Generujesz go **raz**
+i trzymasz na zawsze — każda przyszła aktualizacja musi być podpisana tym samym
+kluczem; zgubienie klucza = brak możliwości aktualizacji apki.
+
+**1. Wygeneruj keystore (raz):**
+```bash
+keytool -genkeypair -v -keystore wacki-release.jks \
+        -alias wacki -keyalg RSA -keysize 2048 -validity 10000
+```
+Plik `.jks` i hasła trzymaj bezpiecznie, **poza repo** (`.gitignore` blokuje
+`*.jks`/`*.keystore`).
+
+**2. Lokalny podpisany build.** W `~/.gradle/gradle.properties` (poza repo):
+```properties
+wacki.keystore=/pełna/ścieżka/wacki-release.jks
+wacki.keystore.password=…
+wacki.key.alias=wacki
+wacki.key.password=…
+```
+potem:
+```bash
+cd android
+./gradlew assembleRelease   # podpisany APK → app/build/outputs/apk/release/app-release.apk
+./gradlew bundleRelease     # AAB pod Sklep Play → app/build/outputs/bundle/release/app-release.aab
+```
+Bez tych właściwości `assembleRelease` zbuduje APK **niepodpisany**.
+
+**3. Podpisany build w CI (automatycznie przy tagu `v*`).** Dodaj 4 sekrety
+repo (Settings → Secrets and variables → Actions):
+
+| Sekret | Wartość |
+|--------|---------|
+| `WACKI_KEYSTORE_BASE64`   | `base64 -i wacki-release.jks` (cała zawartość) |
+| `WACKI_KEYSTORE_PASSWORD` | hasło do keystore |
+| `WACKI_KEY_ALIAS`         | `wacki` |
+| `WACKI_KEY_PASSWORD`      | hasło do klucza |
+
+Wtedy `git tag v1.0 && git push --tags` zbuduje **podpisany release APK** i
+dołączy `wacki-android.apk` do GitHub Release. Bez tych sekretów (albo na
+zwykłym pushu) CI buduje debug APK do testów — nic się nie wywala.
+
+> **Sklep Play vs sideload.** Powyższe daje podpisany APK do samodzielnego
+> rozprowadzania (GitHub Releases / strona). Sklep Play wymaga **AAB**
+> (`bundleRelease`), konta deweloperskiego (jednorazowa opłata), oceny treści
+> i tzw. Play App Signing (Google trzyma wtedy klucz dystrybucyjny). Pamiętaj
+> też, że to port komercyjnej gry z 1997 (wszyte sekcje `WACKI.EXE`) — Play
+> egzekwuje prawa autorskie ostrzej niż GitHub; ta decyzja jest po Twojej stronie.
 
 ## Jak to się składa
 

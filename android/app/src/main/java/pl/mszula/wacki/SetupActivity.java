@@ -14,7 +14,7 @@
  * to WackiActivity and finishes. Files dropped directly into the app's external
  * files dir (adb push / file manager) are also honoured as a fallback.
  */
-package pl.wacki;
+package pl.mszula.wacki;
 
 import android.app.Activity;
 import android.content.Intent;

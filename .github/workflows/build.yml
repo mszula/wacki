@@ -533,18 +533,47 @@ jobs:
       - name: Generate embedded WACKI.EXE blob
         run: make src/embedded_wacki_pe.c
 
-      - name: Build debug APK
-        working-directory: android
-        run: gradle --no-daemon assembleDebug --stacktrace
-
-      - name: Stage APK
+      # Decode the release keystore from a secret, when configured. Absent on
+      # forks / before the maintainer adds it → falls back to the debug build.
+      - name: Decode release keystore (if configured)
+        id: keystore
+        env:
+          KS_B64: ${{ secrets.WACKI_KEYSTORE_BASE64 }}
         run: |
-          src=android/app/build/outputs/apk/debug/app-debug.apk
-          if [ ! -f "$src" ]; then
-            echo "::error::APK not found at $src"; find android -name '*.apk'; exit 1
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/wacki-release.jks"
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
           fi
-          cp "$src" wacki-android.apk
-          ls -lh wacki-android.apk
+
+      # On a v* tag WITH a keystore → signed release APK (what ships). Otherwise
+      # (branch pushes, or no keystore yet) → debug APK for testing. Either way
+      # the result is staged as wacki-android.apk (one artifact, always present).
+      - name: Build APK
+        working-directory: android
+        env:
+          WACKI_KEYSTORE: ${{ steps.keystore.outputs.have == 'true' && format('{0}/wacki-release.jks', runner.temp) || '' }}
+          WACKI_KEYSTORE_PASSWORD: ${{ secrets.WACKI_KEYSTORE_PASSWORD }}
+          WACKI_KEY_ALIAS: ${{ secrets.WACKI_KEY_ALIAS }}
+          WACKI_KEY_PASSWORD: ${{ secrets.WACKI_KEY_PASSWORD }}
+        run: |
+          is_tag=false
+          case "$GITHUB_REF" in refs/tags/v*) is_tag=true;; esac
+          if [ "$is_tag" = "true" ] && [ "${{ steps.keystore.outputs.have }}" = "true" ]; then
+            echo "→ signed release APK"
+            gradle --no-daemon assembleRelease --stacktrace
+            out=app/build/outputs/apk/release/app-release.apk
+          else
+            echo "→ debug APK (no release keystore, or not a v* tag)"
+            gradle --no-daemon assembleDebug --stacktrace
+            out=app/build/outputs/apk/debug/app-debug.apk
+          fi
+          if [ ! -f "$out" ]; then
+            echo "::error::APK not found at $out"; find . -name '*.apk'; exit 1
+          fi
+          cp "$out" "$GITHUB_WORKSPACE/wacki-android.apk"
+          ls -lh "$GITHUB_WORKSPACE/wacki-android.apk"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -16,7 +16,7 @@
  * name→Uri index, so they're safe to call from the SDL thread before any
  * explicit init.
  */
-package pl.wacki;
+package pl.mszula.wacki;
 
 import android.content.Context;
 import android.content.SharedPreferences;
