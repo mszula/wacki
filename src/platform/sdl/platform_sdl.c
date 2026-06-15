@@ -225,8 +225,12 @@ static void handle_keydown(const SDL_Event *ev)
     if (sym == SDLK_F9)  g_quickload_request  = 1;
     /* T56 — F3 stats dump (logs to stderr). */
     if (sym == SDLK_F3)  g_stats_dump_request = 1;
-    /* T24 — F12 opens the Pytanie quit-confirmation menu. */
-    if (sym == SDLK_F12) g_pause_menu_request = 1;
+    /* T24 — F12 opens the Pytanie quit-confirmation menu. The Android Back
+     * button arrives here as SDLK_AC_BACK (delivered as a key rather than
+     * finishing the activity because the Android system HAL sets
+     * SDL_HINT_ANDROID_TRAP_BACK_BUTTON); map it to the same pause menu.
+     * AC_BACK never fires on desktop/handheld, so no platform guard. */
+    if (sym == SDLK_F12 || sym == SDLK_AC_BACK) g_pause_menu_request = 1;
 
     /* F11 toggles fullscreen at runtime — common convention across desktop
      * apps. plat_video_toggle_fullscreen is a no-op on handheld/PS2 (no
@@ -289,6 +293,44 @@ static int input_debug_enabled(void)
         s_flag = (e && *e && *e != '0') ? 1 : 0;
     }
     return s_flag;
+}
+
+/* ---- touchscreen gestures (Android / any SDL touch device) ------ *
+ *
+ * Single-finger touch needs no code here: SDL's built-in touch→mouse
+ * synthesis (SDL_HINT_TOUCH_MOUSE_EVENTS, on by default) turns a tap into a
+ * left click at the touched point — already corrected for the renderer's
+ * letterbox by SDL_RenderSetLogicalSize — so walking, the HUD panel,
+ * inventory and menus all work through the normal mouse path.
+ *
+ * What synthesis can't express is the game's one non-LMB action: RMB =
+ * toggle the active actor (Ebek ↔ Fjej). We map it to a TWO-FINGER tap,
+ * detected from the raw SDL_FINGER* stream. The left click the first finger's
+ * synthesis latched is cancelled the moment a second finger lands, so the
+ * toggle doesn't also fire a stray walk-to. Inert on every non-touch target
+ * (no SDL_FINGER* events are ever generated). */
+static int s_touch_fingers = 0;   /* fingers currently down */
+static int s_touch_peak    = 0;   /* peak simultaneous fingers this gesture */
+
+static void handle_finger_down(void)
+{
+    if (s_touch_fingers == 0) s_touch_peak = 0;     /* new gesture */
+    ++s_touch_fingers;
+    if (s_touch_fingers > s_touch_peak) s_touch_peak = s_touch_fingers;
+    /* A second finger means this is a multi-touch gesture, not a tap: cancel
+     * the left click the first finger's touch-synthesis just latched. */
+    if (s_touch_fingers == 2) g_lmb_clicked = 0;
+}
+
+static void handle_finger_up(void)
+{
+    if (s_touch_fingers > 0) --s_touch_fingers;
+    if (s_touch_fingers != 0) return;               /* wait for all to lift */
+    if (s_touch_peak >= 2) {
+        g_rmb_clicked = 1;                           /* two-finger tap → toggle */
+        g_lmb_clicked = 0;                           /* belt-and-suspenders */
+    }
+    s_touch_peak = 0;
 }
 
 static void handle_mouse_button_down(const SDL_Event *ev)
@@ -438,6 +480,12 @@ void PlatformPumpEvents(void)
             break;
         case SDL_MOUSEBUTTONDOWN:
             handle_mouse_button_down(&ev);
+            break;
+        case SDL_FINGERDOWN:
+            handle_finger_down();
+            break;
+        case SDL_FINGERUP:
+            handle_finger_up();
             break;
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERDEVICEADDED:

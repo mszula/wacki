@@ -112,3 +112,31 @@ domyślnie zostają (przydatne do debugowania przez PINE/PCSX2).
 Tryb wideo (PAL / NTSC / 480p) wybiera się **w runtime** — ekranem wyboru
 przy starcie ELF-a (domyślnie NTSC). Bootowalny obraz ISO z danymi w środku —
 do PCSX2 bez konfiguracji HostFS — składa `./tools/build-ps2-iso.sh`.
+
+---
+
+## Android
+
+Build w **Android Studio** (Gradle + CMake/NDK + SDL2). Inaczej niż pozostałe
+targety Android nie buduje się przez `make` — projekt żyje w katalogu
+`android/` (jego `app/jni/CMakeLists.txt` jest odpowiednikiem `mk/<target>.mk`).
+
+```bash
+# źródła SDL2 (submoduł, jednorazowo)
+git submodule update --init --recursive
+
+cp /sciezka/do/plyty/WACKI.EXE data/
+make                              # generuje src/embedded_wacki_pe.c (wszywany blob)
+
+# otwórz katalog android/ w Android Studio → Sync → Run,
+# albo z linii poleceń (po wygenerowaniu wrappera):
+cd android && ./gradlew assembleDebug
+# APK: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Android Studio dociągnie SDK 34 + NDK + CMake przy pierwszym „Sync".
+APK jest małe — **danych gry (`DANE_*.DTA`) nie ma w paczce**. Przy pierwszym
+uruchomieniu launcher prosi o wskazanie folderu z plikami `.DTA` (przez Storage
+Access Framework) i kopiuje je do prywatnej pamięci aplikacji. Sterowanie
+dotykiem: dotknięcie = klik/chodzenie, dwa palce = zmiana postaci, Wstecz =
+menu pauzy. Szczegóły i rozwiązywanie problemów: `android/README.md`.

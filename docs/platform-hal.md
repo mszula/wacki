@@ -40,6 +40,9 @@ src/platform/
     ps2/   system_ps2.c · storage_ps2.c · audio_ps2.c · video_ps2.c
            (+ ps2_internal.h — deklaracje międzyplikowe, font8x8.inc)
     miyoo/ miyoo.c        portmaster/ portmaster.c        macos/ macos.m
+    android/ hooks_android.c · data_root_android.c
+             (reszta rodziny SDL niezmieniona; bring-up Androida — writable
+              cwd + trap Wstecz — w gałęzi __ANDROID__ w sdl/system_sdl.c)
 ```
 
 Pliki w `sdl/` są **czystym SDL2 — bez `#ifdef WACKI_MIYOO` /
@@ -91,6 +94,7 @@ Każdy target linkuje **dokładnie jednego dostawcę hooków**:
 | Miyoo       | `miyoo/miyoo.c` (MI_AO + keysymy) |
 | PortMaster  | `portmaster/portmaster.c` (fullscreen) |
 | PS2         | `ps2/system_ps2.c` (analog + mysz USB) |
+| Android     | `android/hooks_android.c` (fullscreen, brak klawiatury) |
 
 Reguła „jeden dostawca na target" usuwa `#ifdef`-y bez kolizji symboli.
 `gamepad_sdl.c` (glue `SDL_GameController`) jest linkowany na każdym targecie z
@@ -104,6 +108,13 @@ zbiera całą wiedzę swojego targetu: flagi `CFLAGS`, nazwę binarki, opcje
 rozmiaru i listę `PLATFORM_SRCS` (implementacje HAL + dostawca hooków).
 Rdzeniowa lista źródeł (`ENGINE_SRCS`) nigdy nie nazywa platformy. Nieznany
 `TARGET` failuje od razu z czytelnym komunikatem.
+
+**Wyjątek — Android.** Android nie buduje się przez `make`: NDK + Gradle mają
+własny system buildu, więc „wpisem buildowym" jest tu `android/app/jni/
+CMakeLists.txt` zamiast `mk/android.mk`. Jego lista źródeł świadomie lustrzanie
+odbija `ENGINE_SRCS` + `SDL_PLATFORM_SRCS` (tak jak `TEST_ENGINE_SRCS` w
+Makefile’u) — dokładając tylko HAL z `src/platform/android/`. Reszta zasad HAL
+zostaje bez zmian: rdzeń woła interfejsy, jeden dostawca hooków na target.
 
 ## Dodanie nowej platformy
 

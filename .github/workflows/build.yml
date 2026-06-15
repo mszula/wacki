@@ -19,10 +19,10 @@ name: build
 
 on:
   push:
-    # port/ps2 is included so the experimental PS2 port (and the shared
-    # build system it leans on) gets CI on every push to the working
+    # port/ps2 + port/android are included so the experimental ports (and the
+    # shared build system they lean on) get CI on every push to the working
     # branch, not just at merge time.
-    branches: [master, main, port/ps2]
+    branches: [master, main, port/ps2, port/android]
     tags: ['v*']
   pull_request:
     branches: [master, main]
@@ -473,13 +473,93 @@ jobs:
           path: dist/wacki-ps2.zip
           if-no-files-found: error
 
+  # ---- Android (SDL2 / Gradle + CMake-NDK) ------------------------
+  # Builds the sideload debug APK. Unlike the handheld/PS2 jobs this isn't
+  # Docker — GitHub's ubuntu runner already carries the Android SDK; we add
+  # JDK 17, a pinned Gradle 8.7, and (via sdkmanager) the pinned NDK + CMake so
+  # CI matches an Android Studio build. SDL2 comes from the git submodule
+  # (submodules: recursive) and is built from source into libSDL2.so alongside
+  # our libmain.so. The APK ships WITHOUT the game data — it imports the user's
+  # Dane_*.dta on first run via SAF (see android/README.md).
+  android:
+    name: Android (debug APK)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # fetch-depth: 0 so CMake's `git describe` bakes the real version, not a
+      # bare sha. submodules: recursive checks out app/jni/SDL — the native
+      # build does add_subdirectory(SDL), so a missing submodule fails configure.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Pin the Android toolchain to what android/app/build.gradle references
+      # (ndkVersion + cmake version). The runner's SDK already has accepted
+      # licenses; this just ensures the exact components are present.
+      - name: Install Android NDK + CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" \
+                     "ndk;26.1.10909125" "cmake;3.22.1"
+
+      # Download a pinned Gradle (matches AGP 8.5.2's required 8.7+). We don't
+      # use the runner's preinstalled Gradle (version drifts) and the wrapper
+      # jar isn't committed, so fetching 8.7 here keeps CI deterministic.
+      - name: Install Gradle 8.7
+        run: |
+          curl -fsSL -o /tmp/gradle.zip \
+            https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          sudo unzip -q -d /opt /tmp/gradle.zip
+          echo "/opt/gradle-8.7/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch WACKI.EXE
+        uses: ./.github/actions/fetch-wacki-exe
+        with:
+          url: ${{ secrets.WACKI_EXE_URL }}
+
+      # Generate the embedded PE blob with the HOST compiler via the canonical
+      # Makefile rule (needs only cc + data/WACKI.EXE, no SDL2). The CMake build
+      # then finds src/embedded_wacki_pe.c already present and skips its own
+      # host-tool fallback.
+      - name: Generate embedded WACKI.EXE blob
+        run: make src/embedded_wacki_pe.c
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle --no-daemon assembleDebug --stacktrace
+
+      - name: Stage APK
+        run: |
+          src=android/app/build/outputs/apk/debug/app-debug.apk
+          if [ ! -f "$src" ]; then
+            echo "::error::APK not found at $src"; find android -name '*.apk'; exit 1
+          fi
+          cp "$src" wacki-android.apk
+          ls -lh wacki-android.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wacki-android
+          path: wacki-android.apk
+          if-no-files-found: error
+
   # ---- release -----------------------------------------------------
   # Only fires on tag push (`v*`). Pulls the per-platform archives from the
-  # matrix build + the Miyoo, PortMaster and PS2 jobs and attaches them to a
-  # GitHub Release named after the tag.
+  # matrix build + the Miyoo, PortMaster, PS2 and Android jobs and attaches
+  # them to a GitHub Release named after the tag.
   release:
     name: GitHub Release
-    needs: [build, miyoo, portmaster-package, ps2]
+    needs: [build, miyoo, portmaster-package, ps2, android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -500,7 +580,7 @@ jobs:
 
       - name: Flatten artifact layout
         run: |
-          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.apk' \) \
                 -exec mv {} . \;
           ls -la wacki-*
 
@@ -516,6 +596,7 @@ jobs:
           files: |
             wacki-*.tar.gz
             wacki-*.zip
+            wacki-*.apk
           body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
 

@@ -1,0 +1,20 @@
+# Android / Gradle build artifacts — only the project sources are committed.
+# The SDL source lives in the git submodule app/jni/SDL (tracked as a gitlink),
+# NOT ignored here.
+.gradle/
+build/
+**/build/
+local.properties
+*.apk
+*.aab
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# The Gradle wrapper jar is large + binary; Android Studio (or `gradle wrapper`)
+# regenerates it on first sync. Keep the wrapper *properties* (committed).
+gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IntelliJ
+.idea/

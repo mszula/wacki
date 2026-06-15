@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wacki</string>
+
+    <string name="setup_title">Wacki — pierwsze uruchomienie</string>
+    <string name="setup_intro">Gra potrzebuje plików danych z oryginalnej płyty (DANE_*.DTA).\n\nSkopiuj je gdzieś na telefon (np. do osobnego folderu), a następnie wskaż ten folder poniżej. Pliki zostaną przeniesione do pamięci aplikacji — robisz to tylko raz.</string>
+    <string name="setup_pick">Wskaż folder z plikami gry</string>
+
+    <string name="setup_scanning">Szukam plików .DTA…</string>
+    <string name="setup_copying">Kopiuję %1$d/%2$d: %3$s</string>
+
+    <string name="setup_err_prefix">Błąd: %1$s</string>
+    <string name="setup_err_folder">Nie udało się otworzyć wskazanego folderu.</string>
+    <string name="setup_err_no_dta">W tym folderze nie ma plików .DTA. Wskaż folder, w którym leżą bezpośrednio pliki DANE_*.DTA z płyty.</string>
+</resources>

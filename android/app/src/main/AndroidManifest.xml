@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- A Bluetooth/USB gamepad is optional (SDL_GameController); touch is the
+         primary input. Declared non-required so the app stays installable on
+         phones with no controller. -->
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:hardwareAccelerated="true"
+        android:requestLegacyExternalStorage="false">
+
+        <!-- Launcher: first-run data import (SAF folder pick → copy DANE_*.DTA),
+             then hands off to the SDL game activity. Plain framework theme — it
+             only shows briefly when assets are missing. -->
+        <activity
+            android:name=".SetupActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The game itself: SDLActivity subclass. Landscape (the engine canvas
+             is 640×480 4:3, letterboxed by SDL_RenderSetLogicalSize). The
+             configChanges list is SDL's recommended set so rotation / keyboard
+             dock don't restart the native thread. -->
+        <activity
+            android:name=".WackiActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleInstance"
+            android:configChanges="keyboardHidden|orientation|screenSize|keyboard|navigation|uiMode">
+            <meta-data android:name="android.app.lib_name" android:value="main" />
+        </activity>
+    </application>
+</manifest>

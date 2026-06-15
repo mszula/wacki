@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'pl.wacki'
+    compileSdk 34
+    // Pinned so local (Android Studio) + CI builds use the same toolchain.
+    // AGP 8.5's default NDK; Android Studio offers to install it on sync, CI
+    // installs it via sdkmanager (see .github/workflows/build.yml).
+    ndkVersion '26.1.10909125'
+
+    defaultConfig {
+        applicationId 'pl.wacki'
+        minSdk 24            // Android 7.0 — SAF (ACTION_OPEN_DOCUMENT_TREE) + DocumentFile
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+
+        // Ship 64-bit + 32-bit ARM (real devices) and x86_64 (the emulator).
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+
+        externalNativeBuild {
+            cmake {
+                // SDL is C; no STL needed for our code. Keep the C++ runtime
+                // shared in case a future NDK dependency wants it.
+                arguments '-DANDROID_STL=c++_shared'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'jni/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    // The SDL Java glue (org.libsdl.app.*) lives in the SDL submodule — compile
+    // it straight from there so the Java and native SDL versions can never drift.
+    sourceSets {
+        main {
+            java.srcDirs += 'jni/SDL/android-project/app/src/main/java'
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Sideload-friendly: debuggable, no shrinking.
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            minifyEnabled false
+            // Unsigned release for manual signing; debug builds are
+            // auto-signed with the debug keystore and install directly.
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // SAF directory tree traversal for the first-run asset import.
+    implementation 'androidx.documentfile:documentfile:1.0.1'
+}
