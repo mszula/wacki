@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive-icon background. Sampled from the cover art's orange splatter
+         so the inset artwork blends into the filled icon shape near-seamlessly. -->
+    <color name="ic_launcher_background">#F37B00</color>
+</resources>

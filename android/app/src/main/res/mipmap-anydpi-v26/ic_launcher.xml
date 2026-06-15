@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive icon (API 26+). Full-bleed cover art as the background so the icon
-     fills the launcher's masked shape edge-to-edge like other apps; without
-     this, launchers wrap the legacy bitmap in a frame and shrink it. The art is
-     opaque and square, so the transparent foreground just lets it show through. -->
+<!-- Adaptive icon (API 26+). The launcher masks AND zooms in on the layers
+     (only ~the central ~66dp safe zone is reliably shown), so the full cover
+     art is inset into the foreground's safe zone on an orange background sampled
+     from the art — the icon fills the masked shape (no shrunk legacy frame) and
+     the title never gets cropped by a circle / squircle mask. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@mipmap/ic_launcher_art" />
-    <foreground android:drawable="@android:color/transparent" />
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>
