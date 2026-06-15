@@ -237,6 +237,14 @@ static void handle_keydown(const SDL_Event *ev)
      * windowed mode), so this needs no platform guard. */
     if (sym == SDLK_F11) plat_video_toggle_fullscreen();
 
+    /* Tab switches the active actor (Ebek ↔ Fjej) — the same action as RMB and
+     * the two-finger tap. A keyboard alternative for desktop and especially
+     * Android emulators (BlueStacks et al.), where a hardware right-click isn't
+     * forwarded to the app and a two-finger tap is awkward. Never reached on a
+     * phone (no keyboard); handheld button→keysym maps use arrows/SPACE/LCTRL,
+     * not Tab, so there's no accidental toggle. */
+    if (sym == SDLK_TAB) g_rmb_clicked = 1;
+
     /* Inline-edit (save-slot rename): queue Backspace / Enter as
      * typed-char events so the edit loop sees them alongside the
      * SDL_TEXTINPUT printable chars. */

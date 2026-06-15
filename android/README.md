@@ -61,14 +61,20 @@ Zapisy i `wacki.cfg` lądują w pamięci wewnętrznej aplikacji.
 
 ## Sterowanie (dotyk)
 
-| Gest                | Akcja                                            |
+| Gest / klawisz      | Akcja                                            |
 |---------------------|--------------------------------------------------|
 | Dotknięcie          | klik / chodzenie / interakcja (LPM)              |
 | Dotknięcie 2 palcami| przełączenie aktywnej postaci (Ebek ↔ Fjej, PPM) |
 | Przycisk Wstecz     | menu pauzy (zapis / wczytanie / wyjście)         |
+| **Tab** (klawiatura)| przełączenie postaci — wygodne na emulatorze     |
 
 Pad Bluetooth/USB też działa (przez `SDL_GameController`), tak jak na
 handheldach.
+
+**Emulator (BlueStacks itp.):** dwupalcowy tap myszką jest niewygodny, a prawy
+klik zwykle nie jest przekazywany do apki — użyj **Tab** do zmiany postaci.
+Prawy przycisk myszy też zadziała, jeśli emulator go forwarduje (silnik mapuje
+PPM natywnie).
 
 ## Jak to się składa
 
