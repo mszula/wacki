@@ -137,6 +137,7 @@ cd android && ./gradlew assembleDebug
 Android Studio dociągnie SDK 34 + NDK + CMake przy pierwszym „Sync".
 APK jest małe — **danych gry (`DANE_*.DTA`) nie ma w paczce**. Przy pierwszym
 uruchomieniu launcher prosi o wskazanie folderu z plikami `.DTA` (przez Storage
-Access Framework) i kopiuje je do prywatnej pamięci aplikacji. Sterowanie
-dotykiem: dotknięcie = klik/chodzenie, dwa palce = zmiana postaci, Wstecz =
-menu pauzy. Szczegóły i rozwiązywanie problemów: `android/README.md`.
+Access Framework); gra **czyta je wprost z tego folderu** (przez `content://`
+fd), bez kopiowania. Sterowanie dotykiem: dotknięcie = klik/chodzenie, dwa
+palce / Tab = zmiana postaci, Wstecz = menu pauzy. Szczegóły i rozwiązywanie
+problemów: `android/README.md`.

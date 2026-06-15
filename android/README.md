@@ -53,9 +53,14 @@ APK jest malutkie — danych gry w nim nie ma. Po instalacji:
    w „Pliki" / Downloads).
 2. Uruchom Wacki → ekran powitalny → **„Wskaż folder z plikami gry"** →
    wybierz ten folder (Storage Access Framework, bez uprawnień do pamięci).
-3. Pliki `.DTA` zostaną skopiowane do prywatnej pamięci aplikacji
-   (`Android/data/pl.wacki.debug/files/data/`). Robisz to raz; przy kolejnych
-   startach gra wchodzi od razu.
+3. Gra **czyta pliki wprost z tego folderu** (przez `content://` fd) — nic nie
+   jest kopiowane, więc to natychmiastowe. Dostęp jest utrwalony, więc przy
+   kolejnych startach gra wchodzi od razu. Folder musi pozostać na miejscu.
+
+> **Bez SAF (adb/menedżer):** zamiast wskazywać folder możesz wrzucić
+> `DANE_*.DTA` wprost do prywatnego katalogu aplikacji
+> `Android/data/pl.wacki.debug/files/data/` (release: `pl.wacki`) — silnik też
+> go tam znajdzie (`adb push DANE_01.DTA /sdcard/Android/data/pl.wacki.debug/files/data/`).
 
 Zapisy i `wacki.cfg` lądują w pamięci wewnętrznej aplikacji.
 
@@ -81,12 +86,18 @@ PPM natywnie).
 - **Build**: `app/jni/CMakeLists.txt` buduje `libmain.so` z tej samej listy
   źródeł co Makefile (`ENGINE_SRCS` + `SDL_PLATFORM_SRCS`) oraz `libSDL2.so`
   z submodułu. To androidowy odpowiednik `mk/<target>.mk`.
-- **HAL Androida**: `src/platform/android/{hooks_android,data_root_android}.c`
+- **HAL Androida**: `src/platform/android/{hooks_android,data_root_android,saf}.c`
   + gałąź `__ANDROID__` w `src/platform/sdl/system_sdl.c` (writable cwd +
   trap przycisku Wstecz). Patrz `docs/platform-hal.md`.
-- **Launcher**: `SetupActivity` (import danych przez SAF) → `WackiActivity`
-  (`SDLActivity`). Glue Javy SDL-a (`org.libsdl.app`) kompiluje się prosto
-  z submodułu, więc wersje Javy i natywnego SDL nie mogą się rozjechać.
+- **Czytanie danych w miejscu (SAF)**: `saf.c` woła przez JNI
+  `WackiActivity.nativeOpenDataFd(name)` → `ContentResolver.openFileDescriptor`
+  → `fdopen` (pliki lokalne są seekowalne, więc `fseek/ftell` archiwum działa).
+  `data_root_android.c` włącza ten tryb i ustawia korzeń `saf:`; współdzielone
+  `file_host.c` + `flic_host.c` routują tam pod `#ifdef __ANDROID__`. Bez kopii.
+- **Launcher**: `SetupActivity` (wybór folderu przez SAF + utrwalenie dostępu,
+  bez kopiowania) → `WackiActivity` (`SDLActivity`). Glue Javy SDL-a
+  (`org.libsdl.app`) kompiluje się prosto z submodułu, więc wersje Javy
+  i natywnego SDL nie mogą się rozjechać.
 
 ## Aktualizacja SDL
 

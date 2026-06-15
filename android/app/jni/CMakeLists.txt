@@ -154,6 +154,7 @@ set(WACKI_SRCS
     # ---- Android platform HAL (replaces data_root_* + hooks_* ) ----
     ${WACKI_ROOT}/src/platform/android/hooks_android.c
     ${WACKI_ROOT}/src/platform/android/data_root_android.c
+    ${WACKI_ROOT}/src/platform/android/saf.c
 )
 
 # SDLActivity loads "SDL2" then "main" → this must be libmain.so.

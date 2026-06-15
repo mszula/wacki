@@ -12,6 +12,9 @@
  * src/platform/ps2/storage_ps2.c. */
 
 #include "wacki/platform/storage.h"
+#ifdef __ANDROID__
+#include "wacki/platform/android_saf.h"   /* read-in-place from the SAF tree */
+#endif
 
 #include <stdio.h>
 
@@ -24,6 +27,14 @@ static FILE *s_fp = NULL;
 int plat_flic_open(const char *path)
 {
     if (s_fp) { fclose(s_fp); s_fp = NULL; }
+#ifdef __ANDROID__
+    /* Cutscene paths are built from the data root; when that's the SAF tree,
+     * open the archive in place via a content:// fd (seekable → setvbuf +
+     * fseek work as on a real file). */
+    if (android_saf_active())
+        s_fp = android_saf_fopen(path);
+    if (!s_fp)
+#endif
     s_fp = fopen(path, "rb");
     if (!s_fp) return 0;
     setvbuf(s_fp, NULL, _IOFBF, FLIC_IO_BUFFER_BYTES);

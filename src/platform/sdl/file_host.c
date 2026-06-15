@@ -10,6 +10,9 @@
  * fopen reaches no device) lives in src/platform/ps2/storage_ps2.c. */
 
 #include "wacki/platform/storage.h"   /* CygFile + fopen_cyg/... contract */
+#ifdef __ANDROID__
+#include "wacki/platform/android_saf.h"   /* read-in-place from the SAF tree */
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,7 +21,18 @@ struct CygFile { FILE *fp; };         /* completes storage.h's opaque CygFile */
 
 CygFile *fopen_cyg(const char *name, const char *mode)
 {
-    FILE *fp = fopen(name, mode);
+    FILE *fp = NULL;
+#ifdef __ANDROID__
+    /* When the data root is the SAF tree (read-in-place, no copy), archive +
+     * asset reads resolve to a content:// fd instead of a real path. Read
+     * modes only; if the name isn't in the tree this returns NULL and we fall
+     * through to fopen() (which fails on the "saf:/" sentinel root — i.e. the
+     * file genuinely isn't there). */
+    if (android_saf_active() && mode && mode[0] == 'r')
+        fp = android_saf_fopen(name);
+    if (!fp)
+#endif
+    fp = fopen(name, mode);
     if (!fp) return NULL;
     CygFile *f = (CygFile *)malloc(sizeof *f);
     if (!f) { fclose(fp); return NULL; }

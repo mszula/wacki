@@ -24,4 +24,19 @@ public class WackiActivity extends SDLActivity {
             "main",
         };
     }
+
+    // ---- called from native (src/platform/android/saf.c) ----
+    // Resolved on this activity's class via JNI GetObjectClass, so no app
+    // class-loader lookup is needed from the SDL thread.
+
+    /** Open a read-only fd for the named data archive in the picked SAF folder,
+     *  or -1. The native side fdopen()'s and fclose()'s it. */
+    public int nativeOpenDataFd(String name) {
+        return WackiData.openFd(this, name);
+    }
+
+    /** Whether a SAF data folder is configured and holds the archives. */
+    public boolean nativeHasData() {
+        return WackiData.isConfigured(this);
+    }
 }
