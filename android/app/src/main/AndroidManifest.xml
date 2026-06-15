@@ -22,6 +22,7 @@
             android:name=".SetupActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Material.Light"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

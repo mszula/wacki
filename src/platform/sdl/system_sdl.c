@@ -69,6 +69,11 @@ void plat_system_early_init(void)
     if (home && chdir(home) == 0)
         LOG_INFO("platform", "user dir: %s", home);
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    /* Lock to landscape. The manifest already forces it per-activity; this
+     * pins SDL's own runtime orientation pick (it sets the activity's
+     * requested orientation when the 640×480 window is created) to landscape
+     * only, so a device held in portrait never flashes/rotates the game. */
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
 #endif
 }
 
