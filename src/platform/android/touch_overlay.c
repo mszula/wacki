@@ -17,6 +17,7 @@
  * OUTPUT pixels, scaled by output/window. */
 
 #include "wacki.h"          /* g_mouse_x/y, g_lmb_clicked, g_rmb_clicked, WACKI_SCREEN_* */
+#include "wacki/log.h"
 #include "wacki/platform/android_touch.h"
 
 #include <SDL.h>
@@ -56,6 +57,7 @@ static float s_def_x = 0.0f, s_def_y = 0.0f;    /* deflection -1..1 */
 static int   s_stick_on = 0;
 static float s_cur_x = 0.0f, s_cur_y = 0.0f;    /* sub-pixel cursor mirror */
 static int   s_control_fingers = 0;              /* fingers on a control zone */
+static int   s_log_n = 0;                         /* diagnostic: first N touches */
 
 enum { ROLE_NONE = 0, ROLE_STICK, ROLE_LMB, ROLE_RMB };
 typedef struct { SDL_FingerID id; int used; int role; } Finger;
@@ -186,6 +188,16 @@ void wacki_overlay_finger_down(SDL_FingerID id, float nx, float ny)
     int px = (int)(nx * s_win_w), py = (int)(ny * s_win_h);
     Finger *f = finger_get(id, 1);
     if (!f) return;
+
+    if (s_log_n < 12) {
+        ++s_log_n;
+        LOG_INFO("overlay",
+                 "touch nx=%.4f ny=%.4f px=%d py=%d | win=%dx%d kx=%.3f ky=%.3f "
+                 "stick(%d,%d r%d) lmb(%d,%d r%d) rmb(%d,%d r%d)",
+                 nx, ny, px, py, s_win_w, s_win_h, s_kx, s_ky,
+                 s_stick_cx, s_stick_cy, s_stick_r,
+                 s_lmb_cx, s_lmb_cy, s_lmb_r, s_rmb_cx, s_rmb_cy, s_rmb_r);
+    }
 
     if (in_circle(px, py, s_stick_cx, s_stick_cy, s_stick_r)) {
         f->role = ROLE_STICK; ++s_control_fingers;
