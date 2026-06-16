@@ -42,6 +42,7 @@
       Wierny, otwarty port silnika gry — odtworzony piksel po pikselu ze
       zdekompilowanej oryginalnej binarki. Gra się od intra do napisów
       końcowych na <strong>macOS, Linux i Windows</strong>, na
+      <strong>telefonach z Androidem</strong>, na
       <strong>Miyoo, Anbernic i dziesiątkach innych handheldów</strong>, a
       nawet na <strong>konsolach</strong>.
     </p>
@@ -247,6 +248,27 @@
         </article>
         </div>
 
+        <h3 class="cards__group">Android</h3>
+        <div class="cards">
+        <article
+          class="card"
+          data-platform="android"
+          data-asset="wacki-android.apk"
+        >
+          <div class="card__os">🤖</div>
+          <h3>Android</h3>
+          <p class="card__sub">Telefony i tablety · Android 7+</p>
+          <a
+            class="btn btn--dl"
+            href="https://github.com/mszula/wacki/releases/latest/download/wacki-android.apk"
+            data-umami-event="download"
+            data-umami-event-platform="android"
+            >Pobierz <span class="card__size"></span
+          ></a>
+          <p class="card__file">wacki-android.apk</p>
+        </article>
+        </div>
+
         <h3 class="cards__group">Handheldy</h3>
         <div class="cards">
         <article
@@ -442,6 +464,20 @@
         </div>
       </div>
 
+      <div class="callout">
+        <div class="callout__icon">📱</div>
+        <div>
+          <h3>Na Androidzie</h3>
+          <p>
+            Zainstaluj <code>wacki-android.apk</code> (sideload — w ustawieniach
+            systemu zezwól na instalację z tego źródła). Przy pierwszym
+            uruchomieniu wskaż folder z plikami <code>Dane_*.dta</code> — gra
+            czyta je <strong>wprost z tego miejsca</strong>, bez kopiowania.
+            Sterujesz dotykiem, a obraz zawsze jest w poziomie.
+          </p>
+        </div>
+      </div>
+
       <p class="lead-center">
         Pełna instrukcja dla każdej platformy (w tym Miyoo i PortMaster),
         opcje uruchomienia i rozwiązywanie problemów —
@@ -478,7 +514,7 @@
   <section class="section" id="sterowanie">
     <div class="wrap">
       <h2 class="h2"><span class="h2__tag">07</span> Sterowanie</h2>
-      <div class="grid grid--2">
+      <div class="grid grid--3">
         <div class="ctrl">
           <h3 class="ctrl__h">🖥️ PC (mysz + klawiatura)</h3>
           <table class="ktab">
@@ -549,6 +585,25 @@
             </tbody>
           </table>
         </div>
+        <div class="ctrl">
+          <h3 class="ctrl__h">📱 Android (dotyk)</h3>
+          <table class="ktab">
+            <tbody>
+              <tr>
+                <td>Kursor / kliknięcie (idź / akcja)</td>
+                <td><kbd>dotknięcie</kbd></td>
+              </tr>
+              <tr>
+                <td>Przełącz postać</td>
+                <td><kbd>dwa palce</kbd> / <kbd>Tab</kbd></td>
+              </tr>
+              <tr>
+                <td>Menu pauzy</td>
+                <td><kbd>Wstecz</kbd></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -596,11 +651,12 @@
         <summary>Na jakim sprzęcie to działa?</summary>
         <p>
           Na PC: macOS (Apple Silicon), Linux x86_64, Windows 10/11. Na
-          handheldach: Miyoo Mini / Mini Plus (OnionOS) oraz — przez
-          PortMaster — Anbernic (RG35XX, RG40XX, RG353x i wiele innych),
-          Powkiddy, TrimUI, RGB30, Miyoo Flip i dziesiątki kolejnych
-          urządzeń. A na konsolach: PlayStation 2 (FreeMcBoot / uLaunchELF
-          albo emulator PCSX2).
+          telefonach i tabletach z <strong>Androidem 7+</strong> (oraz
+          emulatorach jak BlueStacks). Na handheldach: Miyoo Mini / Mini Plus
+          (OnionOS) oraz — przez PortMaster — Anbernic (RG35XX, RG40XX, RG353x
+          i wiele innych), Powkiddy, TrimUI, RGB30, Miyoo Flip i dziesiątki
+          kolejnych urządzeń. A na konsolach: PlayStation 2 (FreeMcBoot /
+          uLaunchELF albo emulator PCSX2).
         </p>
       </details>
 

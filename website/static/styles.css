@@ -456,6 +456,10 @@ code {
   grid-template-columns: 1fr 1fr;
   align-items: start;
 }
+.grid--3 {
+  grid-template-columns: repeat(3, 1fr);
+  align-items: start;
+}
 
 .facts {
   list-style: none;
@@ -1000,6 +1004,9 @@ kbd {
 @media (max-width: 980px) {
   .deco {
     display: none;
+  }
+  .grid--3 {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 860px) {

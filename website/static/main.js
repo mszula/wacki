@@ -7,7 +7,7 @@
             navigator.platform || "";
     var s = (ua + " " + p).toLowerCase();
 
-    if (/android/.test(s)) return null;
+    if (/android/.test(s)) return "android";
     if (/iphone|ipad|ipod/.test(s)) return null;
     if (/win/.test(s)) return "windows";
     if (/mac/.test(s)) return "mac";
@@ -18,7 +18,8 @@
   var PLATFORM_LABEL = {
     windows: "Windows",
     mac: "macOS",
-    linux: "Linux"
+    linux: "Linux",
+    android: "Android"
   };
 
   var platform = detectPlatform();
