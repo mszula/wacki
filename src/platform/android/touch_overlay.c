@@ -1,20 +1,21 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/platform/android/touch_overlay.c — Android on-screen touch overlay
- * (see include/wacki/platform/android_touch.h).
+ * src/platform/android/touch_overlay.c — Android on-screen touch overlay +
+ * canvas touch mapping (see include/wacki/platform/android_touch.h).
  *
- * Fills the letterbox pillarbox bars with a virtual joystick (left, drives the
- * cursor) + left/right click buttons (right), semi-transparent. The GAME AREA
- * is NOT handled here — SDL's built-in touch→mouse synthesis maps those touches
- * through the renderer's real present transform (exact on every device). This
- * module only claims the control zones in the bars and, while a finger is on a
- * control, tells the SDL layer to suppress the synth there
- * (wacki_overlay_owns_touch) so a bar touch doesn't also drag/click the cursor.
+ * Owns ALL touch on Android. Measured on-device (BlueStacks): the app's touch
+ * surface is the GAME WINDOW itself — the emulator draws the letterbox bars but
+ * they're outside the touch area, so a touch normalizes to the canvas. Hence
+ * logical = nx·640 / ny·480 (NOT SDL's window-letterbox transform, which is
+ * what made clicks drift). Game-area touch → cursor + tap-click; the joystick +
+ * buttons (hugging the canvas edges, the only touchable spot — the bars can't
+ * host controls) drive the cursor / latches.
  *
- * Geometry is in WINDOW pixels (where SDL_FINGER* events are normalized);
- * drawing happens after the logical-size letterbox is disabled, in renderer-
- * OUTPUT pixels, scaled by output/window. */
+ * NOTE: this assumes touch is normalized to the canvas, which holds on the SDL
+ * Android surface here. On a device where the surface includes the letterbox
+ * bars the canvas-edge controls + mapping would need the window transform — see
+ * git history for the SDL_RenderWindowToLogical variant. */
 
 #include "wacki.h"          /* g_mouse_x/y, g_lmb_clicked, g_rmb_clicked, WACKI_SCREEN_* */
 #include "wacki/platform/android_touch.h"
@@ -22,48 +23,41 @@
 #include <SDL.h>
 #include <math.h>
 
-/* ---- tunables ---------------------------------------------------- */
-#define BAR_MIN_PX        96      /* hide controls if a side bar is narrower */
-#define STICK_BAR_FRAC    0.42f
-#define STICK_H_FRAC      0.17f
-#define STICK_CY_FRAC     0.60f
-#define KNOB_FRAC         0.50f
-#define LMB_BAR_FRAC      0.42f
-#define LMB_H_FRAC        0.16f
-#define LMB_CY_FRAC       0.62f
-#define RMB_FRAC          0.64f
-#define STICK_DEADZONE    0.18f
-#define STICK_SPEED       7.0f    /* cursor px/frame at full deflection */
+/* ---- control geometry, in LOGICAL (640×480) px — edge-hugging ---- */
+#define STICK_CX   48
+#define STICK_CY   240
+#define STICK_R    44
+#define KNOB_R     22
+#define LMB_CX     592
+#define LMB_CY     280
+#define LMB_R      42
+#define RMB_CX     592
+#define RMB_CY     190
+#define RMB_R      27
 
-/* overlay paint (RGBA, low alpha = subtle over the black bars) */
-#define A_STICK_BASE      40
-#define A_STICK_KNOB      95
-#define A_LMB             64
-#define A_RMB             48
+#define STICK_DEADZONE  0.18f
+#define STICK_SPEED     6.0f
+#define TAP_MS          350u
+#define TAP_SLOP        10      /* logical px */
 
-/* ---- geometry (WINDOW pixels), cached on draw ------------------- */
-static int   s_win_w = 0, s_win_h = 0;
-static float s_kx = 1.0f, s_ky = 1.0f;          /* window→output draw scale */
+#define A_STICK_BASE  46
+#define A_STICK_KNOB  100
+#define A_LMB         70
+#define A_RMB         54
+
 static int   s_have_geom = 0;
-static int   s_gx0, s_gw;                         /* canvas rect (window px) */
-static int   s_controls_on = 0;
-static int   s_stick_cx, s_stick_cy, s_stick_r;
-static int   s_lmb_cx, s_lmb_cy, s_lmb_r;
-static int   s_rmb_cx, s_rmb_cy, s_rmb_r;
-
-/* ---- virtual stick + per-finger state --------------------------- */
-static float s_def_x = 0.0f, s_def_y = 0.0f;    /* deflection -1..1 */
+static float s_def_x = 0.0f, s_def_y = 0.0f;
 static int   s_stick_on = 0;
-static float s_cur_x = 0.0f, s_cur_y = 0.0f;    /* sub-pixel cursor mirror */
-static int   s_control_fingers = 0;              /* fingers on a control zone */
-static int   s_mark_px = -1, s_mark_py = -1;     /* DEBUG: last touch (window px) */
+static float s_cur_x = 0.0f, s_cur_y = 0.0f;
 
-enum { ROLE_NONE = 0, ROLE_STICK, ROLE_LMB, ROLE_RMB };
-typedef struct { SDL_FingerID id; int used; int role; } Finger;
+enum { ROLE_NONE = 0, ROLE_STICK, ROLE_LMB, ROLE_RMB, ROLE_GAME };
+typedef struct {
+    SDL_FingerID id; int used; int role;
+    uint32_t t0; int sx, sy, moved;     /* ROLE_GAME tap detection */
+} Finger;
 #define MAX_FINGERS 8
 static Finger s_fingers[MAX_FINGERS];
 
-/* ---- helpers ----------------------------------------------------- */
 static int clampi(int v, int lo, int hi){ return v < lo ? lo : (v > hi ? hi : v); }
 
 static Finger *finger_get(SDL_FingerID id, int create)
@@ -75,62 +69,35 @@ static Finger *finger_get(SDL_FingerID id, int create)
     }
     if (create && free_slot) {
         free_slot->used = 1; free_slot->id = id; free_slot->role = ROLE_NONE;
+        free_slot->moved = 0;
         return free_slot;
     }
     return NULL;
 }
 
-static int in_circle(int px, int py, int cx, int cy, int r)
+static int in_circle(int x, int y, int cx, int cy, int r)
 {
-    long dx = px - cx, dy = py - cy;
+    long dx = x - cx, dy = y - cy;
     return dx * dx + dy * dy <= (long)r * r;
 }
 
-static void recompute(SDL_Renderer *ren, int ww, int wh, int ow, int oh)
+static void to_logical(float nx, float ny, int *lx, int *ly)
 {
-    s_win_w = ww; s_win_h = wh;
-    s_kx = ww > 0 ? (float)ow / ww : 1.0f;
-    s_ky = wh > 0 ? (float)oh / wh : 1.0f;
-
-    /* Canvas rect in WINDOW px, from SDL's present transform. */
-    int ax = 0, ay = 0, bx = 0, by = 0;
-    SDL_RenderLogicalToWindow(ren, 0.0f, 0.0f, &ax, &ay);
-    SDL_RenderLogicalToWindow(ren, (float)WACKI_SCREEN_W, (float)WACKI_SCREEN_H, &bx, &by);
-    s_gx0 = ax; s_gw = bx - ax;
-
-    int left_bar  = s_gx0;
-    int right_bar = ww - (s_gx0 + s_gw);
-    s_controls_on = (left_bar >= BAR_MIN_PX && right_bar >= BAR_MIN_PX);
-
-    s_stick_r  = (int)((left_bar * STICK_BAR_FRAC < wh * STICK_H_FRAC)
-                       ? left_bar * STICK_BAR_FRAC : wh * STICK_H_FRAC);
-    s_stick_cx = left_bar / 2;
-    s_stick_cy = (int)(wh * STICK_CY_FRAC);
-
-    int rcx = s_gx0 + s_gw + right_bar / 2;
-    int lr  = (int)((right_bar * LMB_BAR_FRAC < wh * LMB_H_FRAC)
-                    ? right_bar * LMB_BAR_FRAC : wh * LMB_H_FRAC);
-    s_lmb_r  = lr;
-    s_lmb_cx = rcx;
-    s_lmb_cy = (int)(wh * LMB_CY_FRAC);
-    s_rmb_r  = (int)(lr * RMB_FRAC);
-    s_rmb_cx = rcx;
-    s_rmb_cy = s_lmb_cy - s_lmb_r - s_rmb_r - (int)(wh * 0.03f);
-
-    s_have_geom = 1;
+    int x = (int)(nx * WACKI_SCREEN_W), y = (int)(ny * WACKI_SCREEN_H);
+    *lx = clampi(x, 0, WACKI_SCREEN_W - 1);
+    *ly = clampi(y, 0, WACKI_SCREEN_H - 1);
 }
 
-static void stick_set(int px, int py)
+static void stick_set(int lx, int ly)
 {
-    if (s_stick_r <= 0) return;
-    float dx = (float)(px - s_stick_cx) / s_stick_r;
-    float dy = (float)(py - s_stick_cy) / s_stick_r;
+    float dx = (float)(lx - STICK_CX) / STICK_R;
+    float dy = (float)(ly - STICK_CY) / STICK_R;
     float m  = sqrtf(dx * dx + dy * dy);
     if (m > 1.0f) { dx /= m; dy /= m; }
     s_def_x = dx; s_def_y = dy;
 }
 
-/* ---- drawing ---------------------------------------------------- */
+/* ---- drawing (logical coords; logical-size letterbox stays active) --- */
 static void fill_circle(SDL_Renderer *ren, int cx, int cy, int r, Uint8 A)
 {
     if (r <= 0) return;
@@ -140,86 +107,68 @@ static void fill_circle(SDL_Renderer *ren, int cx, int cy, int r, Uint8 A)
         SDL_RenderDrawLine(ren, cx - dx, cy + dy, cx + dx, cy + dy);
     }
 }
-static void draw_control(SDL_Renderer *ren, int cx, int cy, int r, Uint8 A)
-{
-    fill_circle(ren, (int)(cx * s_kx), (int)(cy * s_ky), (int)(r * s_kx), A);
-}
 
 void wacki_overlay_draw(SDL_Renderer *ren)
 {
     if (!ren) return;
-    int ow = 0, oh = 0, ww = 0, wh = 0;
-    SDL_GetRendererOutputSize(ren, &ow, &oh);
-    SDL_Window *win = SDL_RenderGetWindow(ren);
-    if (win) SDL_GetWindowSize(win, &ww, &wh);
-    if (ww <= 0 || wh <= 0) { ww = ow; wh = oh; }
-    if (ow <= 0 || oh <= 0) return;
-    recompute(ren, ww, wh, ow, oh);     /* logical size still active here */
-    if (!s_controls_on) return;
+    s_have_geom = 1;
 
-    int lw = 0, lh = 0;
-    SDL_RenderGetLogicalSize(ren, &lw, &lh);
-    SDL_RenderSetLogicalSize(ren, 0, 0);
     SDL_BlendMode prev_bm;
     SDL_GetRenderDrawBlendMode(ren, &prev_bm);
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
     Uint8 pr, pg, pb, pa;
     SDL_GetRenderDrawColor(ren, &pr, &pg, &pb, &pa);
 
-    draw_control(ren, s_stick_cx, s_stick_cy, s_stick_r, A_STICK_BASE);
-    int kx = s_stick_cx + (int)(s_def_x * s_stick_r);
-    int ky = s_stick_cy + (int)(s_def_y * s_stick_r);
-    draw_control(ren, kx, ky, (int)(s_stick_r * KNOB_FRAC), A_STICK_KNOB);
-    draw_control(ren, s_lmb_cx, s_lmb_cy, s_lmb_r, A_LMB);
-    draw_control(ren, s_rmb_cx, s_rmb_cy, s_rmb_r, A_RMB);
-
-    /* DEBUG: red cross at where the APP receives the last touch (output px).
-     * Compare to where you physically clicked: if they differ, the platform is
-     * remapping the touch (e.g. emulator squeezing the bars into the canvas). */
-    if (s_mark_px >= 0) {
-        int mx = (int)(s_mark_px * s_kx), my = (int)(s_mark_py * s_ky);
-        SDL_SetRenderDrawColor(ren, 255, 0, 0, 235);
-        for (int t = -2; t <= 2; ++t) {
-            SDL_RenderDrawLine(ren, mx + t, 0, mx + t, oh);
-            SDL_RenderDrawLine(ren, 0, my + t, ow, my + t);
-        }
-    }
+    fill_circle(ren, STICK_CX, STICK_CY, STICK_R, A_STICK_BASE);
+    fill_circle(ren, STICK_CX + (int)(s_def_x * STICK_R),
+                     STICK_CY + (int)(s_def_y * STICK_R), KNOB_R, A_STICK_KNOB);
+    fill_circle(ren, LMB_CX, LMB_CY, LMB_R, A_LMB);
+    fill_circle(ren, RMB_CX, RMB_CY, RMB_R, A_RMB);
 
     SDL_SetRenderDrawColor(ren, pr, pg, pb, pa);
     SDL_SetRenderDrawBlendMode(ren, prev_bm);
-    SDL_RenderSetLogicalSize(ren, lw, lh);
 }
 
-/* ---- input: control zones only (game area = SDL synth) ---------- */
-int wacki_overlay_owns_touch(void) { return s_control_fingers > 0; }
+/* ---- input (we own all touch; synth is disabled) ---------------- */
+int wacki_overlay_owns_touch(void) { return 1; }
 
 void wacki_overlay_finger_down(SDL_FingerID id, float nx, float ny)
 {
-    if (!s_have_geom || !s_controls_on) return;   /* no bars → synth handles all */
-    int px = (int)(nx * s_win_w), py = (int)(ny * s_win_h);
-    s_mark_px = px; s_mark_py = py;          /* DEBUG: where the app got the touch */
+    if (!s_have_geom) return;
+    int lx, ly;
+    to_logical(nx, ny, &lx, &ly);
     Finger *f = finger_get(id, 1);
     if (!f) return;
 
-    if (in_circle(px, py, s_stick_cx, s_stick_cy, s_stick_r)) {
-        f->role = ROLE_STICK; ++s_control_fingers;
+    if (in_circle(lx, ly, STICK_CX, STICK_CY, STICK_R)) {
+        f->role = ROLE_STICK;
         if (!s_stick_on) { s_cur_x = g_mouse_x; s_cur_y = g_mouse_y; }
         s_stick_on = 1;
-        stick_set(px, py);
-    } else if (in_circle(px, py, s_lmb_cx, s_lmb_cy, s_lmb_r)) {
-        f->role = ROLE_LMB; ++s_control_fingers; g_lmb_clicked = 1;
-    } else if (in_circle(px, py, s_rmb_cx, s_rmb_cy, s_rmb_r)) {
-        f->role = ROLE_RMB; ++s_control_fingers; g_rmb_clicked = 1;
+        stick_set(lx, ly);
+    } else if (in_circle(lx, ly, LMB_CX, LMB_CY, LMB_R)) {
+        f->role = ROLE_LMB; g_lmb_clicked = 1;
+    } else if (in_circle(lx, ly, RMB_CX, RMB_CY, RMB_R)) {
+        f->role = ROLE_RMB; g_rmb_clicked = 1;
+    } else {
+        /* game canvas: move the cursor under the finger, arm a tap. */
+        f->role = ROLE_GAME; f->t0 = SDL_GetTicks();
+        f->sx = lx; f->sy = ly; f->moved = 0;
+        g_mouse_x = (int16_t)lx; g_mouse_y = (int16_t)ly;
     }
-    /* else: game-area touch → role stays NONE, not counted; SDL synth handles it. */
 }
 
 void wacki_overlay_finger_motion(SDL_FingerID id, float nx, float ny)
 {
-    if (!s_have_geom) return;
     Finger *f = finger_get(id, 0);
-    if (f && f->role == ROLE_STICK)
-        stick_set((int)(nx * s_win_w), (int)(ny * s_win_h));
+    if (!f) return;
+    int lx, ly;
+    to_logical(nx, ny, &lx, &ly);
+    if (f->role == ROLE_STICK) {
+        stick_set(lx, ly);
+    } else if (f->role == ROLE_GAME) {
+        if (abs(lx - f->sx) > TAP_SLOP || abs(ly - f->sy) > TAP_SLOP) f->moved = 1;
+        g_mouse_x = (int16_t)lx; g_mouse_y = (int16_t)ly;
+    }
 }
 
 void wacki_overlay_finger_up(SDL_FingerID id, float nx, float ny)
@@ -227,10 +176,9 @@ void wacki_overlay_finger_up(SDL_FingerID id, float nx, float ny)
     (void)nx; (void)ny;
     Finger *f = finger_get(id, 0);
     if (!f) return;
-    if (f->role != ROLE_NONE) {
-        if (f->role == ROLE_STICK) { s_stick_on = 0; s_def_x = s_def_y = 0.0f; }
-        if (s_control_fingers > 0) --s_control_fingers;
-    }
+    if (f->role == ROLE_STICK) { s_stick_on = 0; s_def_x = s_def_y = 0.0f; }
+    else if (f->role == ROLE_GAME && !f->moved && (SDL_GetTicks() - f->t0) <= TAP_MS)
+        g_lmb_clicked = 1;
     f->used = 0;
 }
 

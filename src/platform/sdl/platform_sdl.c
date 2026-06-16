@@ -127,12 +127,11 @@ int PlatformInit(int w, int h, const char *title)
 #endif
 
 #ifdef __ANDROID__
-    /* Game-area touches go through SDL's built-in touch→mouse synthesis (it maps
-     * through the renderer's real present transform, so the cursor lands exactly
-     * under the finger on every device incl. emulators). The on-screen overlay
-     * only handles the control zones in the letterbox bars and suppresses the
-     * stray synth there (wacki_overlay_owns_touch). Must precede SDL_Init. */
-    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
+    /* The overlay owns ALL touch (android_touch.c maps it to the canvas — on the
+     * SDL Android surface the touch normalizes to the game window, so SDL's own
+     * window-letterbox synth drifts). Turn synth off so touches don't also
+     * generate a (mis-mapped) mouse event. Must precede SDL_Init. */
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
 
     /* The SDL subsystems each platform needs come from the video HAL:
