@@ -547,8 +547,9 @@ jobs:
             echo "have=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # On a v* tag WITH a keystore → signed release APK (what ships). Otherwise
-      # (branch pushes, or no keystore yet) → debug APK for testing. Either way
+      # Keystore present (maintainer's branches + tags) → signed release APK,
+      # so the artifact you download/test is the production-signed app and a v*
+      # tag ships the same. No keystore (forks / PRs) → debug APK. Either way
       # the result is staged as wacki-android.apk (one artifact, always present).
       - name: Build APK
         working-directory: android
@@ -558,14 +559,12 @@ jobs:
           WACKI_KEY_ALIAS: ${{ secrets.WACKI_KEY_ALIAS }}
           WACKI_KEY_PASSWORD: ${{ secrets.WACKI_KEY_PASSWORD }}
         run: |
-          is_tag=false
-          case "$GITHUB_REF" in refs/tags/v*) is_tag=true;; esac
-          if [ "$is_tag" = "true" ] && [ "${{ steps.keystore.outputs.have }}" = "true" ]; then
+          if [ "${{ steps.keystore.outputs.have }}" = "true" ]; then
             echo "→ signed release APK"
             gradle --no-daemon assembleRelease --stacktrace
             out=app/build/outputs/apk/release/app-release.apk
           else
-            echo "→ debug APK (no release keystore, or not a v* tag)"
+            echo "→ debug APK (no release keystore)"
             gradle --no-daemon assembleDebug --stacktrace
             out=app/build/outputs/apk/debug/app-debug.apk
           fi
