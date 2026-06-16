@@ -74,13 +74,20 @@ Zapisy i `wacki.cfg` lądują w pamięci wewnętrznej aplikacji.
 | Przycisk Wstecz     | menu pauzy (zapis / wczytanie / wyjście)         |
 | **Tab** (klawiatura)| przełączenie postaci — wygodne na emulatorze     |
 
+Klik w obszarze gry idzie przez wbudowaną syntezę dotyk→mysz SDL-a (mapowaną
+przez realną transformatę renderera), więc trafia dokładnie pod palec na każdym
+urządzeniu.
+
+**Nakładka dotykowa w pasach (telefon).** Na szerokim ekranie 640×480
+letterboxuje się do czarnych pasów po bokach. Wypełnia je półprzezroczysta
+gałka (lewo — rusza kursorem) + duży LPM / mniejszy PPM (prawo). Działa na
+**prawdziwym telefonie** (cały ekran to jedna powierzchnia dotyku). **Na
+BlueStacks nie zadziała** — emulator ściska dotyk z pasów do obszaru gry, więc
+kontrolki tam są nieosiągalne (ograniczenie emulatora, nie do obejścia w kodzie).
+Na emulatorze steruj bezpośrednim klikiem + **Tab** (zmiana postaci).
+
 Pad Bluetooth/USB też działa (przez `SDL_GameController`), tak jak na
 handheldach.
-
-**Emulator (BlueStacks itp.):** dwupalcowy tap myszką jest niewygodny, a prawy
-klik zwykle nie jest przekazywany do apki — użyj **Tab** do zmiany postaci.
-Prawy przycisk myszy też zadziała, jeśli emulator go forwarduje (silnik mapuje
-PPM natywnie).
 
 ## Wydanie produkcyjne (podpisywanie)
 
