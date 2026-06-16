@@ -62,6 +62,7 @@ static float s_def_x = 0.0f, s_def_y = 0.0f;    /* deflection -1..1 */
 static int   s_stick_on = 0;
 static float s_cur_x = 0.0f, s_cur_y = 0.0f;    /* sub-pixel cursor mirror */
 static int   s_log_count = 0;                    /* diagnostic: log first N taps */
+static int   s_cross_wx = -1, s_cross_wy = -1;   /* DEBUG: g_mouse in window px */
 
 enum { ROLE_NONE = 0, ROLE_STICK, ROLE_LMB, ROLE_RMB, ROLE_GAME };
 typedef struct {
@@ -153,6 +154,12 @@ static void recompute(SDL_Renderer *ren, int ww, int wh, int ow, int oh)
     s_rmb_cx = rcx;
     s_rmb_cy = s_lmb_cy - s_lmb_r - s_rmb_r - (int)(wh * 0.03f);
 
+    /* DEBUG: where the game's cursor (g_mouse) lands, in window px — via the
+     * SAME present transform, so it shows exactly where the engine thinks the
+     * pointer is. Computed while the logical size is still active. */
+    SDL_RenderLogicalToWindow(ren, (float)g_mouse_x, (float)g_mouse_y,
+                              &s_cross_wx, &s_cross_wy);
+
     s_have_geom = 1;
 }
 
@@ -211,6 +218,17 @@ void wacki_overlay_draw(SDL_Renderer *ren)
     draw_control(ren, kx, ky, (int)(s_stick_r * KNOB_FRAC), A_STICK_KNOB);
     draw_control(ren, s_lmb_cx, s_lmb_cy, s_lmb_r, A_LMB);
     draw_control(ren, s_rmb_cx, s_rmb_cy, s_rmb_r, A_RMB);
+
+    /* DEBUG crosshair at the engine's cursor (g_mouse), in output px. Full-
+     * screen red cross so it's unmistakable vs the host mouse pointer. */
+    if (s_cross_wx >= 0) {
+        int ox = (int)(s_cross_wx * s_kx), oy = (int)(s_cross_wy * s_ky);
+        SDL_SetRenderDrawColor(ren, 255, 0, 0, 220);
+        for (int t = -1; t <= 1; ++t) {
+            SDL_RenderDrawLine(ren, ox + t, 0, ox + t, oh);
+            SDL_RenderDrawLine(ren, 0, oy + t, ow, oy + t);
+        }
+    }
 
     SDL_SetRenderDrawColor(ren, pr, pg, pb, pa);
     SDL_SetRenderDrawBlendMode(ren, prev_bm);
