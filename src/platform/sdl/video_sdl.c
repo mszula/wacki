@@ -90,7 +90,13 @@ int plat_video_init(int w, int h, const char *title)
         return 0;
     }
 
+    /* NOTE: Android skips logical-size on purpose. The touch overlay manages the
+     * full window itself (game in a centred rect, controls in the side panels)
+     * so the panels are touchable — SDL's letterbox maps emulator touch to the
+     * 4:3 canvas and saturates the bars, making them unreachable. */
+#ifndef __ANDROID__
     SDL_RenderSetLogicalSize(s_ren, w, h);
+#endif
     s_tex = SDL_CreateTexture(s_ren, SDL_PIXELFORMAT_ARGB8888,
                               SDL_TEXTUREACCESS_STREAMING, w, h);
     if (!s_tex) {
@@ -183,15 +189,21 @@ void plat_video_present(const uint8_t *shadow, const uint8_t *palette_rgb,
         }
         SDL_UpdateTexture(s_tex, NULL, s_pixels32, w * ARGB_BYTES_PER_PIXEL);
     }
-    /* Letterbox bars = the clear colour; force black so nothing (e.g. the
-     * Android overlay's white fill) can leave a stray colour that paints the
-     * bars on the next clear. */
+    /* Side panels = the clear colour; force black so nothing (e.g. the Android
+     * overlay's white fill) leaves a stray colour the next clear would smear. */
     SDL_SetRenderDrawColor(s_ren, 0, 0, 0, 255);
     SDL_RenderClear(s_ren);
-    SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
 #ifdef __ANDROID__
-    /* On-screen touch controls in the letterbox bars (no-op when too narrow). */
+    /* Full-window layout: game in a centred 4:3 rect, controls in side panels. */
+    wacki_overlay_compute_layout(s_ren);
+    SDL_Rect game_rect = wacki_overlay_game_rect();
+    if (game_rect.w > 0 && game_rect.h > 0)
+        SDL_RenderCopy(s_ren, s_tex, NULL, &game_rect);
+    else
+        SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
     wacki_overlay_draw(s_ren);
+#else
+    SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
 #endif
     SDL_RenderPresent(s_ren);
 }
