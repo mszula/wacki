@@ -11,6 +11,21 @@ def releaseStorePw = System.getenv('WACKI_KEYSTORE_PASSWORD') ?: findProperty('w
 def releaseAlias   = System.getenv('WACKI_KEY_ALIAS')         ?: findProperty('wacki.key.alias')
 def releaseKeyPw   = System.getenv('WACKI_KEY_PASSWORD')      ?: findProperty('wacki.key.password')
 
+// versionCode/Name from git so every build is a DISTINCT, upgradable artifact.
+// A constant versionCode makes `adb install -r` (and stores) treat a new APK as
+// "already installed" and keep the old build — which silently stranded testers
+// on a stale build. Commit count = monotonic; describe = human-readable.
+def gitOut = { List<String> cmd ->
+    try {
+        def os = new ByteArrayOutputStream()
+        exec { commandLine cmd; standardOutput = os; workingDir = rootProject.projectDir }
+        return os.toString().trim()
+    } catch (ignored) { return '' }
+}
+def gitCountStr = gitOut(['git', 'rev-list', '--count', 'HEAD'])
+def wackiVersionCode = gitCountStr.isInteger() ? gitCountStr.toInteger() : 1
+def wackiVersionName = gitOut(['git', 'describe', '--tags', '--always', '--dirty']) ?: '1.0'
+
 android {
     namespace 'pl.mszula.wacki'
     compileSdk 34
@@ -23,8 +38,8 @@ android {
         applicationId 'pl.mszula.wacki'
         minSdk 24            // Android 7.0 — SAF (ACTION_OPEN_DOCUMENT_TREE) + DocumentFile
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode wackiVersionCode
+        versionName wackiVersionName
 
         // Ship 64-bit + 32-bit ARM (real devices) and x86_64 (the emulator).
         ndk {

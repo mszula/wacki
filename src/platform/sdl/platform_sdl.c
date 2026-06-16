@@ -127,11 +127,12 @@ int PlatformInit(int w, int h, const char *title)
 #endif
 
 #ifdef __ANDROID__
-    /* The on-screen overlay (android_touch.c) owns all touch, so turn off SDL's
-     * touch→mouse synthesis — otherwise a touch on a control in the letterbox
-     * bar would also jump the cursor (the synth maps it through the logical
-     * viewport). Must precede SDL_Init. */
-    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    /* Game-area touches go through SDL's built-in touch→mouse synthesis (it maps
+     * through the renderer's real present transform, so the cursor lands exactly
+     * under the finger on every device incl. emulators). The on-screen overlay
+     * only handles the control zones in the letterbox bars and suppresses the
+     * stray synth there (wacki_overlay_owns_touch). Must precede SDL_Init. */
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
 #endif
 
     /* The SDL subsystems each platform needs come from the video HAL:
@@ -296,6 +297,12 @@ static void handle_textinput(const SDL_Event *ev)
 
 static void handle_mouse_motion(const SDL_Event *ev)
 {
+#ifdef __ANDROID__
+    /* Ignore the synthesized mouse from a touch that's on an on-screen control
+     * (it would drag the cursor to the bar edge); the overlay drives the cursor
+     * itself there. Real game-area touches fall through. */
+    if (ev->motion.which == SDL_TOUCH_MOUSEID && wacki_overlay_owns_touch()) return;
+#endif
     g_mouse_x = (int16_t)ev->motion.x;
     g_mouse_y = (int16_t)ev->motion.y;
 }
@@ -358,6 +365,12 @@ static void handle_finger_up(void)
 
 static void handle_mouse_button_down(const SDL_Event *ev)
 {
+#ifdef __ANDROID__
+    /* Suppress the synth click from a touch on an on-screen control — the
+     * overlay raises the latch itself (and at the cursor's current position,
+     * not the bar edge). */
+    if (ev->button.which == SDL_TOUCH_MOUSEID && wacki_overlay_owns_touch()) return;
+#endif
     if (input_debug_enabled()) {
         LOG_INFO("input",
                  "MOUSEDOWN button=%u state=0x%X clicks=%u x=%d y=%d which=%u",

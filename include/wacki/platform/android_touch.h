@@ -12,10 +12,12 @@
  *   - right bar: a big button = left click (walk / use), a smaller one = right
  *                click (switch actor)
  *
- * Direct tapping on the game canvas still works (drag to aim, lift to click).
- * On Android we own ALL touch (SDL touch→mouse synthesis is disabled), so the
- * canvas tap path lives here too — it needs the letterbox geometry the draw
- * step caches anyway.
+ * Direct tapping/dragging on the game canvas still works — those touches go
+ * through SDL's built-in touch→mouse synthesis (it maps through the renderer's
+ * real present transform, so the cursor lands exactly under the finger on every
+ * device). This module only claims the control zones in the bars and, while a
+ * finger is on a control, has the SDL layer suppress the synth for that touch
+ * (wacki_overlay_owns_touch).
  *
  * Implementation: src/platform/android/touch_overlay.c. The shared SDL layer
  * calls these under #ifdef __ANDROID__: video_sdl.c draws, platform_sdl.c feeds
@@ -39,5 +41,10 @@ void wacki_overlay_finger_up(SDL_FingerID id, float nx, float ny);
 
 /* Per-frame: integrate the virtual stick deflection into the cursor. */
 void wacki_overlay_tick(void);
+
+/* Non-zero while a finger is on an on-screen control (joystick/buttons). The
+ * SDL layer uses this to suppress the synthesized touch-mouse for that touch so
+ * a bar press doesn't also drag/click the game cursor. */
+int  wacki_overlay_owns_touch(void);
 
 #endif /* WACKI_PLATFORM_ANDROID_TOUCH_H */
