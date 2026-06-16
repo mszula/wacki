@@ -155,6 +155,7 @@ set(WACKI_SRCS
     ${WACKI_ROOT}/src/platform/android/hooks_android.c
     ${WACKI_ROOT}/src/platform/android/data_root_android.c
     ${WACKI_ROOT}/src/platform/android/saf.c
+    ${WACKI_ROOT}/src/platform/android/touch_overlay.c
 )
 
 # SDLActivity loads "SDL2" then "main" → this must be libmain.so.

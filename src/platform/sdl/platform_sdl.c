@@ -29,6 +29,9 @@
 #include "wacki/platform/input.h"
 #include "wacki/platform/system.h"
 #include "sdl_internal.h"            /* platform_pad_* (gamepad_sdl.c) */
+#ifdef __ANDROID__
+#include "wacki/platform/android_touch.h"   /* on-screen touch overlay owns touch */
+#endif
 
 #include <SDL.h>
 #include <stdint.h>
@@ -121,6 +124,14 @@ int PlatformInit(int w, int h, const char *title)
      * than the lowercase process name. Must precede SDL_Init. */
 #ifdef SDL_HINT_APP_NAME   /* added in SDL 2.0.18; handheld bases ship older */
     SDL_SetHint(SDL_HINT_APP_NAME, "Wacki");
+#endif
+
+#ifdef __ANDROID__
+    /* The on-screen overlay (android_touch.c) owns all touch, so turn off SDL's
+     * touch→mouse synthesis — otherwise a touch on a control in the letterbox
+     * bar would also jump the cursor (the synth maps it through the logical
+     * viewport). Must precede SDL_Init. */
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
 
     /* The SDL subsystems each platform needs come from the video HAL:
@@ -316,7 +327,10 @@ static int input_debug_enabled(void)
  * detected from the raw SDL_FINGER* stream. The left click the first finger's
  * synthesis latched is cancelled the moment a second finger lands, so the
  * toggle doesn't also fire a stray walk-to. Inert on every non-touch target
- * (no SDL_FINGER* events are ever generated). */
+ * (no SDL_FINGER* events are ever generated). On Android the on-screen overlay
+ * (android_touch.h) owns all touch, so this desktop-touchscreen path is
+ * compiled out there. */
+#ifndef __ANDROID__
 static int s_touch_fingers = 0;   /* fingers currently down */
 static int s_touch_peak    = 0;   /* peak simultaneous fingers this gesture */
 
@@ -340,6 +354,7 @@ static void handle_finger_up(void)
     }
     s_touch_peak = 0;
 }
+#endif /* !__ANDROID__ */
 
 static void handle_mouse_button_down(const SDL_Event *ev)
 {
@@ -490,10 +505,23 @@ void PlatformPumpEvents(void)
             handle_mouse_button_down(&ev);
             break;
         case SDL_FINGERDOWN:
+#ifdef __ANDROID__
+            wacki_overlay_finger_down(ev.tfinger.fingerId, ev.tfinger.x, ev.tfinger.y);
+#else
             handle_finger_down();
+#endif
+            break;
+        case SDL_FINGERMOTION:
+#ifdef __ANDROID__
+            wacki_overlay_finger_motion(ev.tfinger.fingerId, ev.tfinger.x, ev.tfinger.y);
+#endif
             break;
         case SDL_FINGERUP:
+#ifdef __ANDROID__
+            wacki_overlay_finger_up(ev.tfinger.fingerId, ev.tfinger.x, ev.tfinger.y);
+#else
             handle_finger_up();
+#endif
             break;
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERDEVICEADDED:
@@ -507,6 +535,12 @@ void PlatformPumpEvents(void)
      * mouse-motion this frame doesn't get clobbered by the d-pad
      * snapshot. If the d-pad isn't held, this is a cheap no-op. */
     if (!g_headless) poll_virtual_cursor();
+
+#ifdef __ANDROID__
+    /* Integrate the on-screen virtual stick into the cursor (no-op unless a
+     * finger is on it). After poll_virtual_cursor so the stick wins on Android. */
+    if (!g_headless) wacki_overlay_tick();
+#endif
 }
 
 int PlatformShouldQuit(void) { return s_quit; }

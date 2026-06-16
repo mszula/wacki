@@ -18,6 +18,9 @@
 #ifdef __APPLE__
 #include "wacki/platform/macos.h"   /* PlatformSetupMacMenu */
 #endif
+#ifdef __ANDROID__
+#include "wacki/platform/android_touch.h"   /* on-screen touch overlay */
+#endif
 
 #include <SDL.h>
 #include <stdint.h>
@@ -182,6 +185,10 @@ void plat_video_present(const uint8_t *shadow, const uint8_t *palette_rgb,
     }
     SDL_RenderClear(s_ren);
     SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
+#ifdef __ANDROID__
+    /* On-screen touch controls in the letterbox bars (no-op when too narrow). */
+    wacki_overlay_draw(s_ren);
+#endif
     SDL_RenderPresent(s_ren);
 }
 
