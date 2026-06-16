@@ -9,12 +9,14 @@
  * fight the artwork. Owns all touch on Android: controls in the bars, plus
  * drag-to-aim / tap-to-click on the game canvas.
  *
- * Coordinate spaces: SDL_FINGER* events are normalized 0..1 of the WINDOW, so
- * geometry + hit-testing live in window pixels. Drawing happens after the
- * logical-size letterbox is disabled, i.e. in renderer-OUTPUT pixels, which can
- * differ from the window on scaled hosts (some emulators) — so draw positions
- * are scaled by output/window. On a normal phone window==output and the scale
- * is 1. All tunables are constants below; touch feel wants on-device tuning. */
+ * Coordinate handling: rather than reimplement SDL's letterbox math (which must
+ * match EXACTLY or clicks drift away from the cursor with distance from
+ * centre), the canvas conversion goes through SDL_RenderWindowToLogical — the
+ * inverse of how the frame is presented — and the bars' extent comes from
+ * SDL_RenderLogicalToWindow of the canvas corners. SDL_FINGER* coords are
+ * normalized to the WINDOW; geometry/hit-testing live in window pixels; drawing
+ * (after the logical-size letterbox is disabled) is in renderer-OUTPUT pixels,
+ * scaled by output/window. All tunables are constants below. */
 
 #include "wacki.h"          /* g_mouse_x/y, g_lmb_clicked, g_rmb_clicked, WACKI_SCREEN_* */
 #include "wacki/log.h"
@@ -45,12 +47,11 @@
 #define A_RMB             48
 
 /* ---- geometry (WINDOW pixels), cached on draw ------------------- */
+static SDL_Renderer *s_ren = NULL;
 static int   s_win_w = 0, s_win_h = 0;          /* touch-normalization space */
-static int   s_out_w = 0, s_out_h = 0;          /* renderer output (drawing) */
-static float s_draw_k = 1.0f;                    /* output/window scale */
+static float s_kx = 1.0f, s_ky = 1.0f;          /* window→output draw scale */
 static int   s_have_geom = 0;
-static float s_scale = 1.0f;                     /* window px per logical px */
-static int   s_gx0, s_gy0, s_gw, s_gh;          /* game canvas rect (window px) */
+static int   s_gx0, s_gy0, s_gw, s_gh;          /* canvas rect (window px) */
 static int   s_controls_on = 0;
 static int   s_stick_cx, s_stick_cy, s_stick_r;
 static int   s_lmb_cx, s_lmb_cy, s_lmb_r;
@@ -60,7 +61,7 @@ static int   s_rmb_cx, s_rmb_cy, s_rmb_r;
 static float s_def_x = 0.0f, s_def_y = 0.0f;    /* deflection -1..1 */
 static int   s_stick_on = 0;
 static float s_cur_x = 0.0f, s_cur_y = 0.0f;    /* sub-pixel cursor mirror */
-static int   s_logged = 0;                       /* one-shot diagnostic */
+static int   s_log_count = 0;                    /* diagnostic: log first N taps */
 
 enum { ROLE_NONE = 0, ROLE_STICK, ROLE_LMB, ROLE_RMB, ROLE_GAME };
 typedef struct {
@@ -103,28 +104,33 @@ static int in_circle(int px, int py, int cx, int cy, int r)
     return dx * dx + dy * dy <= (long)r * r;
 }
 
-/* Map a WINDOW-pixel point inside the game canvas to logical 640×480. Returns
- * 0 if the point is outside the canvas (i.e. in a bar). */
+/* Map a WINDOW-pixel point inside the canvas to logical 640×480 via SDL's own
+ * present transform (exact). Returns 0 if outside the canvas (in a bar). */
 static int win_to_logical(int px, int py, int *lx, int *ly)
 {
-    if (s_scale <= 0.0f) return 0;
-    int x = (int)((px - s_gx0) / s_scale);
-    int y = (int)((py - s_gy0) / s_scale);
+    if (!s_ren) return 0;
+    float fx = 0.0f, fy = 0.0f;
+    SDL_RenderWindowToLogical(s_ren, px, py, &fx, &fy);
+    int x = (int)fx, y = (int)fy;
     if (x < 0 || y < 0 || x >= WACKI_SCREEN_W || y >= WACKI_SCREEN_H) return 0;
     *lx = x; *ly = y;
     return 1;
 }
 
-static void recompute(int ww, int wh, int ow, int oh)
+/* Recompute control geometry. Must run while the logical-size letterbox is
+ * active (SDL_RenderLogicalToWindow depends on it). */
+static void recompute(SDL_Renderer *ren, int ww, int wh, int ow, int oh)
 {
-    s_win_w = ww; s_win_h = wh; s_out_w = ow; s_out_h = oh;
-    s_draw_k = ww > 0 ? (float)ow / ww : 1.0f;
+    s_ren = ren;
+    s_win_w = ww; s_win_h = wh;
+    s_kx = ww > 0 ? (float)ow / ww : 1.0f;
+    s_ky = wh > 0 ? (float)oh / wh : 1.0f;
 
-    const float lw = (float)WACKI_SCREEN_W, lh = (float)WACKI_SCREEN_H;
-    float sx = ww / lw, sy = wh / lh;
-    s_scale = sx < sy ? sx : sy;
-    s_gw = (int)(lw * s_scale); s_gh = (int)(lh * s_scale);
-    s_gx0 = (ww - s_gw) / 2;    s_gy0 = (wh - s_gh) / 2;
+    /* Canvas rect in WINDOW px, straight from SDL's present transform. */
+    int ax = 0, ay = 0, bx = 0, by = 0;
+    SDL_RenderLogicalToWindow(ren, 0.0f, 0.0f, &ax, &ay);
+    SDL_RenderLogicalToWindow(ren, (float)WACKI_SCREEN_W, (float)WACKI_SCREEN_H, &bx, &by);
+    s_gx0 = ax; s_gy0 = ay; s_gw = bx - ax; s_gh = by - ay;
 
     int left_bar  = s_gx0;
     int right_bar = ww - (s_gx0 + s_gw);
@@ -160,7 +166,7 @@ static void stick_set(int px, int py)
     s_def_x = dx; s_def_y = dy;
 }
 
-/* ---- drawing (output pixels: window geometry × s_draw_k) --------- */
+/* ---- drawing (output pixels: window geometry × scale) ----------- */
 static void fill_circle(SDL_Renderer *ren, int cx, int cy, int r,
                         Uint8 R, Uint8 G, Uint8 B, Uint8 A)
 {
@@ -171,6 +177,12 @@ static void fill_circle(SDL_Renderer *ren, int cx, int cy, int r,
         SDL_RenderDrawLine(ren, cx - dx, cy + dy, cx + dx, cy + dy);
     }
 }
+static void draw_control(SDL_Renderer *ren, int cx, int cy, int r,
+                         Uint8 A)  /* window-px geometry → output px */
+{
+    fill_circle(ren, (int)(cx * s_kx), (int)(cy * s_ky),
+                (int)(r * s_kx), 255, 255, 255, A);
+}
 
 void wacki_overlay_draw(SDL_Renderer *ren)
 {
@@ -179,12 +191,11 @@ void wacki_overlay_draw(SDL_Renderer *ren)
     SDL_GetRendererOutputSize(ren, &ow, &oh);
     SDL_Window *win = SDL_RenderGetWindow(ren);
     if (win) SDL_GetWindowSize(win, &ww, &wh);
-    if (ww <= 0 || wh <= 0) { ww = ow; wh = oh; }   /* fall back to output */
+    if (ww <= 0 || wh <= 0) { ww = ow; wh = oh; }
     if (ow <= 0 || oh <= 0) return;
-    recompute(ww, wh, ow, oh);
+    recompute(ren, ww, wh, ow, oh);     /* logical size still active here */
     if (!s_controls_on) return;
 
-    const float k = s_draw_k;
     int lw = 0, lh = 0;
     SDL_RenderGetLogicalSize(ren, &lw, &lh);
     SDL_RenderSetLogicalSize(ren, 0, 0);
@@ -194,16 +205,12 @@ void wacki_overlay_draw(SDL_Renderer *ren)
     Uint8 pr, pg, pb, pa;
     SDL_GetRenderDrawColor(ren, &pr, &pg, &pb, &pa);
 
-    fill_circle(ren, (int)(s_stick_cx*k), (int)(s_stick_cy*k), (int)(s_stick_r*k),
-                255, 255, 255, A_STICK_BASE);
+    draw_control(ren, s_stick_cx, s_stick_cy, s_stick_r, A_STICK_BASE);
     int kx = s_stick_cx + (int)(s_def_x * s_stick_r);
     int ky = s_stick_cy + (int)(s_def_y * s_stick_r);
-    fill_circle(ren, (int)(kx*k), (int)(ky*k), (int)(s_stick_r*KNOB_FRAC*k),
-                255, 255, 255, A_STICK_KNOB);
-    fill_circle(ren, (int)(s_lmb_cx*k), (int)(s_lmb_cy*k), (int)(s_lmb_r*k),
-                255, 255, 255, A_LMB);
-    fill_circle(ren, (int)(s_rmb_cx*k), (int)(s_rmb_cy*k), (int)(s_rmb_r*k),
-                255, 255, 255, A_RMB);
+    draw_control(ren, kx, ky, (int)(s_stick_r * KNOB_FRAC), A_STICK_KNOB);
+    draw_control(ren, s_lmb_cx, s_lmb_cy, s_lmb_r, A_LMB);
+    draw_control(ren, s_rmb_cx, s_rmb_cy, s_rmb_r, A_RMB);
 
     SDL_SetRenderDrawColor(ren, pr, pg, pb, pa);
     SDL_SetRenderDrawBlendMode(ren, prev_bm);
@@ -230,22 +237,20 @@ void wacki_overlay_finger_down(SDL_FingerID id, float nx, float ny)
     } else if (s_controls_on && in_circle(px, py, s_rmb_cx, s_rmb_cy, s_rmb_r)) {
         f->role = ROLE_RMB; g_rmb_clicked = 1;
     } else if (win_to_logical(px, py, &lx, &ly)) {
-        /* Game canvas: move the cursor under the finger (drag to aim), arm a tap. */
         f->role = ROLE_GAME; f->t0 = SDL_GetTicks();
         f->sx = px; f->sy = py; f->moved = 0; hit_game = 1;
         g_mouse_x = (int16_t)lx; g_mouse_y = (int16_t)ly;
     } else {
-        f->role = ROLE_NONE;   /* empty bar space → swallow */
+        f->role = ROLE_NONE;
     }
 
-    if (!s_logged) {
-        s_logged = 1;
+    if (s_log_count < 6) {
+        ++s_log_count;
         LOG_INFO("overlay",
-                 "geom win=%dx%d out=%dx%d k=%.3f scale=%.3f gx0=%d gy0=%d gw=%d gh=%d "
-                 "controls=%d | down nx=%.4f ny=%.4f -> px=%d py=%d game=%d lx=%d ly=%d",
-                 s_win_w, s_win_h, s_out_w, s_out_h, s_draw_k, s_scale,
-                 s_gx0, s_gy0, s_gw, s_gh, s_controls_on,
-                 nx, ny, px, py, hit_game, lx, ly);
+                 "win=%dx%d kx=%.3f ky=%.3f canvas(win)=%d,%d %dx%d controls=%d | "
+                 "nx=%.4f ny=%.4f px=%d py=%d game=%d lx=%d ly=%d",
+                 s_win_w, s_win_h, s_kx, s_ky, s_gx0, s_gy0, s_gw, s_gh,
+                 s_controls_on, nx, ny, px, py, hit_game, lx, ly);
     }
 }
 
