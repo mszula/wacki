@@ -183,5 +183,6 @@ target_compile_options(main PRIVATE
     -fno-strict-aliasing
     -std=gnu99)
 
-# SDL2 (shared) + SDL2main (the Android SDL_main bootstrap glue).
-target_link_libraries(main SDL2 SDL2main)
+# SDL2 (shared) + SDL2main (the Android SDL_main bootstrap glue) + liblog
+# (src/log.c routes the engine log to logcat via __android_log_print).
+target_link_libraries(main SDL2 SDL2main log)
