@@ -34,8 +34,7 @@
 #define STICK_PANEL_FRAC  0.42f
 #define LMB_PANEL_FRAC    0.40f
 #define RMB_PANEL_FRAC    0.26f
-#define LMB_CY_FRAC       0.64f
-#define RMB_CY_FRAC       0.34f
+#define BTN_GAP_FRAC      0.12f      /* vertical gap LMB↔RMB, of panel width */
 #define STICK_DEADZONE    0.18f
 #define STICK_SPEED       6.0f      /* logical px / tick at full deflection */
 #define TAP_MS            350u
@@ -120,9 +119,12 @@ void wacki_overlay_compute_layout(SDL_Renderer *ren)
     s_stick_r  = (int)(s_panel_l * STICK_PANEL_FRAC);
     s_knob_r   = s_stick_r / 2;
 
+    /* LMB centred vertically (mirrors the stick on the left); RMB stacked just
+     * above it with a gap so the two never overlap regardless of panel width. */
     int rcx  = s_game.x + gw + s_panel_r / 2;
-    s_lmb_cx = rcx; s_lmb_cy = (int)(s_win_h * LMB_CY_FRAC); s_lmb_r = (int)(s_panel_r * LMB_PANEL_FRAC);
-    s_rmb_cx = rcx; s_rmb_cy = (int)(s_win_h * RMB_CY_FRAC); s_rmb_r = (int)(s_panel_r * RMB_PANEL_FRAC);
+    s_lmb_cx = rcx; s_lmb_r = (int)(s_panel_r * LMB_PANEL_FRAC); s_lmb_cy = s_win_h / 2;
+    s_rmb_cx = rcx; s_rmb_r = (int)(s_panel_r * RMB_PANEL_FRAC);
+    s_rmb_cy = s_lmb_cy - s_lmb_r - s_rmb_r - (int)(s_panel_r * BTN_GAP_FRAC);
 
     s_tap_slop = (int)(s_win_w * TAP_SLOP_FRAC);
     s_have_geom = 1;
