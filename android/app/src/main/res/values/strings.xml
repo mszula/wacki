@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Wacki</string>
+    <string name="app_name">Wacki: Kosmiczna rozgrywka</string>
 
-    <string name="setup_title">Wacki — pierwsze uruchomienie</string>
+    <string name="setup_title">Wacki: Kosmiczna rozgrywka — pierwsze uruchomienie</string>
     <string name="setup_intro">Gra potrzebuje plików danych z oryginalnej płyty (DANE_*.DTA).\n\nSkopiuj je gdzieś na telefon (np. osobny folder), a potem wskaż ten folder poniżej. Gra czyta je wprost z tego miejsca — nic nie jest kopiowane, więc to natychmiastowe. Wybór trzeba zrobić tylko raz.</string>
     <string name="setup_pick">Wskaż folder z plikami gry</string>
 
