@@ -23,7 +23,6 @@
  * Android). Game-area touch maps window-px → 640×480 via the game rect. */
 
 #include "wacki.h"          /* g_mouse_x/y, g_lmb_clicked, g_rmb_clicked, WACKI_SCREEN_* */
-#include "wacki/log.h"
 #include "wacki/platform/android_touch.h"
 
 #include <SDL.h>
@@ -191,10 +190,6 @@ void wacki_overlay_finger_down(SDL_FingerID id, float nx, float ny)
     int px = (int)(nx * s_win_w), py = (int)(ny * s_win_h);
     Finger *f = finger_get(id, 1);
     if (!f) return;
-
-    /* TODO(temp): confirm BlueStacks delivers full-window touch post-letterbox-removal. */
-    LOG_INFO("overlay", "down nx=%.3f ny=%.3f px=%d py=%d | win=%dx%d game=%d,%d,%dx%d",
-             nx, ny, px, py, s_win_w, s_win_h, s_game.x, s_game.y, s_game.w, s_game.h);
 
     if (in_circle(px, py, s_stick_cx, s_stick_cy, s_stick_r)) {
         f->role = ROLE_STICK;
