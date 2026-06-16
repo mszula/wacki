@@ -56,6 +56,7 @@ static float s_def_x = 0.0f, s_def_y = 0.0f;    /* deflection -1..1 */
 static int   s_stick_on = 0;
 static float s_cur_x = 0.0f, s_cur_y = 0.0f;    /* sub-pixel cursor mirror */
 static int   s_control_fingers = 0;              /* fingers on a control zone */
+static int   s_mark_px = -1, s_mark_py = -1;     /* DEBUG: last touch (window px) */
 
 enum { ROLE_NONE = 0, ROLE_STICK, ROLE_LMB, ROLE_RMB };
 typedef struct { SDL_FingerID id; int used; int role; } Finger;
@@ -172,6 +173,18 @@ void wacki_overlay_draw(SDL_Renderer *ren)
     draw_control(ren, s_lmb_cx, s_lmb_cy, s_lmb_r, A_LMB);
     draw_control(ren, s_rmb_cx, s_rmb_cy, s_rmb_r, A_RMB);
 
+    /* DEBUG: red cross at where the APP receives the last touch (output px).
+     * Compare to where you physically clicked: if they differ, the platform is
+     * remapping the touch (e.g. emulator squeezing the bars into the canvas). */
+    if (s_mark_px >= 0) {
+        int mx = (int)(s_mark_px * s_kx), my = (int)(s_mark_py * s_ky);
+        SDL_SetRenderDrawColor(ren, 255, 0, 0, 235);
+        for (int t = -2; t <= 2; ++t) {
+            SDL_RenderDrawLine(ren, mx + t, 0, mx + t, oh);
+            SDL_RenderDrawLine(ren, 0, my + t, ow, my + t);
+        }
+    }
+
     SDL_SetRenderDrawColor(ren, pr, pg, pb, pa);
     SDL_SetRenderDrawBlendMode(ren, prev_bm);
     SDL_RenderSetLogicalSize(ren, lw, lh);
@@ -184,6 +197,7 @@ void wacki_overlay_finger_down(SDL_FingerID id, float nx, float ny)
 {
     if (!s_have_geom || !s_controls_on) return;   /* no bars → synth handles all */
     int px = (int)(nx * s_win_w), py = (int)(ny * s_win_h);
+    s_mark_px = px; s_mark_py = py;          /* DEBUG: where the app got the touch */
     Finger *f = finger_get(id, 1);
     if (!f) return;
 
