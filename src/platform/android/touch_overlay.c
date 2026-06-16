@@ -181,6 +181,11 @@ void wacki_overlay_draw(SDL_Renderer *ren)
     SDL_BlendMode prev_bm;
     SDL_GetRenderDrawBlendMode(ren, &prev_bm);
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+    /* Save the draw colour — fill_circle changes it to white, and the next
+     * frame's SDL_RenderClear paints the bars with whatever colour is left set
+     * (leaving white → solid white bars). */
+    Uint8 pr, pg, pb, pa;
+    SDL_GetRenderDrawColor(ren, &pr, &pg, &pb, &pa);
 
     /* joystick: base + knob at current deflection */
     fill_circle(ren, s_stick_cx, s_stick_cy, s_stick_r, 255, 255, 255, A_STICK_BASE);
@@ -192,6 +197,7 @@ void wacki_overlay_draw(SDL_Renderer *ren)
     fill_circle(ren, s_lmb_cx, s_lmb_cy, s_lmb_r, 255, 255, 255, A_LMB);
     fill_circle(ren, s_rmb_cx, s_rmb_cy, s_rmb_r, 255, 255, 255, A_RMB);
 
+    SDL_SetRenderDrawColor(ren, pr, pg, pb, pa);
     SDL_SetRenderDrawBlendMode(ren, prev_bm);
     SDL_RenderSetLogicalSize(ren, lw, lh);
 }

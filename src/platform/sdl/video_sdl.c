@@ -183,6 +183,10 @@ void plat_video_present(const uint8_t *shadow, const uint8_t *palette_rgb,
         }
         SDL_UpdateTexture(s_tex, NULL, s_pixels32, w * ARGB_BYTES_PER_PIXEL);
     }
+    /* Letterbox bars = the clear colour; force black so nothing (e.g. the
+     * Android overlay's white fill) can leave a stray colour that paints the
+     * bars on the next clear. */
+    SDL_SetRenderDrawColor(s_ren, 0, 0, 0, 255);
     SDL_RenderClear(s_ren);
     SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
 #ifdef __ANDROID__
