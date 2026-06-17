@@ -16,7 +16,7 @@
 #include "wacki/platform/android_saf.h"   /* read-in-place from the SAF tree */
 #endif
 
-#include <stdio.h>
+#include <stdio.h>   /* + plat_resolve_path_ci (storage.h) for the case fallback */
 
 /* The playback loop issues one fread per AVI sub-chunk (KB-sized); a 1 MiB
  * fully-buffered FILE coalesces them into ~1 MiB sequential block reads. */
@@ -36,6 +36,14 @@ int plat_flic_open(const char *path)
     if (!s_fp)
 #endif
     s_fp = fopen(path, "rb");
+    /* Case-sensitive FS fallback: the cutscene files (Dane_NN.dta) are
+     * lower-cased on the original Linux CD, so the literal open misses.
+     * Resolve a case-insensitive directory match and retry. */
+    if (!s_fp) {
+        char real[1024];
+        if (plat_resolve_path_ci(path, real, sizeof real))
+            s_fp = fopen(real, "rb");
+    }
     if (!s_fp) return 0;
     setvbuf(s_fp, NULL, _IOFBF, FLIC_IO_BUFFER_BYTES);
     return 1;

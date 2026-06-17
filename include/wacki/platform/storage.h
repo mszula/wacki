@@ -16,6 +16,7 @@
 #ifndef WACKI_PLATFORM_STORAGE_H
 #define WACKI_PLATFORM_STORAGE_H
 
+#include <stddef.h>   /* size_t — plat_resolve_path_ci out-buffer length */
 #include <stdint.h>   /* fread_cyg/ftell_cyg widths — keeps this header self-contained */
 
 /* ---- save image -------------------------------------------------- *
@@ -89,5 +90,18 @@ uint32_t plat_flic_read(void *dst, uint32_t n);
 void     plat_flic_seek(int32_t off, int whence);
 int32_t  plat_flic_tell(void);
 void     plat_flic_close(void);
+
+/* ---- case-insensitive path resolution ---------------------------- *
+ *
+ * On case-sensitive filesystems (Linux) the original CD's lower-cased data
+ * files (dane_02.dta) don't match the engine's mixed-case requests
+ * (Dane_02.dta), so the literal open misses and the game can't find its
+ * data. Given a path whose literal open just FAILED, scan its directory for
+ * a basename equal ignoring ASCII case; on a match write the real on-disk
+ * path into out[outcap] and return 1, else return 0. Call only on the open-
+ * miss path — the fast path (exact case, or a case-insensitive FS like
+ * macOS/Windows) never reaches here. Desktop/handheld only (POSIX dirent);
+ * the PS2 ISO backend is upper-case-only and needs no resolution. */
+int plat_resolve_path_ci(const char *in, char *out, size_t outcap);
 
 #endif /* WACKI_PLATFORM_STORAGE_H */
