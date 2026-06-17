@@ -425,6 +425,21 @@ int PlayFlicAviFile(const char *path)
     int      frame_count = 0;          /* T29 — batch-test coverage report */
     int      skipped     = 0;          /* user aborted via click/key */
 
+    /* Consume input latched BEFORE playback began so it can't abort the
+     * cutscene on frame 0. The per-stage "transition" AVI (Dane_22 / 32 /
+     * 42 / 52) is played the instant the chapter-select map is dismissed by
+     * a click; that click's latch (or a spurious window-focus click SDL can
+     * inject on activation) would otherwise hit the skip check below and
+     * tear the clip down before a single frame showed — the reported
+     * "transition cutscene never plays" bug. Pump the queue once to settle
+     * any still-queued press into the latch, then clear all three: a skip
+     * must come from input DURING playback, not the pre-roll. (s_quit is
+     * left intact so a real quit request still propagates.) */
+    PlatformPumpEvents();
+    g_lmb_clicked = 0;
+    g_rmb_clicked = 0;
+    g_key_state  &= 0xFF00;
+
     for (;;) {
         /* 1. Top the audio FIFO to the cushion, buffering any video
          *    frames raced past into the ring. No-op without audio. */
