@@ -36,6 +36,15 @@ extern uint16_t  g_active_actor;
 extern uint16_t  g_cur_etap;
 extern uint16_t  g_cur_komnata;
 
+/* Current room's looping background-music tracks, resolved from the
+ * komnata's Wacky.scr room-level [sampl] (see FindKomnataBgMusic). The
+ * original LAYERS all of them at once, each looped; the port plays each on
+ * its own looping channel. Set by LoadKomnata, consumed by LoadKomnataScene.
+ * count==0 = no room music (a room with no room-level [sampl] plays silent,
+ * as in the original). */
+extern char      g_scene_bg_tracks[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+extern int       g_scene_bg_track_count;
+
 extern StageDef *g_stage;
 extern StageDef *g_stage_table[5];
 

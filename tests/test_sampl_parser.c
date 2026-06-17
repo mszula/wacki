@@ -28,6 +28,8 @@
 /* Public parser entry (src/audio/sfx.c). */
 extern void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end);
 extern void ResetDynamicSfxTable(void);
+extern int  FindKomnataBgMusic(const uint8_t *start, const uint8_t *end,
+                               char out[][KOMNATA_BG_MUSIC_NAME_MAX], int max);
 
 /* Test-only accessors over the parser's output (sfx.c bottom). */
 extern int         sfx_test_dynamic_count(void);
@@ -220,6 +222,118 @@ TEST(parse_stops_at_next_komnata_section)
     ASSERT_TRUE(find_entry("a.wyc", "x.wav", 1) >= 0);
 }
 
+/* ---- room-level BG music: FindKomnataBgMusic ------------------------- *
+ * The looping room ambience is the [sampl] track(s) listed BEFORE the
+ * komnata section's first [animacja]/[rozmowa] — NOT a Tlo_<etap>_<id>a
+ * formula. These cases mirror the real Wacky.scr layouts. */
+
+/* Helper: run FindKomnataBgMusic over a literal section. */
+static int find_music(const char *text,
+                      char out[][KOMNATA_BG_MUSIC_NAME_MAX], int max)
+{
+    return FindKomnataBgMusic((const uint8_t *)text,
+                              (const uint8_t *)text + strlen(text), out, max);
+}
+
+TEST(bg_music_single_room_level_sampl)
+{
+    /* etap-1 kiosk21: one room track, then prop animations. */
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] Tlo_1_3a.wav\n"
+                       "[animacja] kioskarz.wyc\n"
+                       "[sampl] mowi.wav (3,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 1);
+    ASSERT_STREQ(m[0], "tlo_1_3a.wav");   /* lowercased */
+}
+
+TEST(bg_music_multiple_variants_form_the_pool)
+{
+    /* etap-1 maluch: three room tracks the engine layers + loops together. */
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] Tlo_1_1a.wav\n"
+                       "[sampl] Tlo_1_1b.wav\n"
+                       "[sampl] Tlo_1_1c.wav\n"
+                       "[animacja] baranek.wyc\n"
+                       "[sampl] mee.wav (1,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 3);
+    ASSERT_STREQ(m[0], "tlo_1_1a.wav");
+    ASSERT_STREQ(m[1], "tlo_1_1b.wav");
+    ASSERT_STREQ(m[2], "tlo_1_1c.wav");
+}
+
+TEST(bg_music_etap2_short_names)
+{
+    /* The actual bug: etap-2 rooms name their track Tlo1a.wav (no
+     * _etap_komnata_ infix) — the old formula's Tlo_2_1a.wav never
+     * matched, so the room was silent. The data-driven path picks it up. */
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] Tlo1a.wav\n"
+                       "[animacja] kamera.wyc\n"
+                       "[ sampl] CamKlik2.wav (31,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 1);
+    ASSERT_STREQ(m[0], "tlo1a.wav");
+}
+
+TEST(bg_music_stops_at_first_animacja)
+{
+    /* [animacja]-scoped [sampl] are prop SFX, never room music. */
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] room.wav\n"
+                       "[animacja] a.wyc\n"
+                       "[sampl] sfx1.wav (1,)\n"
+                       "[sampl] sfx2.wav (2,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 1);
+    ASSERT_STREQ(m[0], "room.wav");
+}
+
+TEST(bg_music_stops_at_rozmowa_boundary)
+{
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] amb.wav\n"
+                       "[rozmowa] dlg\n"
+                       "[sampl] notmusic.wav (1,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 1);
+    ASSERT_STREQ(m[0], "amb.wav");
+}
+
+TEST(bg_music_none_when_animacja_is_first)
+{
+    /* A room that opens straight into an [animacja] has no room music. */
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[animacja] a.wyc\n"
+                       "[sampl] sfx.wav (1,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 0);
+}
+
+TEST(bg_music_respects_max_cap)
+{
+    char m[2][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] one.wav\n"
+                       "[sampl] two.wav\n"
+                       "[sampl] three.wav\n", m, 2);
+    ASSERT_EQ(n, 2);
+    ASSERT_STREQ(m[0], "one.wav");
+    ASSERT_STREQ(m[1], "two.wav");
+}
+
+TEST(bg_music_mixed_prefix_tracks_all_collected)
+{
+    /* etap-4 chatacz layers two Tlo tracks with a Tamtamy (drum) track —
+     * different prefixes, all room-level, all kept. Regression guard for the
+     * "play only one track" bug: every layer must survive extraction so the
+     * caller can play them together (e.g. klatka2's piano was one such layer). */
+    char m[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+    int n = find_music("[sampl] Tlo_4_4a.wav\n"
+                       "[sampl] Tlo_4_4b.wav\n"
+                       "[sampl] Tamtamy2.wav\n"
+                       "[animacja] tubylec.wyc\n"
+                       "[sampl] krzyk.wav (2,)\n", m, KOMNATA_BG_MUSIC_MAX_TRACKS);
+    ASSERT_EQ(n, 3);
+    ASSERT_STREQ(m[0], "tlo_4_4a.wav");
+    ASSERT_STREQ(m[1], "tlo_4_4b.wav");
+    ASSERT_STREQ(m[2], "tamtamy2.wav");
+}
+
 SUITE(sampl_parser)
 {
     RUN_TEST(single_play_trigger_no_end);
@@ -232,4 +346,12 @@ SUITE(sampl_parser)
     RUN_TEST(parse_no_animacja_section_no_entries);
     RUN_TEST(parse_two_animacja_blocks_each_track_owns_its_entries);
     RUN_TEST(parse_stops_at_next_komnata_section);
+    RUN_TEST(bg_music_single_room_level_sampl);
+    RUN_TEST(bg_music_multiple_variants_form_the_pool);
+    RUN_TEST(bg_music_etap2_short_names);
+    RUN_TEST(bg_music_stops_at_first_animacja);
+    RUN_TEST(bg_music_stops_at_rozmowa_boundary);
+    RUN_TEST(bg_music_none_when_animacja_is_first);
+    RUN_TEST(bg_music_respects_max_cap);
+    RUN_TEST(bg_music_mixed_prefix_tracks_all_collected);
 }

@@ -308,6 +308,61 @@ void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end)
     LOG_INFO("sampl", "parser: %d entries from this [komnata]", added);
 }
 
+/* FindKomnataBgMusic — extract a komnata's room-level [sampl] background
+ * tracks: the [sampl] WAVs that appear before the section's first
+ * [animacja]/[rozmowa] block (1:1 with FUN_00409970's `local_20` boundary).
+ * Those name the looping room ambience; the [animacja]-scoped [sampl] that
+ * follow them are per-frame prop SFX (ParseSamplTagsForKomnata's job).
+ *
+ * Reads the first whitespace-delimited token after each room-level [sampl]
+ * (the WAV name), lowercased, into out[]. Returns the track count — 0 means
+ * the room lists no [sampl] music and plays silent, as in the original. */
+int FindKomnataBgMusic(const uint8_t *start, const uint8_t *end,
+                       char out[][KOMNATA_BG_MUSIC_NAME_MAX], int max)
+{
+    if (!start || !end || start >= end || max <= 0) return 0;
+    const uint8_t *p = start;
+    int count = 0;
+
+    while (p < end && count < max) {
+        while (p < end && (*p == ' ' || *p == '\t' ||
+                           *p == '\r' || *p == '\n')) ++p;
+        if (p >= end) break;
+
+        /* Boundary: room-level [sampl] only precede the first [animacja]/
+         * [rozmowa]; the next [komnata] ends the section. Peek with copies
+         * so a non-match leaves p at the line start. */
+        const uint8_t *pa = p, *pr = p, *pk = p;
+        if (match_bracket_tag(&pa, end, "animacja") ||
+            match_bracket_tag(&pr, end, "rozmowa")  ||
+            match_bracket_tag(&pk, end, "komnata"))
+            break;
+
+        if (match_bracket_tag(&p, end, "sampl")) {
+            while (p < end && (*p == ' ' || *p == '\t')) ++p;
+            const uint8_t *tok = p;
+            while (p < end && *p != ' ' && *p != '\t' &&
+                   *p != '\r' && *p != '\n' && *p != '(') ++p;
+            size_t n = (size_t)(p - tok);
+            /* Original keeps only names starting with a printable > '/'
+             * (digit/letter) — skips blank/garbage [sampl] lines. */
+            if (n > 0 && *tok > '/') {
+                if (n >= KOMNATA_BG_MUSIC_NAME_MAX)
+                    n = KOMNATA_BG_MUSIC_NAME_MAX - 1;
+                for (size_t i = 0; i < n; ++i) {
+                    char c = (char)tok[i];
+                    out[count][i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+                }
+                out[count][n] = 0;
+                ++count;
+            }
+        }
+        /* Advance to the next line. */
+        while (p < end && *p != '\n') ++p;
+    }
+    return count;
+}
+
 /* ======================================================================== *
  * Per-(asset, frame, wav) playback state.
  *

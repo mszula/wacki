@@ -414,6 +414,13 @@ int      g_audio_sound_enabled = 1;       /* speech_color_index mirror (legacy g
 static char  s_last_music_name[64] = "";
 static int   s_last_music_loop    = 0;
 
+/* Current room's layered BG tracks (mirror of g_scene_bg_tracks, capped at
+ * the layer-channel count), remembered so a music/sound re-enable can resume
+ * them. Mutually exclusive with the menu track above: whichever started last
+ * is what a re-enable resumes (the other's name is cleared on switch). */
+static char  s_room_tracks[MIX_CHAN_ROOMMUS_COUNT][KOMNATA_BG_MUSIC_NAME_MAX];
+static int   s_room_track_count = 0;
+
 void StopMenuMusic(void)
 {
     /* Tear down any active stream first (so the producer won't touch the
@@ -430,6 +437,11 @@ void PlayMenuMusic(const char *dta_name, int loop)
         s_last_music_loop = 0;
         return;
     }
+    /* Menu BGM and room ambience are mutually exclusive — taking the menu
+     * track stops any layered room music and switches resume-mode to "menu". */
+    StopRoomMusic();
+    s_room_track_count = 0;
+
     /* Remember the last requested track so AudioSetMusicEnabled(1)
      * can resume play after a mute-toggle. */
     snprintf(s_last_music_name, sizeof s_last_music_name, "%s", dta_name);
@@ -449,25 +461,91 @@ void PlayMenuMusic(const char *dta_name, int loop)
 
     Uint8 *buf = NULL; Uint32 len = 0;
     if (!mixer_load_wav(dta_name, &buf, &len)) {
-        LOG_TRACE("music", "cannot find/decode %s as WAV", dta_name);
+        /* Visible by default (WARN): a referenced BG/menu track that can't
+         * be found leaves the channel silent — surface it so a room with
+         * no music is diagnosable instead of failing quietly. */
+        LOG_WARN("music", "%s not found/undecodable — channel stays silent", dta_name);
         return;
     }
     mixer_assign(MIX_CHAN_MUSIC, buf, len, loop ? 1 : 0, dta_name);
-    LOG_TRACE("music", "%s playing: %u bytes converted (loop=%d) on mixer ch %d", dta_name, len, loop ? 1 : 0, MIX_CHAN_MUSIC);
+    LOG_TRACE("music", "%s playing: %u bytes (loop=%d) on ch %d",
+              dta_name, len, loop ? 1 : 0, MIX_CHAN_MUSIC);
 }
 
-/* Toggle hook — called by the Solund options handler when the user
- * clicks the music on/off button. If muting mid-play, stops the
- * channel. If un-muting, re-issues PlayMenuMusic with the last
- * remembered track to resume. */
+/* Silence the room-music layer block. Keeps s_room_tracks so a later
+ * music/sound re-enable can resume the same layers. */
+void StopRoomMusic(void)
+{
+    if (!plat_audio_is_open()) return;
+    for (int i = 0; i < MIX_CHAN_ROOMMUS_COUNT; ++i)
+        mixer_stop_channel(MIX_CHAN_ROOMMUS_START + i);
+}
+
+/* (Re)assign the remembered room tracks onto the layer channels, each looped.
+ * Caller must have vetted the enable gates + opened the device. */
+static void room_music_start_layers(void)
+{
+    for (int i = 0; i < s_room_track_count; ++i) {
+        Uint8 *buf = NULL; Uint32 len = 0;
+        if (!mixer_load_wav(s_room_tracks[i], &buf, &len)) {
+            LOG_WARN("music", "room layer '%s' not found/undecodable", s_room_tracks[i]);
+            continue;
+        }
+        mixer_assign(MIX_CHAN_ROOMMUS_START + i, buf, len, 1, s_room_tracks[i]);
+        LOG_TRACE("music", "room layer %d/%d: '%s' (%u bytes, looped on ch%d)",
+                  i + 1, s_room_track_count, s_room_tracks[i], len,
+                  MIX_CHAN_ROOMMUS_START + i);
+    }
+}
+
+void PlayRoomMusic(char tracks[][KOMNATA_BG_MUSIC_NAME_MAX], int count)
+{
+    /* Menu BGM and room ambience are mutually exclusive. */
+    StopMenuMusic();
+    s_last_music_name[0] = 0;
+    StopRoomMusic();
+
+    /* Remember up to the layer-channel count; surface any overflow. */
+    if (count < 0) count = 0;
+    int keep = count < MIX_CHAN_ROOMMUS_COUNT ? count : MIX_CHAN_ROOMMUS_COUNT;
+    for (int i = 0; i < keep; ++i)
+        snprintf(s_room_tracks[i], sizeof s_room_tracks[i], "%s", tracks[i]);
+    s_room_track_count = keep;
+    if (count > keep)
+        LOG_WARN("music", "room has %d BG tracks but only %d layer channels — %d dropped",
+                 count, MIX_CHAN_ROOMMUS_COUNT, count - keep);
+
+    if (keep == 0) return;
+    if (!g_audio_music_enabled || !g_audio_sound_enabled) return;
+    if (!mixer_ensure_open()) return;
+    room_music_start_layers();
+}
+
+/* Resume whatever music mode is current after a mute-toggle re-enables
+ * output: the layered room ambience if a room set it, otherwise the last
+ * menu track. Gated by both the music and global-sound enables. */
+static void resume_current_music(void)
+{
+    if (!g_audio_music_enabled || !g_audio_sound_enabled) return;
+    if (s_room_track_count > 0) {
+        if (mixer_ensure_open()) room_music_start_layers();
+    } else if (s_last_music_name[0]) {
+        PlayMenuMusic(s_last_music_name, s_last_music_loop);
+    }
+}
+
+/* Toggle hook — called by the Solund options handler when the user clicks
+ * the music on/off button. Muting stops every music channel (menu + room
+ * layers); un-muting resumes whichever mode is current. */
 void AudioSetMusicEnabled(int on)
 {
     int was = g_audio_music_enabled;
     g_audio_music_enabled = on ? 1 : 0;
     if (was && !on) {
         StopMenuMusic();
-    } else if (!was && on && s_last_music_name[0]) {
-        PlayMenuMusic(s_last_music_name, s_last_music_loop);
+        StopRoomMusic();
+    } else if (!was && on) {
+        resume_current_music();
     }
 }
 
@@ -487,15 +565,16 @@ void AudioSetVoiceEnabled(int on)
 }
 
 /* Global sound mute — kills both music + SFX while clear,
- * resumes music when set back on. */
+ * resumes music (menu or room layers) when set back on. */
 void AudioSetSoundEnabled(int on)
 {
     int was = g_audio_sound_enabled;
     g_audio_sound_enabled = on ? 1 : 0;
     if (was && !on) {
         StopMenuMusic();
-    } else if (!was && on && s_last_music_name[0] && g_audio_music_enabled) {
-        PlayMenuMusic(s_last_music_name, s_last_music_loop);
+        StopRoomMusic();
+    } else if (!was && on) {
+        resume_current_music();
     }
 }
 

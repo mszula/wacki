@@ -29,6 +29,8 @@ struct ScriptObj { const uint8_t *start; const uint8_t *end; uint32_t size; uint
 StageDef *g_stage = NULL;                       /* g_actor_walk_anim_table */
 uint16_t  g_cur_etap    = 0;                    /* */
 uint16_t  g_cur_komnata = 0;                    /* g_cur_komnata */
+char      g_scene_bg_tracks[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX] = {{0}};
+int       g_scene_bg_track_count = 0;            /* layered room BG tracks */
 /* g_game_over_code is a macro alias for g_script_vars[14] — see wacki.h.
  * g_completed_stages is similarly aliased to g_script_vars[17] (Fix #21).
  * No separate storage; the values live inside the script_vars array so

@@ -38,10 +38,8 @@
 
 #define FLD_BITS_PER_BYTE              8
 
-/* Synthesised-DemoScene name buffer size + the music name template
- * (Tlo_<etap>_<komnata>a.wav). */
+/* Synthesised-DemoScene name buffer size. */
 #define SCENE_NAME_BUFFER_SIZE         64
-#define MUSIC_NAME_FMT                 "Tlo_%u_%ua.wav"
 #define FLD_EXTENSION                  ".fld"
 #define FLD_EXTENSION_BYTES            5      /* ".fld" + NUL */
 
@@ -124,13 +122,16 @@ static void free_previous_scene_assets(void)
 
     FreeSceneBgAtlas();
     StopMenuMusic();
+    StopRoomMusic();
+    g_scene_bg_track_count = 0;   /* LoadKomnata's Pass 2 re-resolves it */
 }
 
-/* Build a synthesised DemoScene from the resolved komnata name, the
- * current stage / komnata indices, and the standard naming convention:
+/* Build a synthesised DemoScene from the resolved komnata name and the
+ * standard naming convention:
  *   bg_pic    = <name>
  *   fld_file  = <name without .pic>.fld
- *   music_wav = Tlo_<stage>_<komnata>a.wav
+ * Room music is NOT carried here — it's a layered set (g_scene_bg_tracks)
+ * played directly in Step 5, so music_wav stays NULL.
  * Returns a pointer to a static buffer (stable across the call,
  * overwritten by the next LoadKomnataScene). */
 static const DemoScene *synthesise_demo_scene(const char *name)
@@ -138,7 +139,6 @@ static const DemoScene *synthesise_demo_scene(const char *name)
     static DemoScene s_synth;
     static char      s_synth_name [SCENE_NAME_BUFFER_SIZE];
     static char      s_synth_fld  [SCENE_NAME_BUFFER_SIZE];
-    static char      s_synth_music[SCENE_NAME_BUFFER_SIZE];
 
     snprintf(s_synth_name, sizeof s_synth_name, "%s", name);
 
@@ -151,14 +151,11 @@ static const DemoScene *synthesise_demo_scene(const char *name)
     memcpy(s_synth_fld, name, base);
     memcpy(s_synth_fld + base, FLD_EXTENSION, FLD_EXTENSION_BYTES);
 
-    snprintf(s_synth_music, sizeof s_synth_music, MUSIC_NAME_FMT,
-             (unsigned)g_cur_etap, (unsigned)g_cur_komnata);
-
     s_synth = (DemoScene){
         .name      = s_synth_name,
         .bg_pic    = s_synth_name,
         .fld_file  = s_synth_fld,
-        .music_wav = s_synth_music,
+        .music_wav = NULL,
         .walk_x0   = 0, .walk_y0 = 0,
         .walk_x1   = 0, .walk_y1 = 0,
     };
@@ -245,7 +242,20 @@ void LoadKomnataScene(uint16_t id)
     load_scene_walkability_fallback(s);
 
     /* --- Step 5: music + clean BG repaint ------------------------ */
-    if (s->music_wav) PlayMenuMusic(s->music_wav, 1);
+    /* Room music = the room-level [sampl] tracks LoadKomnata resolved into
+     * g_scene_bg_tracks. The original plays them all at once, looped, so
+     * layer them across the room-music channels (PlayRoomMusic warns on any
+     * track it can't load). */
+    if (g_scene_bg_track_count > 0) {
+        LOG_TRACE("music", "komnata etap=%u id=%u room='%s' → %d layered BG track(s)",
+                  (unsigned)g_cur_etap, (unsigned)g_cur_komnata,
+                  name, g_scene_bg_track_count);
+        PlayRoomMusic(g_scene_bg_tracks, g_scene_bg_track_count);
+    } else {
+        StopRoomMusic();
+        LOG_TRACE("music", "komnata etap=%u id=%u room='%s' → no room [sampl] music",
+                  (unsigned)g_cur_etap, (unsigned)g_cur_komnata, name);
+    }
 
     /* LoadKomnata runs the enter script + two embedded ProcessGame
      * FrameTick calls. Those embedded ticks call EntityRenderAll,

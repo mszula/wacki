@@ -274,6 +274,8 @@ FontHandle *g_default_font = NULL;
 WackiStats g_stats;
 uint16_t  g_cur_etap;
 uint16_t  g_cur_komnata;
+char      g_scene_bg_tracks[KOMNATA_BG_MUSIC_MAX_TRACKS][KOMNATA_BG_MUSIC_NAME_MAX];
+int       g_scene_bg_track_count;
 uint32_t  g_tick_counter;
 uint8_t   g_lmb_handled;
 uint8_t   g_lmb_clicked;

@@ -245,7 +245,19 @@ static void parse_komnata_sampl_tags(const char *name)
     if (!FindScriptByStageAndRoom(g_scripts_obj, etap_str, name)) return;
     const uint8_t *ss = ScriptObjGetSectionStart(g_scripts_obj);
     const uint8_t *se = ScriptObjGetSectionEnd  (g_scripts_obj);
-    if (ss && se) ParseSamplTagsForKomnata(ss, se);
+    if (!ss || !se) return;
+    ParseSamplTagsForKomnata(ss, se);
+
+    /* Resolve this room's looping BG music from its room-level [sampl]
+     * tracks. The original LAYERS all of them simultaneously, each looped
+     * (FUN_00409970 chains a node per [sampl]; FUN_00401100 fires them all) —
+     * so collect the full set; LoadKomnataScene plays each on its own looping
+     * channel. Pre-cleared in free_previous_scene_assets, so "no [sampl]" →
+     * stays silent. */
+    int ntrk = FindKomnataBgMusic(ss, se, g_scene_bg_tracks,
+                                  KOMNATA_BG_MUSIC_MAX_TRACKS);
+    g_scene_bg_track_count = ntrk;
+    LOG_TRACE("music", "room '%s': %d layered BG track(s)", name, ntrk);
 }
 
 /* Invoke an enter/secondary script via RunScriptInterpreter with

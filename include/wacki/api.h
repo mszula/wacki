@@ -153,6 +153,20 @@ void PlaySceneCutsceneAvi(const char *avi_name);
  * audio device. PlayMenuMusic("Dane_01.dta") => menu music. */
 void PlayMenuMusic(const char *dta_name, int loop);
 void StopMenuMusic(void);
+
+/* Room-music track-name buffer sizing (shared by FindKomnataBgMusic below
+ * and the layered playback API). */
+#define KOMNATA_BG_MUSIC_NAME_MAX   32
+#define KOMNATA_BG_MUSIC_MAX_TRACKS  8
+
+/* Room background music — LAYERED looping playback. Plays every track in
+ * `tracks` (count of them) simultaneously, each looped on its own channel,
+ * mirroring the original (FUN_00401100 fires all of FUN_00401070's chained
+ * nodes). StopRoomMusic silences the layer block. Gated by the same music/
+ * sound enables as PlayMenuMusic; the two are mutually exclusive (starting
+ * one stops the other). */
+void PlayRoomMusic(char tracks[][KOMNATA_BG_MUSIC_NAME_MAX], int count);
+void StopRoomMusic(void);
 /* Per-frame tick — no-op since the T6 mixer (callback handles loop
  * natively). Kept for API compatibility. */
 void TickMenuMusic(void);
@@ -162,10 +176,11 @@ void AudioSetSfxEnabled  (int on);
 void AudioSetVoiceEnabled(int on);
 void AudioSetSoundEnabled(int on);
 
-/* T6 audio mixer — single SDL device + callback mixing 8 channels:
- *   ch 0    = music (looped)
- *   ch 1    = dialog speech (one-shot)
- *   ch 2..7 = SFX pool (one-shot, age-based stealing)
+/* T6 audio mixer — single SDL device + callback mixing the channels:
+ *   ch 0     = menu/title music (looped)
+ *   ch 1     = dialog speech (one-shot)
+ *   ch 2..5  = room BG music layers (looped, played together)
+ *   ch 6..11 = SFX pool (one-shot, age-based stealing)
  * All streams converted to 22050 Hz S16 stereo at load time. */
 void     PlaySfx(const char *wav_name);
 void     TickSfx(void);
@@ -183,6 +198,16 @@ void     mixer_release(void);
  * table from [animacja]…[sampl] pairs. */
 void ResetDynamicSfxTable(void);
 void ParseSamplTagsForKomnata(const uint8_t *start, const uint8_t *end);
+
+/* Room background-music extraction. The looping room ambience is NOT a
+ * computable name — it's the room-level [sampl] track(s) listed in the
+ * komnata's Wacky.scr section BEFORE its first [animacja]/[rozmowa] block
+ * (1:1 with the original FUN_00409970 boundary). A room may list several
+ * tracks (e.g. Tlo_1_2a/b/c); the original plays them ALL at once, each
+ * looped (see PlayRoomMusic). FindKomnataBgMusic writes up to `max`
+ * lowercased WAV names into out[] and returns the count. */
+int  FindKomnataBgMusic(const uint8_t *start, const uint8_t *end,
+                        char out[][KOMNATA_BG_MUSIC_NAME_MAX], int max);
 
 /* Positional alpha-tint source queue (VM op 0x41/0x42 — dynamic
  * lighting on alpha-plane sprites, NOT sound; see audio/sound_queue.c). */

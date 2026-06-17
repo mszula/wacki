@@ -22,10 +22,30 @@
 
 /* ---- channel layout ----------------------------------------------- */
 
-#define MIX_CHANNEL_COUNT       8
-#define MIX_CHAN_MUSIC          0   /* reserved: looped music */
+#define MIX_CHANNEL_COUNT       12
+#define MIX_CHAN_MUSIC          0   /* reserved: menu/title looped BGM */
 #define MIX_CHAN_DIALOG         1   /* reserved: dialog speech */
-#define MIX_CHAN_SFX_START      2   /* SFX takes [2..MIX_CHANNEL_COUNT) */
+/* Room background music is LAYERED: the original plays ALL of a komnata's
+ * room-level [sampl] tracks simultaneously, each looped (FUN_00401100 fires
+ * every node FUN_00401070 chained). Reserve a small block of looping
+ * channels for them, ahead of the SFX pool so the SFX range stays symbolic. */
+#define MIX_CHAN_ROOMMUS_START  2   /* room BG layers [2..6) */
+#define MIX_CHAN_ROOMMUS_COUNT  4
+#define MIX_CHAN_SFX_START      6   /* SFX takes [6..MIX_CHANNEL_COUNT) = 6 */
+
+/* Channel-layout invariants (compile-time; portable negative-array trick so
+ * it holds under -std=gnu99 too). The reserved blocks must stay ordered and
+ * disjoint — music, then dialog, then the room-music layer block, then the
+ * SFX pool — and the SFX pool must keep its 6 slots. A future renumbering
+ * that overlaps the room-music block with SFX/dialog (the mistake this layout
+ * is prone to) fails the build instead of silently stealing channels. */
+typedef char mix_chanlayout_ordered_disjoint[
+    (MIX_CHAN_MUSIC == 0 && MIX_CHAN_DIALOG == 1 &&
+     MIX_CHAN_ROOMMUS_START == MIX_CHAN_DIALOG + 1 &&
+     MIX_CHAN_SFX_START == MIX_CHAN_ROOMMUS_START + MIX_CHAN_ROOMMUS_COUNT &&
+     MIX_CHAN_SFX_START < MIX_CHANNEL_COUNT) ? 1 : -1];
+typedef char mix_chanlayout_sfx_pool_size[
+    (MIX_CHANNEL_COUNT - MIX_CHAN_SFX_START == 6) ? 1 : -1];
 
 /* ---- output spec (fixed; every source is converted to this) ------- */
 
