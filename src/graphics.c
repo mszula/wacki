@@ -29,50 +29,101 @@ uint16_t  g_screen_h = WACKI_SCREEN_H;
 uint16_t  g_screen_w_dim = WACKI_SCREEN_W;
 uint16_t  g_screen_h_dim = WACKI_SCREEN_H;
 
-/* Scene-BG atlas copy — stub-pic komnaty (e.g. magaz3j where the table
- * .pic is a 1×1 palette placeholder) spawn their real BG as a kind=2
- * atlas entity with flag-0x60 in their enter_va. The one-shot blit
- * paths it to the backbuffer ONCE, then second_va destroys the entity
- * — freeing the atlas. So we copy the atlas frame's pixels here on the
- * one-shot path and own the copy ourselves; per-frame paint repaints
- * the BG image (not a backbuffer snapshot — earlier impl snapshot
- * captured whatever else was on backbuffer at the moment, including
- * leftover sprites from the prior komnata → "static silhouettes"
- * behind every moving thing). Freed on komnata transition. */
-uint8_t  *g_scene_bg_atlas_copy = NULL;
-uint16_t  g_scene_bg_atlas_w    = 0;
-uint16_t  g_scene_bg_atlas_h    = 0;
-int16_t   g_scene_bg_atlas_dx   = 0;
-int16_t   g_scene_bg_atlas_dy   = 0;
+/* ---- persistent one-shot-BG bake layer ----------------------------- *
+ *
+ * Entities flagged EFLAG_FADE_OR_BG | EFLAG_ONESHOT_BG_PEND (flag-0x60
+ * spawns, plus per-entity fade bakes) paint their current frame into the
+ * scene background ONCE, then the source entity is usually destroyed. The
+ * original engine accumulates every such bake into one persistent BG page
+ * (FUN_00411730) and repaints from it, so any number of bakes coexist
+ * permanently — a stub .pic's full background, the korlab5 airlock door,
+ * the card-reader buttons.
+ *
+ * We mirror that with a screen-sized pixel buffer + 1-byte coverage mask.
+ * SaveSceneBgAtlas copies the (clean) atlas pixels in and marks the rect;
+ * PaintSceneBgAtlasIfAny overlays the marked pixels onto the
+ * freshly-painted .pic every frame. Storing clean atlas pixels (never a
+ * backbuffer snapshot) avoids the "static silhouette" artefact a snapshot
+ * baked in. A re-bake over the same area overwrites in place, so
+ * open→close→open toggles always show the latest state. A dirty bbox
+ * keeps the per-frame overlay cheap. Freed on komnata transition.
+ *
+ * NOTE: replaces an earlier single-atlas slot that held only ONE bake and
+ * gated saves on width ≥ 320 px — which dropped narrow scene props, most
+ * visibly the korlab5 airlock door (~165 px), so it reverted to the
+ * .pic's closed state the instant the per-frame repaint ran. The width
+ * gate only existed to stop a small prop from evicting the real BG out of
+ * that single slot; the layer makes both the gate and the slot moot,
+ * matching the original's un-gated accumulation. */
+static uint8_t *s_bg_bake_px   = NULL;   /* screen-sized accumulated pixels */
+static uint8_t *s_bg_bake_mask = NULL;   /* 1 where a bake covers the pixel */
+static int      s_bg_bake_x0, s_bg_bake_y0;   /* dirty bbox of baked area;  */
+static int      s_bg_bake_x1, s_bg_bake_y1;   /* x1<=x0 ⇒ nothing baked yet */
+
+static int ensure_bg_bake_layer(void)
+{
+    size_t n = (size_t)g_screen_w * g_screen_h;
+    if (!s_bg_bake_px) s_bg_bake_px = (uint8_t *)xmalloc((uint32_t)n);
+    if (!s_bg_bake_mask) {
+        s_bg_bake_mask = (uint8_t *)xmalloc((uint32_t)n);
+        if (s_bg_bake_mask) memset(s_bg_bake_mask, 0, n);
+    }
+    return s_bg_bake_px && s_bg_bake_mask;
+}
 
 void SaveSceneBgAtlas(int16_t dx, int16_t dy,
                       uint16_t w, uint16_t h, const uint8_t *src)
 {
-    if (!src || !w || !h) return;
-    size_t n = (size_t)w * h;
-    if (g_scene_bg_atlas_copy) { xfree(g_scene_bg_atlas_copy); g_scene_bg_atlas_copy = NULL; }
-    g_scene_bg_atlas_copy = (uint8_t *)xmalloc((uint32_t)n);
-    if (!g_scene_bg_atlas_copy) return;
-    memcpy(g_scene_bg_atlas_copy, src, n);
-    g_scene_bg_atlas_w  = w;
-    g_scene_bg_atlas_h  = h;
-    g_scene_bg_atlas_dx = dx;
-    g_scene_bg_atlas_dy = dy;
+    if (!src || !w || !h || !ensure_bg_bake_layer()) return;
+
+    /* Clip (dx,dy,w,h) to the screen, tracking the source offset so a
+     * partially off-screen bake still copies the right pixels. */
+    int x0 = dx, y0 = dy, x1 = dx + (int)w, y1 = dy + (int)h;
+    int sx = 0, sy = 0;
+    if (x0 < 0) { sx = -x0; x0 = 0; }
+    if (y0 < 0) { sy = -y0; y0 = 0; }
+    if (x1 > (int)g_screen_w) x1 = (int)g_screen_w;
+    if (y1 > (int)g_screen_h) y1 = (int)g_screen_h;
+    if (x0 >= x1 || y0 >= y1) return;
+
+    for (int y = y0; y < y1; ++y) {
+        const uint8_t *s   = src + (size_t)(sy + (y - y0)) * w + sx;
+        size_t         off = (size_t)y * g_screen_w + x0;
+        memcpy(s_bg_bake_px   + off, s, (size_t)(x1 - x0));
+        memset(s_bg_bake_mask + off, 1, (size_t)(x1 - x0));
+    }
+
+    if (s_bg_bake_x1 <= s_bg_bake_x0) {        /* first bake this scene */
+        s_bg_bake_x0 = x0; s_bg_bake_y0 = y0;
+        s_bg_bake_x1 = x1; s_bg_bake_y1 = y1;
+    } else {
+        if (x0 < s_bg_bake_x0) s_bg_bake_x0 = x0;
+        if (y0 < s_bg_bake_y0) s_bg_bake_y0 = y0;
+        if (x1 > s_bg_bake_x1) s_bg_bake_x1 = x1;
+        if (y1 > s_bg_bake_y1) s_bg_bake_y1 = y1;
+    }
 }
 
 void PaintSceneBgAtlasIfAny(void)
 {
-    if (!g_scene_bg_atlas_copy) return;
-    PaintImageToBackbuffer(g_scene_bg_atlas_dx, g_scene_bg_atlas_dy,
-                           g_scene_bg_atlas_w, g_scene_bg_atlas_h,
-                           g_scene_bg_atlas_copy);
+    if (!s_bg_bake_px || !s_bg_bake_mask || !g_back_shadow) return;
+    if (s_bg_bake_x1 <= s_bg_bake_x0) return;          /* nothing baked yet */
+
+    for (int y = s_bg_bake_y0; y < s_bg_bake_y1; ++y) {
+        size_t         row = (size_t)y * g_screen_w;
+        const uint8_t *mk  = s_bg_bake_mask + row;
+        const uint8_t *px  = s_bg_bake_px   + row;
+        uint8_t       *bb  = g_back_shadow  + row;
+        for (int x = s_bg_bake_x0; x < s_bg_bake_x1; ++x)
+            if (mk[x]) bb[x] = px[x];
+    }
 }
 
 void FreeSceneBgAtlas(void)
 {
-    if (g_scene_bg_atlas_copy) { xfree(g_scene_bg_atlas_copy); g_scene_bg_atlas_copy = NULL; }
-    g_scene_bg_atlas_w = g_scene_bg_atlas_h = 0;
-    g_scene_bg_atlas_dx = g_scene_bg_atlas_dy = 0;
+    if (s_bg_bake_px)   { xfree(s_bg_bake_px);   s_bg_bake_px   = NULL; }
+    if (s_bg_bake_mask) { xfree(s_bg_bake_mask); s_bg_bake_mask = NULL; }
+    s_bg_bake_x0 = s_bg_bake_y0 = s_bg_bake_x1 = s_bg_bake_y1 = 0;
 }
 
 /* ---- dirty-rect tracking (kept for fidelity, not used by SDL preset) --- */

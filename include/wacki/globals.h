@@ -26,7 +26,6 @@ extern uint8_t   g_palette_rgb[256*3];
 extern uint16_t  g_screen_w, g_screen_h;
 extern uint8_t  *g_back_shadow;          /* 320×240×8bpp paletted shadow */
 extern uint16_t  g_screen_w_dim, g_screen_h_dim;
-extern uint8_t  *g_scene_bg_atlas_copy;
 
 /* ---- script register file + scene state -------------------------- */
 

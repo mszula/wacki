@@ -57,15 +57,6 @@ extern Entity *g_actor[2];
 #define SCENE_BG_WIDTH_OFFSET   4
 #define SCENE_BG_HEIGHT_OFFSET  6
 
-/* ---- one-shot BG persistence heuristic ----------------------------- */
-/* HUD panel atlases (small button strips at the bottom of the screen)
- * also use the one-shot blit path, but we must NOT cache them as the
- * persistent scene background. Heuristic: only cache when the sprite
- * spans at least half the play-area width AND its top is high enough
- * to suggest it covers the upper part of the screen. */
-#define BG_PERSIST_MIN_WIDTH  320
-#define BG_PERSIST_TOP_LIMIT  200
-#define BG_PERSIST_BOT_LIMIT  380
 
 /* ---- viewport off-screen guard (generous on every edge so mid-
  * flight off-screen sprites still render their tail). The left/top
@@ -145,14 +136,13 @@ static void stamp_paint_mask(int x0, int y0, int w, int h)
 
 /* ---- one-shot BG sprite (flag 0x40 | 0x20) -------------------------- *
  *
- * Some komnaty ship a 1×1 stub .pic and rely on a regular entity
- * spawn to paint the actual background — this fires once on the first
- * tick after the entity is spawned, then clears its own pending bit so
- * subsequent frames don't repaint. We also stash the atlas pixels via
- * SaveSceneBgAtlas so the per-frame BG repaint can find them.
- *
- * The size heuristic prevents HUD panel strips (which also use the
- * flag-0x40|0x20 path) from being cached as the scene BG. */
+ * Fires once after a flag-0x60 entity (or a per-entity fade bake) reaches
+ * a frame: paints the current frame to the backbuffer and clears the
+ * pending bit so it doesn't repaint. The pixels are also handed to
+ * SaveSceneBgAtlas, which accumulates them into the persistent bake layer
+ * so the per-frame BG repaint re-applies them — that's how a stub .pic's
+ * real background, the airlock door, and the card-reader props all stay
+ * painted after their source entity is destroyed. */
 static void paint_oneshot_bg(Entity *e, uint16_t flags, AnimAsset *atlas)
 {
     if (!atlas || !atlas->frame_count || !atlas->pixel_ptrs) return;
@@ -180,11 +170,12 @@ static void paint_oneshot_bg(Entity *e, uint16_t flags, AnimAsset *atlas)
      * advanced its animation frame. The outer FlushFrameToPrimary at
      * the end of paint_frame already presents the complete buffer. */
 
-    int top_high_enough = (by < BG_PERSIST_TOP_LIMIT) ||
-                          ((by + fh) >= BG_PERSIST_BOT_LIMIT);
-    if (fw >= BG_PERSIST_MIN_WIDTH && top_high_enough) {
-        SaveSceneBgAtlas(bx, by, fw, fh, px);
-    }
+    /* Accumulate into the persistent bake layer so the overlay survives
+     * the per-frame .pic repaint. Unconditional, matching the original's
+     * un-gated BG-page accumulation: the layer holds every bake (stub-pic
+     * background, narrow scene props like the airlock door), so there's no
+     * single slot to protect and no size gate to drop small props. */
+    SaveSceneBgAtlas(bx, by, fw, fh, px);
 }
 
 /* ---- walk-behind mask: 1bpp shape → BG-through-mask blit ------------ *
