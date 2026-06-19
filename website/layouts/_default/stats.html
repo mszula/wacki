@@ -1,7 +1,7 @@
 {{ define "head" }}
 <meta
   name="description"
-  content="Ile razy pobrano port Wacki: Kosmiczna rozgrywka? Statystyki na żywo z GitHuba — podział na platformy (PC i handheldy) oraz na wydania."
+  content="Ile razy pobrano port Wacki: Kosmiczna rozgrywka? Statystyki na żywo z GitHuba — podział wg platformy, rodziny sprzętu (komputery, telefony, handheldy, konsole) i wydania."
 />
 <link rel="canonical" href="{{ .Permalink }}" />
 
@@ -83,30 +83,16 @@
 
   <section class="section">
     <div class="wrap">
-      <h2 class="h2"><span class="h2__tag">02</span> PC kontra handheldy</h2>
+      <h2 class="h2"><span class="h2__tag">02</span> Wg rodziny sprzętu</h2>
       <p class="section__sub">
-        Pecet (Windows, macOS, Linux) czy kieszonkowa konsola (Miyoo,
-        Anbernic i spółka)?
+        Te same pobrania co wyżej, zsumowane w cztery światy: komputery
+        (Windows, macOS, Linux), telefony i tablety (Android), handheldy
+        (Miyoo, Anbernic i spółka) oraz konsole (PlayStation 2). Ile waży
+        każdy z nich?
       </p>
       <div class="split">
-        <div class="split__bar">
-          <div class="split__seg split__seg--pc" id="split-pc-fill">
-            <span id="split-pc-pct"></span>
-          </div>
-          <div class="split__seg split__seg--hh" id="split-hh-fill">
-            <span id="split-hh-pct"></span>
-          </div>
-        </div>
-        <div class="split__legend">
-          <span class="split__item">
-            <span class="split__dot split__dot--pc"></span>
-            🖥️ PC — <b id="split-pc-num">—</b>
-          </span>
-          <span class="split__item">
-            <span class="split__dot split__dot--hh"></span>
-            🎮 Handheldy — <b id="split-hh-num">—</b>
-          </span>
-        </div>
+        <div class="split__bar" id="split-bar"></div>
+        <div class="split__legend" id="split-legend"></div>
       </div>
     </div>
   </section>
@@ -132,5 +118,6 @@
 {{ end }}
 
 {{ define "scripts" }}
+{{ partial "families-data.html" . }}
 <script src="{{ "stats.js" | relURL }}?v={{ site.Params.assetver }}"></script>
 {{ end }}

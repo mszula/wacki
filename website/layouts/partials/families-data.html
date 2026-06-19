@@ -1,0 +1,17 @@
+{{- /* Emits the hardware-family list (data/families.yaml) as a JS global so
+       stats.js can roll the live download counter up into family groups — the
+       same single source of truth that drives the home grid and the /platformy/
+       hub. Add a family in families.yaml → it shows up in the stats split for
+       free. Like platforms-data.html, this MUST be `jsonify | safeJS`: inside a
+       <script> block Go's html/template double-escapes a plain jsonify'd string
+       into a broken mess, and safeJS marks it as already-safe JS. */ -}}
+{{- $fams := slice -}}
+{{- range hugo.Data.families -}}
+  {{- $fams = $fams | append (dict
+      "key" .key
+      "label" .label
+      "icon" .icon
+      "color" .color
+  ) -}}
+{{- end -}}
+<script>window.WACKI_FAMILIES = {{ $fams | jsonify | safeJS }};</script>

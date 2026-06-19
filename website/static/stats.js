@@ -31,6 +31,21 @@
     : FALLBACK_PLATFORMS;
   var OTHER = { key: "other", icon: "📦", label: "Inne", kind: "pc", color: "#6b5a3e" };
 
+  // Hardware families, for the higher-level "by family" split. Comes from Hugo
+  // (window.WACKI_FAMILIES, injected from data/families.yaml) so it shares the
+  // site's single source of truth — add a family there and it buckets here for
+  // free. Order = display order of the split; `color`/`label`/`icon` mirror the
+  // YAML. The inline array is only a fallback for a stale/cached stats.html.
+  var FALLBACK_FAMILIES = [
+    { key: "pc",       label: "Komputery",          icon: "🖥️", color: "#1c3a52" },
+    { key: "mobile",   label: "Telefony i tablety", icon: "📱", color: "#14a84a" },
+    { key: "handheld", label: "Handheldy",          icon: "🎮", color: "#ff7b08" },
+    { key: "console",  label: "Konsole",            icon: "📀", color: "#b8330f" }
+  ];
+  var FAMILIES = (window.WACKI_FAMILIES && window.WACKI_FAMILIES.length)
+    ? window.WACKI_FAMILIES
+    : FALLBACK_FAMILIES;
+
   function platformFor(assetName) {
     var n = (assetName || "").toLowerCase();
     for (var i = 0; i < PLATFORMS.length; i++) {
@@ -64,7 +79,9 @@
         var p = platformFor(a.name);
         perPlatform[p.key] = perPlatform[p.key] || { meta: p, count: 0 };
         perPlatform[p.key].count += c;
-        byKind[p.kind] += c;
+        // Guarded so a platform whose kind isn't pre-seeded (a new family) adds
+        // up instead of producing NaN.
+        byKind[p.kind] = (byKind[p.kind] || 0) + c;
         relTotal += c;
         total += c;
         if (a.created_at && (!firstAssetDate || a.created_at < firstAssetDate)) {
@@ -187,19 +204,45 @@
       );
     });
 
-    // desktop vs handheld split (other kinds — consoles like PS2, Android —
-    // show in the per-platform bars + grand total, but not this binary
-    // PC↔handheld widget)
-    var pc = data.byKind.pc, hh = data.byKind.handheld, sum = pc + hh;
-    var pcPct = sum ? Math.round((pc / sum) * 100) : 0;
-    var hhPct = sum ? 100 - pcPct : 0;
-    el("split-pc-num").textContent = fmt(pc);
-    el("split-hh-num").textContent = fmt(hh);
-    el("split-pc-pct").textContent = pcPct + "%";
-    el("split-hh-pct").textContent = hhPct + "%";
-    applySoon(function () {
-      el("split-pc-fill").style.width = pcPct + "%";
-      el("split-hh-fill").style.width = hhPct + "%";
+    // hardware-family split — the same downloads as the per-platform bars,
+    // rolled up into the families from data/families.yaml as one 100%-stacked
+    // bar. Families with zero downloads are dropped so it shows only what
+    // people actually play on. Percentages are a share of this sum (which
+    // equals the grand total once every platform maps to a family).
+    var famSum = 0;
+    FAMILIES.forEach(function (f) { famSum += data.byKind[f.key] || 0; });
+    var splitBar = el("split-bar");
+    var splitLegend = el("split-legend");
+    splitBar.innerHTML = "";
+    splitLegend.innerHTML = "";
+    FAMILIES.forEach(function (f) {
+      var count = data.byKind[f.key] || 0;
+      if (count <= 0) return;
+      // Exact float width (so segments always fill the bar); rounded label.
+      var pctExact = famSum ? (count / famSum) * 100 : 0;
+      var pctLabel = Math.round(pctExact);
+
+      var seg = document.createElement("div");
+      seg.className = "split__seg";
+      seg.style.background = f.color;
+      seg.title = f.label + " — " + fmt(count) + " (" + pctLabel + "%)";
+      // Only label segments wide enough to fit the text without clipping; the
+      // legend carries the rest so a thin sliver doesn't show garbled digits.
+      if (pctExact >= 10) seg.textContent = pctLabel + "%";
+      splitBar.appendChild(seg);
+      applySoon(function () { seg.style.width = pctExact + "%"; });
+
+      var item = document.createElement("span");
+      item.className = "split__item";
+      var dot = document.createElement("span");
+      dot.className = "split__dot";
+      dot.style.background = f.color;
+      var b = document.createElement("b");
+      b.textContent = fmt(count);
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(" " + f.icon + " " + f.label + " — "));
+      item.appendChild(b);
+      splitLegend.appendChild(item);
     });
 
     // per-release bars (already latest-first from API) — share of grand total

@@ -31,7 +31,7 @@ repo = "mszula/wacki"
 
 # Cache-buster appended to styles.css/main.js/stats.* — bump on every CSS/JS
 # change so browsers (and the local preview) don't serve a stale build.
-assetver = "20260617h"
+assetver = "20260619a"
 
 # Where the (1998, out-of-print) game can be downloaded as abandonware. Used by
 # the FAQ, the platform-page disc callout and the hub notice so the framing +

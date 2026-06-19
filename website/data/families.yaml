@@ -1,21 +1,28 @@
 # Platform families, in display order. The single source for how platforms are
-# grouped on the home grid and the /platformy/ hub. `key` matches each platform
-# page's params.familyKey (also the stats "kind" bucket: pc|mobile|handheld|console).
-# Adding a platform = drop a content file in content/platformy/ with the right
-# familyKey; it slots into the matching group automatically.
+# grouped on the home grid, the /platformy/ hub and the stats "by hardware
+# family" split. `key` matches each platform page's params.familyKey (also the
+# stats "kind" bucket: pc|mobile|handheld|console). `color` feeds the stats
+# family split (via window.WACKI_FAMILIES) — keep it in sync with the fallback
+# palette in static/stats.js. Adding a platform = drop a content file in
+# content/platformy/ with the right familyKey; it slots into the matching
+# group automatically.
 - key: pc
   label: Komputery
   icon: "🖥️"
+  color: "#1c3a52"
   blurb: "macOS, Linux i Windows — mysz, klawiatura, pełny ekran."
 - key: mobile
   label: Telefony i tablety
   icon: "📱"
+  color: "#14a84a"
   blurb: "Android — sterowanie dotykiem, obraz zawsze w poziomie."
 - key: handheld
   label: Handheldy
   icon: "🎮"
+  color: "#ff7b08"
   blurb: "Miyoo, Anbernic i dziesiątki innych kieszonkowych konsol."
 - key: console
   label: Konsole
   icon: "📀"
+  color: "#b8330f"
   blurb: "Wielkie pudła pod telewizor — na razie PlayStation 2."
