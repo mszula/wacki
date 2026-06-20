@@ -1,0 +1,6 @@
+// Windows resource script — embeds the application icon into the .exe so it
+// shows in Explorer, the taskbar, and the window title bar. Compiled by windres
+// on the Windows/mingw build (see the Makefile); ignored on Linux/macOS.
+//
+// The lowest-numbered ICON resource is the one Explorer uses as the file icon.
+1 ICON "wacki.ico"

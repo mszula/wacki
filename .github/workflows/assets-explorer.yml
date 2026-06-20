@@ -1,0 +1,217 @@
+# Build the standalone Wacki Assets Explorer (assets-explorer/) on Linux,
+# Windows, and macOS.
+#
+# RELEASE CADENCE is decoupled from the engine: the viewer changes rarely, so it
+# does NOT ride along on the engine's `v*` tags. It gets its OWN tag namespace —
+# push an `assets-explorer-v*` tag (e.g. assets-explorer-v1.0.0) to cut a viewer
+# release with its own GitHub Release entry. Engine `v*` tags don't trigger this
+# workflow at all. The viewer release is marked make_latest:false so it never
+# steals the "Latest" badge from the engine.
+#
+# Push to master/PR still builds + smoke-tests on all three platforms (no
+# release) — a cheap safety net, because the viewer compiles a small subset of
+# the engine sources in-place (../src), so an engine refactor can break it.
+#
+# This is independent of the engine's build.yml: the viewer needs NO game data
+# and no WACKI.EXE secret (it only browses .dta archives the user supplies at
+# runtime), so it builds on forks/PRs too.
+#
+# Third-party libs (nuklear/stb/msf_gif/tinyfd) are fetched + checksum-verified
+# by `make` itself (assets-explorer/tools/fetch-deps.sh), so there is no vendored
+# code to check out.
+
+name: assets-explorer
+
+on:
+  push:
+    branches: [master, main]          # build + smoke (safety net), no release
+    tags: ['assets-explorer-v*']      # build + cut the viewer's own release
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux (x86_64)
+            artifact: wacki-assets-explorer-linux-x86_64
+            archive_ext: tar.gz
+          - os: windows-latest
+            label: Windows (x86_64, MSYS2/mingw)
+            artifact: wacki-assets-explorer-windows-x86_64
+            archive_ext: zip
+          - os: macos-latest
+            label: macOS (arm64)
+            artifact: wacki-assets-explorer-macos-arm64
+            archive_ext: zip
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- SDL2 (the only external build dependency) ------------------
+      - name: Install SDL2 (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
+      - name: Install SDL2 (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install sdl2
+
+      # MSYS2 MINGW64 ships SDL2 + a working sdl2-config; curl + zip for the
+      # dep fetch and packaging. The viewer build itself runs in this shell.
+      - name: Setup MSYS2 (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-SDL2
+            curl
+            zip
+
+      # ---- build ------------------------------------------------------
+      - name: Build (Linux / macOS)
+        if: matrix.os != 'windows-latest'
+        run: make -C assets-explorer
+
+      - name: Build (Windows / MSYS2)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: make -C assets-explorer
+
+      # macOS: also wrap it in the double-clickable .app bundle we ship.
+      - name: Bundle .app (macOS)
+        if: matrix.os == 'macos-latest'
+        run: make -C assets-explorer app
+
+      # ---- smoke: the binary runs + exits cleanly with no data --------
+      # `--list` with no ./data must fail with rc=1 (the controlled
+      # "mount failed" path), not segfault / hang. Cheap signal that the
+      # link + static init are sound on this platform. Linux only.
+      - name: Smoke (Linux — runs + clean no-data exit)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set +e
+          ./assets-explorer/dist/wacki-viewer --list
+          rc=$?
+          set -e
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::expected rc=1 (no data), got $rc"; exit 1
+          fi
+          echo "ok — clean no-data exit"
+
+      # ---- package ----------------------------------------------------
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p staging
+          cp assets-explorer/dist/wacki-viewer staging/
+          cp assets-explorer/README.md staging/ 2>/dev/null || true
+          tar czf "${{ matrix.artifact }}.tar.gz" -C staging .
+
+      # Windows: bundle the non-system (mingw) DLLs ldd resolves under
+      # /mingw64 — SDL2.dll, libwinpthread-1.dll, etc. — next to the .exe so
+      # the zip runs standalone. The system DLLs (kernel32, comdlg32, the
+      # UCRT api-ms-win-* set) ship with Windows.
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          mkdir -p staging
+          cp assets-explorer/dist/wacki-viewer.exe staging/
+          ldd staging/wacki-viewer.exe \
+            | grep -i '/mingw64/' \
+            | awk '{print $3}' \
+            | while read -r dll; do cp "$dll" staging/; done
+          cp assets-explorer/README.md staging/ 2>/dev/null || true
+          (cd staging && zip -r "../${{ matrix.artifact }}.zip" .)
+          echo "bundled DLLs:"; ls staging/*.dll
+
+      # macOS: ship the .app with SDL2 bundled inside so it runs on any Mac
+      # (the build links Homebrew's SDL2 by absolute path). Copy the dylib
+      # into Contents/Frameworks and rewrite the load command to @executable_
+      # path. Not code-signed — Gatekeeper needs a right-click → Open once.
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p staging
+          APP="staging/Wacki Assets Explorer.app"
+          cp -R "assets-explorer/dist/Wacki Assets Explorer.app" "$APP"
+          bin="$APP/Contents/MacOS/wacki-viewer"
+          sdl=$(otool -L "$bin" | awk '/libSDL2/{print $1; exit}')
+          if [ -n "$sdl" ] && [ -f "$sdl" ]; then
+            mkdir -p "$APP/Contents/Frameworks"
+            base=$(basename "$sdl")
+            cp "$sdl" "$APP/Contents/Frameworks/$base"
+            install_name_tool -change "$sdl" "@executable_path/../Frameworks/$base" "$bin"
+            echo "bundled $base"
+          fi
+          cp assets-explorer/README.md staging/ 2>/dev/null || true
+          (cd staging && zip -ry "../${{ matrix.artifact }}.zip" .)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
+
+  # ---- release ----------------------------------------------------------
+  # Fires ONLY on an `assets-explorer-v*` tag (never the engine's `v*`). Creates
+  # a dedicated GitHub Release for that tag with the three platform archives.
+  # make_latest:false so it never displaces the engine's release as "Latest".
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/assets-explorer-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: wacki-assets-explorer-*
+
+      - name: Flatten archives
+        run: |
+          mkdir -p out
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec mv {} out/ \;
+          ls -la out
+
+      # Clean release title: strip the namespace prefix (assets-explorer-v1.0.0 -> v1.0.0).
+      - name: Version from tag
+        run: echo "AE_VERSION=${GITHUB_REF_NAME#assets-explorer-}" >> "$GITHUB_ENV"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Wacki Assets Explorer ${{ env.AE_VERSION }}
+          make_latest: 'false'
+          files: out/*
+          fail_on_unmatched_files: true
+          body: |
+            Standalone **Wacki Assets Explorer** ${{ env.AE_VERSION }} — browse the
+            game's `.dta` archives and preview every asset type. Released
+            independently of the engine.
+
+            **Downloads**
+            - Linux x86_64 — `.tar.gz` (uses the system SDL2)
+            - Windows x86_64 — `.zip`, standalone (bundled DLLs, no console window)
+            - macOS arm64 — `.zip` with `Wacki Assets Explorer.app` (SDL2 bundled)
+
+            See the included `README.md` for usage.

@@ -178,30 +178,36 @@ Bit set → walkable. Czytane przez `is_walkable_at(x,y)` w `src/game.c`.
 
 ## 6. Tła PIC — `.pic`
 
-Statyczne tła pokoi, 8-bpp paletted, full screen-size (640×480).
+Statyczne tła pokoi, 8-bpp paletted (typowo 640×400, czasem 640×480).
 Format (consumer: `paint_rawb_pic`):
 
 | Off | Size | Field | Notes |
 |----:|-----:|---|---|
-|     0 | 2 | `w` | szerokość (typowo 640) |
-|     2 | 2 | `h` | wysokość (typowo 480) |
-|     4 | 0x304 | header | misc flags + padding |
+|     0 | 4 | `magic` | `'RAWB'` = 0x42574152 |
+|     4 | 2 | `w` | szerokość (typowo 640) |
+|     6 | 2 | `h` | wysokość (typowo 400; bywa 480) |
+|     8 | 0x300 | header | misc flags + padding |
 | 0x308 | w*h | pixels | flat 8bpp |
 
 Prefix 0x308 jest traktowany jako opaque metadata przez port
-(`paint_rawb_pic` czyta pixele tylko od offsetu 0x308).
+(`paint_rawb_pic` czyta pixele tylko od offsetu 0x308). NOTE: wymiary
+leżą PO 4-bajtowym magic `RAWB` (w@4, h@6) — wcześniejsza wersja tej
+tabeli błędnie podawała w@0/h@2. Zweryfikowane renderowaniem assetów
+w narzędziu viewer (PLAC.PIC = 640×400).
 
 ---
 
 ## 7. Paleta PAL — `.pal`
 
-Flat 256×3 BGR triplety (768 bajtów total). Ładowana bezpośrednio do
+Flat 256×3 **RGB** triplety (768 bajtów total). Ładowana bezpośrednio do
 `g_palette_rgb` i aplikowana przez `InstallPalette` która rebuilduje
-też LUT-y RGB12 quantization dla alpha-plane rendering.
+też LUT-y RGB12 quantization dla alpha-plane rendering. NOTE: bajty to
+R,G,B (nie BGR) — `plat_video_present` mapuje e[0]→R, e[1]→G, e[2]→B
+(`src/platform/sdl/video_sdl.c`). Wcześniejsza wersja błędnie pisała BGR.
 
 ```
 +--- byte 0 ---+--- byte 1 ---+--- byte 2 ---+ ...
-| B[0]         | G[0]         | R[0]         | B[1] ...
+| R[0]         | G[0]         | B[0]         | R[1] ...
 ```
 
 Oryginał czasami fadem ładuje partial paletę (rzędy N..N+M tylko);

@@ -24,9 +24,11 @@ wacki.cfg
 # Logs / diagnostics
 *.log
 
-# Game assets (symlinked, not committed)
+# Game assets (symlinked, not committed). assets-explorer/data -> ../data is a
+# dev convenience so the viewer finds data/ when run from its own dir.
 /data
 /data/
+/assets-explorer/data
 
 # Debug screenshots / dumps
 *.bmp
@@ -43,6 +45,12 @@ ANALYSIS/
 /website/public/
 /website/resources/
 /website/.hugo_build.lock
+
+/assets-explorer/dist/
+/assets-explorer/third_party/
+# 2.4 MB hi-res icon source — only the small icon-source.jpg (README image) and
+# the generated header are committed; the PNG is regenerated locally on demand.
+/assets-explorer/icon-source.png
 
 # Editor / OS / tool metadata
 .DS_Store

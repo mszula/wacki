@@ -438,6 +438,27 @@ FLIC, pipeline audio itd.) jest w [`docs/`](docs/) — zacznij od
 
 ---
 
+## 🔍 Assets Explorer
+
+Chcesz zajrzeć do środka plików gry? **Wacki Assets Explorer** to osobne,
+otwarte narzędzie (Nuklear + SDL2), które otwiera archiwa `Dane_*.dta`
+i pokazuje każdy zasób — sprite'y, animacje, palety, dźwięki, cutscenki
+i skrypty — z eksportem do PNG / GIF / WAV. Działa na Linuksie, Windowsie
+i macOS.
+
+**Pobierz** (od wydania `assets-explorer-v1.0.0`):
+
+| Platforma | Paczka |
+|---|---|
+| 🐧 **Linux** x86_64 | [`wacki-assets-explorer-linux-x86_64.tar.gz`](https://github.com/mszula/wacki/releases/download/assets-explorer-v1.0.0/wacki-assets-explorer-linux-x86_64.tar.gz) |
+| 🪟 **Windows** x86_64 | [`wacki-assets-explorer-windows-x86_64.zip`](https://github.com/mszula/wacki/releases/download/assets-explorer-v1.0.0/wacki-assets-explorer-windows-x86_64.zip) |
+| 🍎 **macOS** (Apple Silicon) | [`wacki-assets-explorer-macos-arm64.zip`](https://github.com/mszula/wacki/releases/download/assets-explorer-v1.0.0/wacki-assets-explorer-macos-arm64.zip) |
+
+- 🌐 Strona: **[mszula.github.io/wacki/eksplorer.html](https://mszula.github.io/wacki/eksplorer.html)**
+- 📂 Kod, instrukcja budowania i szczegóły: **[`assets-explorer/`](assets-explorer/README.md)**
+
+---
+
 ## Zgłaszanie błędów
 
 Coś się sypie? Otwórz issue:

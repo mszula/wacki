@@ -252,7 +252,7 @@ TEST_CFLAGS = -O2 -Wall -Wextra -Wpedantic \
               -std=gnu11 -I tests/sdl_stub -I include -I tests
 
 # ---- targets ----------------------------------------------------------------
-.PHONY: all engine tools clean run debug test miyoo ps2 ps2-iso
+.PHONY: all engine tools viewer clean run debug test miyoo ps2 ps2-iso
 all: engine tools
 
 engine: $(DIST)/$(BIN_NAME)$(EXE)
@@ -290,6 +290,19 @@ $(DIST)/dta-extract$(EXE): $(TOOL_SRCS_EXTRACT) | $(DIST)
 
 $(DIST)/pkv2-depack$(EXE): $(TOOL_SRCS_PKV2) | $(DIST)
 	$(CC) $(CFLAGS) -o $@ $(TOOL_SRCS_PKV2)
+
+# ---- asset explorer (wacki-viewer) -----------------------------------------
+# The standalone Nuklear + SDL2 asset browser lives in its OWN self-contained
+# subproject under assets-explorer/ — it has its own Makefile, vendored
+# third_party/ single-header libs, and UI sources (assets-explorer/src/). It
+# still compiles a small SDL-free subset of THIS engine's sources in-place
+# (../src/{depack,archive,...}) so it always reflects real engine behaviour.
+#
+# This target just delegates, so `make viewer` from the repo root keeps
+# working; CC / SDL2_CFG are forwarded so a custom toolchain carries through.
+# The built binary lands in assets-explorer/dist/wacki-viewer.
+viewer:
+	$(MAKE) -C assets-explorer CC='$(CC)' SDL2_CFG='$(SDL2_CFG)'
 
 run: $(DIST)/$(BIN_NAME)$(EXE)
 	$(DIST)/$(BIN_NAME)$(EXE)
