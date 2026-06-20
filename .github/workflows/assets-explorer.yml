@@ -143,9 +143,16 @@ jobs:
           echo "bundled DLLs:"; ls staging/*.dll
 
       # macOS: ship the .app with SDL2 bundled inside so it runs on any Mac
-      # (the build links Homebrew's SDL2 by absolute path). Copy the dylib
-      # into Contents/Frameworks and rewrite the load command to @executable_
-      # path. Not code-signed — Gatekeeper needs a right-click → Open once.
+      # (the build links Homebrew's SDL2 by absolute path). Copy the dylib into
+      # Contents/Frameworks and rewrite the load command to @executable_path.
+      #
+      # Then RE-SIGN ad-hoc. install_name_tool rewrites the Mach-O, which
+      # invalidates the linker's ad-hoc signature — and a *broken* signature
+      # makes macOS reject the downloaded app outright as "is damaged — move to
+      # Trash" (worse than the normal unverified-developer prompt, and not
+      # bypassable by right-click → Open). `codesign --deep --sign -` re-seals
+      # the bundle + the bundled dylib with a valid ad-hoc signature, so the app
+      # opens after the usual quarantine clear (xattr -cr / right-click → Open).
       - name: Package (macOS)
         if: matrix.os == 'macos-latest'
         run: |
@@ -161,6 +168,8 @@ jobs:
             install_name_tool -change "$sdl" "@executable_path/../Frameworks/$base" "$bin"
             echo "bundled $base"
           fi
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP" && echo "ad-hoc signature valid"
           cp assets-explorer/README.md staging/ 2>/dev/null || true
           (cd staging && zip -ry "../${{ matrix.artifact }}.zip" .)
 
