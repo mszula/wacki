@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build (tools/build-switch.sh)
-        run: ./tools/build-switch.sh
+        run: bash tools/build-switch.sh
 
       - name: Wgraj artefakt .nro
         uses: actions/upload-artifact@v4
