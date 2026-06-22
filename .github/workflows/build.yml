@@ -593,6 +593,13 @@ jobs:
     needs: [build, miyoo, portmaster-package, ps2, android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    # itch.io upload key for the butler steps below. Optional: when the
+    # secret is unset (forks, or before the maintainer adds it) those steps
+    # self-skip and the GitHub Release still ships. Generate one at
+    # itch.io -> Settings -> API keys, then add it as the BUTLER_API_KEY
+    # repository secret.
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
     permissions:
       contents: write
       actions: write          # to dispatch the Pages deploy (gh workflow run)
@@ -630,6 +637,47 @@ jobs:
             wacki-*.apk
           body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
+
+      # ---- mirror the same archives to itch.io (butler) ------------
+      # Push each per-platform archive to its own channel under
+      # mszula/wacki. itch reads the channel names windows / linux / osx /
+      # android as platform tags; the handheld + console channels
+      # (miyoo / portmaster / ps2) are plain labels. --userversion stamps
+      # the release tag so the itch page shows the version. Both steps
+      # self-skip when BUTLER_API_KEY is absent, so a missing key never
+      # blocks the GitHub Release above.
+      # NOTE: we push the archives as-is, for parity with the GitHub
+      # Release. Pushing the *extracted* folders instead would let the itch
+      # desktop app install + delta-update them — switch to that if wanted.
+      - name: Install butler
+        if: env.BUTLER_API_KEY != ''
+        run: |
+          curl -fsSL -o butler.zip \
+            https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d "$HOME/.butler"
+          chmod +x "$HOME/.butler/butler"
+          echo "$HOME/.butler" >> "$GITHUB_PATH"
+          "$HOME/.butler/butler" -V
+
+      - name: Publish to itch.io (butler)
+        if: env.BUTLER_API_KEY != ''
+        run: |
+          ver="${GITHUB_REF_NAME}"     # the v* tag, e.g. v1.2.4
+          push() {
+            if [ -f "$1" ]; then
+              echo "-> $1 -> mszula/wacki:$2 ($ver)"
+              butler push "$1" "mszula/wacki:$2" --userversion "$ver"
+            else
+              echo "::warning::itch upload skipped — $1 not found"
+            fi
+          }
+          push wacki-macos-arm64.tar.gz   osx
+          push wacki-linux-x86_64.tar.gz  linux
+          push wacki-windows-x86_64.zip   windows
+          push wacki-miyoo.zip            miyoo
+          push wacki-portmaster.zip       portmaster
+          push wacki-ps2.zip              ps2
+          push wacki-android.apk          android
 
       # Redeploy the Pages site so its version/date pick up this release.
       # We can't lean on pages.yml's `release: published` trigger: events
