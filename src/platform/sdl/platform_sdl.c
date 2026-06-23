@@ -650,6 +650,16 @@ void PlatformPumpEvents(void)
         case SDL_CONTROLLERDEVICEREMOVED:
             platform_pad_handle_event(&ev);
             break;
+        case SDL_JOYBUTTONDOWN:
+            /* SDL_Joystick button events — used by platforms whose controller
+             * is not a SDL_GameController (notably Wii's Wiimote, which SDL2-
+             * wii exposes as a joystick). Forwarded to the same handler so the
+             * per-platform gamepad_*.c file can map button indices to engine
+             * latches without touching this shared pump. No-op on targets
+             * whose pad is a SDL_GameController (those platforms open the
+             * controller subsystem which intercepts joystick events first). */
+            platform_pad_handle_event(&ev);
+            break;
         }
     }
 

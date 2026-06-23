@@ -27,6 +27,11 @@
 #include <unistd.h>     /* chdir */
 #include <sys/stat.h>   /* mkdir */
 #endif
+#ifdef __wii__
+#include <fat.h>        /* fatInitDefault */
+#include <unistd.h>     /* chdir */
+#include <sys/stat.h>   /* mkdir */
+#endif
 
 #ifdef _WIN32
 #include <stdio.h>
@@ -104,6 +109,19 @@ void plat_system_early_init(void)
         LOG_INFO("platform", "user dir: sdmc:/switch/wacki");
     else
         LOG_INFO("platform", "chdir(sdmc:/switch/wacki) failed — Wacki.sav/wacki.cfg location not pinned");
+#endif
+#ifdef __wii__
+    /* Homebrew Channel: init libfat so SD card fopen() works, then pin
+     * the cwd to sd:/apps/wacki/ — same reasoning as __SWITCH__ above.
+     * fatInitDefault() mounts the SD card as "sd:" (and optionally USB).
+     * Must run before any fopen, including ConfigLoad. */
+    if (!fatInitDefault())
+        LOG_INFO("platform", "fatInitDefault() failed — SD card may be unavailable");
+    mkdir("sd:/apps/wacki", 0777);
+    if (chdir("sd:/apps/wacki") == 0)
+        LOG_INFO("platform", "user dir: sd:/apps/wacki");
+    else
+        LOG_INFO("platform", "chdir(sd:/apps/wacki) failed — Wacki.sav/wacki.cfg location not pinned");
 #endif
 }
 

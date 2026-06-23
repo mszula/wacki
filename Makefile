@@ -264,7 +264,7 @@ TEST_CFLAGS = -O2 -Wall -Wextra -Wpedantic \
               -std=gnu11 -I tests/sdl_stub -I include -I tests
 
 # ---- targets ----------------------------------------------------------------
-.PHONY: all engine tools viewer clean run debug test miyoo ps2 ps2-iso switch
+.PHONY: all engine tools viewer clean run debug test miyoo ps2 ps2-iso switch wii
 all: engine tools
 
 engine: $(DIST)/$(BIN_NAME)$(EXE)
@@ -288,6 +288,9 @@ ps2:
 
 switch:
 	./tools/build-switch.sh
+
+wii:
+	./tools/build-wii.sh
 
 # Bootable PS2 ISO (SYSTEM.CNF + ELF + game data) so PCSX2 runs it via "Boot
 # ISO" with no HostFS config. Builds the ELF first if needed.

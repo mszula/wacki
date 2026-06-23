@@ -1,0 +1,31 @@
+name: Wii build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'Makefile'
+      - 'mk/**'
+      - 'tools/**'
+      - '.github/workflows/wii.yml'
+
+jobs:
+  build-wii:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build (tools/build-wii.sh)
+        run: bash tools/build-wii.sh
+
+      - name: Wgraj artefakt .dol
+        uses: actions/upload-artifact@v4
+        with:
+          name: wacki-wii
+          path: dist/wacki.dol
+          if-no-files-found: error
