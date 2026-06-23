@@ -30,7 +30,8 @@ BIN_NAME := wacki
 CFLAGS += -DGEKKO -mrvl -mcpu=750 -meabi -mhard-float \
           -DWACKI_HANDHELD -DWACKI_WII \
           -I$(DEVKITPRO)/libogc/include \
-          -I$(DEVKITPRO)/portlibs/wii/include
+          -I$(DEVKITPRO)/portlibs/wii/include \
+          -I src/platform/sdl
 
 # -Os + section GC keeps the .dol lean; no -flto (conservative, same
 # reasoning as miyoo.mk and switch.mk).
