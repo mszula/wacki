@@ -93,7 +93,7 @@ int plat_pad_menu_nav(int *up, int *down, int *confirm)
 
     SDL_JoystickUpdate();
     /* D-pad on Wiimote (held pointing at TV): hat 0 */
-    SDL_Hat hat = SDL_JoystickGetHat(s_wiimote, 0);
+    Uint8 hat = SDL_JoystickGetHat(s_wiimote, 0);
     int u = (hat & SDL_HAT_UP)   != 0;
     int d = (hat & SDL_HAT_DOWN) != 0;
     int c = SDL_JoystickGetButton(s_wiimote, WII_BTN_2); /* 2 confirms */
