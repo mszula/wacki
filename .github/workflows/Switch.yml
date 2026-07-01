@@ -1,0 +1,43 @@
+name: Switch build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'Makefile'
+      - 'mk/**'
+      - 'tools/**'
+      - 'assets/**'
+      - '.github/workflows/switch.yml'
+
+jobs:
+  build-switch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Przywroc WACKI.EXE z sekretu (opcjonalne)
+        env:
+          WACKI_EXE_URL: ${{ secrets.WACKI_EXE_URL }}
+        run: |
+          if [ -n "$WACKI_EXE_URL" ]; then
+            mkdir -p data
+            curl -fsSL "$WACKI_EXE_URL" -o data/WACKI.EXE
+            echo "WACKI.EXE pobrano z URL ($(wc -c < data/WACKI.EXE) bajtow)"
+          else
+            echo "Brak sekretu WACKI_EXE_URL - build uzyje dynamicznego ladowania z karty SD"
+          fi
+
+      - name: Build (tools/build-switch.sh)
+        run: bash tools/build-switch.sh
+
+      - name: Wgraj artefakt .nro
+        uses: actions/upload-artifact@v4
+        with:
+          name: wacki-switch
+          path: dist/wacki.nro
+          if-no-files-found: error
