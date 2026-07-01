@@ -140,8 +140,14 @@ static void handle_keydown(const SDL_Event *ev)
     if (sym == SDLK_F3)  g_stats_dump_request = 1;
     if (sym == SDLK_F12 || sym == SDLK_AC_BACK) g_pause_menu_request = 1;
     if (sym == SDLK_F11) plat_video_toggle_fullscreen();
+#ifndef WACKI_PS2
+    /* F10/F8 — aspect mode i touch mode: zdefiniowane w video_sdl.c /
+     * platform_sdl.c. PS2 uzywa video_ps2.c zamiast video_sdl.c i nie
+     * ma klawiatury, wiec te wywolania sa tam zbedne i spowodowaly by
+     * undefined reference przy linkowaniu. */
     if (sym == SDLK_F10) platform_video_toggle_aspect_mode();
     if (sym == SDLK_F8)  platform_touch_cycle_mode();
+#endif
     if (sym == SDLK_TAB) g_rmb_clicked = 1;
     if (sym == SDLK_BACKSPACE) PlatformPushTypedChar(ASCII_BACKSPACE);
     if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER) PlatformPushTypedChar(ASCII_ENTER);
