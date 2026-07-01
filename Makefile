@@ -10,6 +10,7 @@
 # edits to this file. Build a non-default target with `make TARGET=<plat>`
 # (in practice via the tools/build-<plat>.sh Docker wrappers).
 
+.DEFAULT_GOAL := all
 CC       ?= cc
 SDL2_CFG ?= sdl2-config
 
@@ -157,7 +158,7 @@ DEBUG_LDFLAGS = -fsanitize=address -fsanitize=undefined
 # .rdata + .data raw bytes as a const slice table + blob. The PE-loader resolves
 # original VAs against it at runtime — no PE parsing, no file I/O after build.
 # Build-time dep: data/WACKI.EXE must exist; the generated file is gitignored.
-EMBEDDED_PE_SRC = src/embedded_wacki_pe.c
+EMBEDDED_PE_SRC ?= src/embedded_wacki_pe.c
 EMBEDDED_PE_BIN = data/WACKI.EXE
 EMBED_PE_TOOL   = $(DIST)/embed-pe-data$(EXE)
 
@@ -167,8 +168,10 @@ EMBED_PE_TOOL   = $(DIST)/embed-pe-data$(EXE)
 $(EMBED_PE_TOOL): tools/embed-pe-data.c | $(DIST)
 	$(HOSTCC) -O2 -Wall -I include -o $@ $<
 
+ifeq ($(EMBEDDED_PE_SRC),src/embedded_wacki_pe.c)
 $(EMBEDDED_PE_SRC): $(EMBEDDED_PE_BIN) $(EMBED_PE_TOOL)
 	$(EMBED_PE_TOOL) $(EMBEDDED_PE_BIN) $(EMBEDDED_PE_SRC)
+endif
 
 # Window icon: embed the 64×64 BMP from assets/icons/ as a C byte array so
 # SDL_SetWindowIcon can hand it to the window system (Dock / taskbar / titlebar).
