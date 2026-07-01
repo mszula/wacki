@@ -1,77 +1,88 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/config.c — wacki.cfg: persisted player display preferences.
+ * src/config.c — wacki.cfg: persisted player display/input preferences.
  *
- * A tiny key=value file in the working directory (next to Wacki.sav)
- * remembering the display mode the player chose so the engine doesn't
- * re-ask every launch. Deliberately NOT stored in Wacki.sav — that
- * file's WackiSettings struct is byte-compatible with the original
- * 1998 game and we don't want to break that. wacki.cfg is purely a
- * port-side convenience.
+ * Dodane klucze:
+ *   aspect_mode=stretch|4:3   — tryb proporcji ekranu
+ *   touch_mode=absolute|relative|off — tryb ekranu dotykowego
  *
- * Keys:
- *   fullscreen=0|1   — start full-screen
- *   scale=N          — window zoom factor when not full-screen (1..8)
- *
- * Precedence is handled by call order in main.c: ConfigLoad runs
- * FIRST (baseline from saved prefs), then the CLI parser and env
- * overrides layer on top, so an explicit --scale / --fullscreen /
- * WACKI_* always wins over the stored preference.
- *
- * g_config_first_run is set when no wacki.cfg exists — PlatformInit
- * uses it to decide whether to show the one-time display-mode
- * picker. */
+ * g_aspect_mode i g_touch_mode są zdefiniowane tutaj (nie w video_sdl.c /
+ * platform_sdl.c) aby były dostępne dla WSZYSTKICH targetów przez linkowanie
+ * config.c — zapobiega undefined reference na PS2 i innych platformach. */
 
 #include "wacki.h"
 #include "wacki/log.h"
-
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#define WACKI_CFG_PATH      "wacki.cfg"
-#define CFG_SCALE_MAX       8
+#define WACKI_CFG_PATH "wacki.cfg"
+#define CFG_SCALE_MAX  8
 
+extern int  g_scale_factor;
+extern int  g_fullscreen;
+
+/* Zdefiniowane tutaj — dostępne dla wszystkich targetów. */
+char g_aspect_mode[16] = "stretch";
+char g_touch_mode[16]  = "absolute";
 
 int g_config_first_run = 0;
+
+void ConfigSave(void);
+
+static void normalize_aspect(const char *raw)
+{
+    if (!raw) return;
+    if (strncmp(raw,"4:3",3)==0 || strncmp(raw,"4x3",3)==0 || strncmp(raw,"43",2)==0)
+        strncpy(g_aspect_mode, "4:3", 15);
+    else if (strncmp(raw,"stretch",7)==0)
+        strncpy(g_aspect_mode, "stretch", 15);
+    g_aspect_mode[15] = '\0';
+}
+
+static void normalize_touch(const char *raw)
+{
+    if (!raw) return;
+    if      (strncmp(raw,"absolute",8)==0) strncpy(g_touch_mode,"absolute",15);
+    else if (strncmp(raw,"relative",8)==0) strncpy(g_touch_mode,"relative",15);
+    else if (strncmp(raw,"off",3)==0)      strncpy(g_touch_mode,"off",15);
+    g_touch_mode[15] = '\0';
+}
 
 void ConfigLoad(void)
 {
     FILE *fp = fopen(WACKI_CFG_PATH, "r");
     if (!fp) {
-        /* No config yet → first launch. PlatformInit shows the
-         * display-mode picker (unless a CLI/env flag pre-empts it). */
         g_config_first_run = 1;
+        ConfigSave();
         return;
     }
-    char line[128];
+    char line[128], sv[16];
+    int v;
     while (fgets(line, sizeof line, fp)) {
-        int v;
-        if (sscanf(line, "fullscreen=%d", &v) == 1) {
-            g_fullscreen = v ? 1 : 0;
-        } else if (sscanf(line, "scale=%d", &v) == 1) {
-            if (v >= 1 && v <= CFG_SCALE_MAX) g_scale_factor = v;
-        }
+        if      (sscanf(line,"fullscreen=%d",&v)==1) g_fullscreen = v?1:0;
+        else if (sscanf(line,"scale=%d",&v)==1 && v>=1 && v<=CFG_SCALE_MAX)
+            g_scale_factor = v;
+        else if (sscanf(line,"aspect_mode=%15s",sv)==1) normalize_aspect(sv);
+        else if (sscanf(line,"touch_mode=%15s",sv)==1)  normalize_touch(sv);
     }
     fclose(fp);
-    LOG_INFO("config", "loaded wacki.cfg: fullscreen=%d scale=%d",
-             g_fullscreen, g_scale_factor);
+    LOG_INFO("config","loaded: fullscreen=%d scale=%d aspect=%s touch=%s",
+             g_fullscreen,g_scale_factor,g_aspect_mode,g_touch_mode);
 }
 
 void ConfigSave(void)
 {
     FILE *fp = fopen(WACKI_CFG_PATH, "w");
-    if (!fp) {
-        LOG_INFO("config", "cannot write %s (display prefs not saved)",
-                 WACKI_CFG_PATH);
-        return;
-    }
-    fprintf(fp, "# Wacki display preferences (port-side, not the save file).\n");
-    fprintf(fp, "# Skasuj ten plik, by ponownie wybrać tryb przy starcie.\n");
-    fprintf(fp, "fullscreen=%d\n", g_fullscreen ? 1 : 0);
-    fprintf(fp, "scale=%d\n", g_scale_factor > 0 ? g_scale_factor : 1);
+    if (!fp) { LOG_INFO("config","cannot write %s",WACKI_CFG_PATH); return; }
+    fprintf(fp,"# Wacki display/input preferences\n");
+    fprintf(fp,"fullscreen=%d\n", g_fullscreen?1:0);
+    fprintf(fp,"scale=%d\n",      g_scale_factor>0?g_scale_factor:1);
+    fprintf(fp,"# aspect_mode: stretch (pelny ekran) | 4:3 (czarne pasy)\n");
+    fprintf(fp,"aspect_mode=%s\n", g_aspect_mode[0]?g_aspect_mode:"stretch");
+    fprintf(fp,"# touch_mode: absolute | relative | off\n");
+    fprintf(fp,"touch_mode=%s\n",  g_touch_mode[0]?g_touch_mode:"absolute");
     fclose(fp);
-    LOG_INFO("config", "saved wacki.cfg: fullscreen=%d scale=%d",
-             g_fullscreen, g_scale_factor ? g_scale_factor : 1);
+    LOG_INFO("config","saved: fullscreen=%d scale=%d aspect=%s touch=%s",
+             g_fullscreen,g_scale_factor?g_scale_factor:1,g_aspect_mode,g_touch_mode);
 }

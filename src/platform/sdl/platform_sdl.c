@@ -1,96 +1,57 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Mateusz Szuła
  *
- * src/platform/sdl/platform_sdl.c — portable platform layer (SDL2):
- * the Platform* entry points + the cross-platform input/event pump.
+ * src/platform/sdl/platform_sdl.c — portable platform layer (SDL2).
  *
- * Replaces the original DirectDraw / WndProc / WaitMessage stack. The
- * engine renders into a flat 8-bpp uint8_t shadow buffer; this layer
- * uploads that buffer to a streaming SDL_Texture via a palette LUT
- * and pumps SDL events into the engine's input + key-latch globals.
- *
- * Headless mode (--headless) keeps SDL_Init alive (dummy video +
- * audio drivers) so the event queue + mixer callback still run, but
- * skips window/renderer/texture creation so CI smoke tests work
- * without a display.
- *
- * Public API (declared in wacki.h):
- *   PlatformInit / PlatformShutdown
- *   PlatformPresent  — upload + present one frame
- *   PlatformPumpEvents — drain SDL events, update input globals
- *   PlatformShouldQuit — set by SDL_QUIT / WINDOWCLOSE / ESC
- *   PlatformSetTextInput / PlatformPollTypedChar / PushTypedChar
- *   PlatformShowMessageBox
- */
+ * Zmiany względem oryginału:
+ *   - g_touch_mode ("absolute"/"relative"/"off") — tryb ekranu dotykowego,
+ *     zdefiniowany w src/config.c, persystowany w wacki.cfg.
+ *   - Obsługa SDL_FINGER* dla ekranów dotykowych (Switch, przyszłe porty).
+ *   - platform_touch_cycle_mode() — wywołana z gamepad_switch.c (MINUS).
+ *   - #ifdef WACKI_SWITCH: skalowanie współrzędnych myszy w trybie stretch
+ *     (gdy logical-size scaling jest wyłączony). */
 
 #include "wacki.h"
 #include "wacki/log.h"
 #include "wacki/platform/video.h"
 #include "wacki/platform/input.h"
 #include "wacki/platform/system.h"
-#include "sdl_internal.h"            /* platform_pad_* (gamepad_sdl.c) */
+#include "sdl_internal.h"
 #ifdef __ANDROID__
-#include "wacki/platform/android_touch.h"   /* on-screen touch overlay owns touch */
+#include "wacki/platform/android_touch.h"
 #endif
 
 #include <SDL.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-/* ---- constants ---------------------------------------------------- */
+#define TYPED_QUEUE_SZ            32
+#define ASCII_BACKSPACE           0x08
+#define ASCII_ENTER               0x0D
+#define UTF8_MULTIBYTE_MARK       0x80
+#define VCUR_BASE_PIXELS_PER_TICK 1
+#define VCUR_MAX_PIXELS_PER_TICK  8
+#define VCUR_ACCEL_TICKS          10
 
-/* Typed-char ring buffer for inline-edit (save-slot rename). Populated
- * by SDL_TEXTINPUT (printable chars) + SDL_KEYDOWN (Backspace / Enter).
- * Drained by PlatformPollTypedChar — returns 0 when empty. */
-#define TYPED_QUEUE_SZ              32
+static int     s_w = 0, s_h = 0;
+static int     s_quit = 0;
+static uint8_t s_typed_q[TYPED_QUEUE_SZ];
+static int     s_typed_head = 0, s_typed_tail = 0;
 
-/* ASCII control codes the inline-edit handler expects. */
-#define ASCII_BACKSPACE             0x08
-#define ASCII_ENTER                 0x0D
+static int   s_vcur_x = 320, s_vcur_y = 240;
+static int   s_vcur_initialized = 0;
+static int   s_vcur_hold_ticks  = 0;
+static float s_vcur_rem_x = 0, s_vcur_rem_y = 0;
 
-/* UTF-8 lead/continuation bytes start at 0x80 — used to drop multi-
- * byte sequences from SDL_TEXTINPUT (the save-slot name field is
- * single-byte latin-1, accepts only space + '0'..'Z'). */
-#define UTF8_MULTIBYTE_MARK         0x80
+/* Defined in src/config.c */
+extern char g_touch_mode[16];
 
-/* Virtual cursor — d-pad / arrow-keys drive a fake mouse so the game
- * is playable on handhelds (Miyoo Mini Plus and friends, where the
- * d-pad arrives as SDLK_UP/DOWN/LEFT/RIGHT and the A/B face buttons
- * arrive as SDLK_SPACE/SDLK_LCTRL). Always-on additive: on a desktop
- * with a real mouse the keyboard path simply doesn't fire; on a
- * handheld it's the only input source. The acceleration curve
- * mirrors what OnionOS apps do — slow at first so single-pixel hit
- * targets stay reachable, then ramps up. */
-#define VCUR_BASE_PIXELS_PER_TICK   1
-#define VCUR_MAX_PIXELS_PER_TICK    8
-#define VCUR_ACCEL_TICKS            10    /* ticks to reach max speed */
-
-/* ---- module state ------------------------------------------------- */
-
-/* The SDL window / renderer / texture live in the video HAL backend
- * (src/platform/sdl/video_sdl.c); this layer keeps only the framebuffer
- * dimensions (for the virtual-cursor clamp) and the quit latch. */
-static int           s_w = 0, s_h = 0;
-static int           s_quit = 0;
-
-static uint8_t       s_typed_q[TYPED_QUEUE_SZ];
-static int           s_typed_head = 0, s_typed_tail = 0;
-
-/* Virtual cursor state — see VCUR_* constants above. */
-static int           s_vcur_x = 320, s_vcur_y = 240;
-static int           s_vcur_initialized = 0;
-static int           s_vcur_hold_ticks = 0;     /* d-pad-held duration */
-static float         s_vcur_rem_x = 0, s_vcur_rem_y = 0;  /* analog sub-px */
-
-
-/* ---- typed-char ring buffer -------------------------------------- */
+/* ---- typed-char ring -------------------------------------------------- */
 
 void PlatformPushTypedChar(uint8_t c)
 {
     int next = (s_typed_head + 1) % TYPED_QUEUE_SZ;
-    if (next == s_typed_tail) return;     /* queue full → drop */
+    if (next == s_typed_tail) return;
     s_typed_q[s_typed_head] = c;
     s_typed_head = next;
 }
@@ -106,69 +67,38 @@ uint8_t PlatformPollTypedChar(void)
 void PlatformSetTextInput(int on)
 {
     if (g_headless) return;
-    if (on) SDL_StartTextInput();
-    else    SDL_StopTextInput();
-    /* Drop any stale chars queued before/after the toggle. */
+    if (on) SDL_StartTextInput(); else SDL_StopTextInput();
     s_typed_head = s_typed_tail = 0;
 }
 
-/* ---- init / shutdown --------------------------------------------- */
+/* ---- init / shutdown -------------------------------------------------- */
 
 int PlatformInit(int w, int h, const char *title)
 {
-    /* App identity for SDL subsystems that surface a name — audio
-     * device label, screensaver-inhibit reason, and (when running as a
-     * bare binary outside the .app) the macOS menu-bar title. Inside
-     * the bundle the menu name comes from CFBundleName; this is the
-     * fallback so a terminal-launched build still says "Wacki" rather
-     * than the lowercase process name. Must precede SDL_Init. */
-#ifdef SDL_HINT_APP_NAME   /* added in SDL 2.0.18; handheld bases ship older */
+#ifdef SDL_HINT_APP_NAME
     SDL_SetHint(SDL_HINT_APP_NAME, "Wacki");
 #endif
-
 #ifdef __ANDROID__
-    /* The overlay owns ALL touch (android_touch.c maps it to the canvas — on the
-     * SDL Android surface the touch normalizes to the game window, so SDL's own
-     * window-letterbox synth drifts). Turn synth off so touches don't also
-     * generate a (mis-mapped) mouse event. Must precede SDL_Init. */
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#else
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS,
+                g_touch_mode[0] == 'a' ? "1" : "0");
 #endif
 
-    /* The SDL subsystems each platform needs come from the video HAL:
-     * VIDEO|EVENTS|AUDIO on the SDL backend; EVENTS|TIMER on PS2, where gsKit
-     * owns the GS and audsrv the sound (SDL2-PS2's video/audio backends fight
-     * the IOP), so SDL is used only for input + timing. */
     if (SDL_Init(plat_video_sdl_init_flags()) != 0) {
         LOG_INFO("log", "SDL_Init: %s", SDL_GetError());
         return 0;
     }
-    s_w = w;
-    s_h = h;
+    s_w = w; s_h = h;
 
-    /* Re-apply the firmware/OS volume (mmiyoo resets it on audio init); a
-     * no-op on platforms that don't need it. */
     plat_restore_system_volume();
-
-    /* Adopt a game controller if one's present (handhelds + DualShock; on a
-     * mouse-only desktop with no pad this finds nothing and no-ops). */
-    if (!g_headless)
-        platform_pad_open();
+    if (!g_headless) platform_pad_open();
 
     if (g_headless) {
-        /* T45: no window/renderer/texture. SDL stays initialised (dummy
-         * video + audio drivers) so PumpEvents still drives the event
-         * queue and the mixer callback still fires — CI smoke tests
-         * exercise PlayDialogLine + TickMenuMusic etc. */
-        const char *drv = SDL_GetCurrentVideoDriver();
-        LOG_INFO("platform", "SDL ready (headless): %dx%d, video=%s", w, h, drv ? drv : "?");
+        LOG_INFO("platform", "SDL ready (headless): %dx%d", w, h);
         return 1;
     }
-
-    /* Bring up the display through the video HAL — SDL window + renderer +
-     * streaming texture on desktop/handheld (src/platform/sdl/video_sdl.c),
-     * gsKit on PS2 (src/platform/ps2/video_ps2.c). */
-    if (!plat_video_init(w, h, title)) return 0;
-    return 1;
+    return plat_video_init(w, h, title);
 }
 
 void PlatformShutdown(void)
@@ -177,116 +107,55 @@ void PlatformShutdown(void)
     SDL_Quit();
 }
 
-/* ---- presentation ------------------------------------------------ */
-
-/* Present one (8-bpp shadow, palette[256×3]) frame through the video HAL.
- * Caller passes the shadow buffer + the live palette explicitly so this
- * module doesn't reach into graphics.c. */
-void PlatformPresent(const uint8_t *shadow,
-                     const uint8_t *palette_rgb, int w, int h)
+void PlatformPresent(const uint8_t *shadow, const uint8_t *pal, int w, int h)
 {
     if (g_headless) return;
-    plat_video_present(shadow, palette_rgb, w, h);
+    plat_video_present(shadow, pal, w, h);
 }
 
-/* ---- event pump -------------------------------------------------- */
+/* ---- event handlers --------------------------------------------------- */
 
-/* Per-event-type handlers — each takes the SDL_Event and returns
- * nothing. PlatformPumpEvents dispatches on ev.type. */
-
-static int input_debug_enabled(void);
+static int input_debug_enabled(void)
+{
+    static int f = -1;
+    if (f < 0) { const char *e = SDL_getenv("WACKI_INPUT_DEBUG"); f = (e && *e && *e != '0'); }
+    return f;
+}
 
 #ifdef __APPLE__
-/* C bridges for the macOS "Gra" menu (src/platform/macos/macos.m). Each maps
- * a menu item to the exact in-engine action its keyboard shortcut
- * triggers: the quicksave / quickload / pause "request" latches the
- * game loop consumes once per frame, a direct screenshot dump, and the
- * shared fullscreen toggle. Cocoa menu actions fire on the main thread
- * during SDL event pumping — the same thread the game loop reads these
- * on — so they're plain writes/calls with no locking. */
 void PlatformMenuQuickSave(void)  { g_quicksave_request  = 1; }
 void PlatformMenuQuickLoad(void)  { g_quickload_request  = 1; }
 void PlatformMenuPause(void)      { g_pause_menu_request = 1; }
 void PlatformMenuToggleFull(void) { plat_video_toggle_fullscreen(); }
-void PlatformMenuScreenshot(void)
-{
-    extern void ScreenshotToBmpAutoIncrement(void);
-    ScreenshotToBmpAutoIncrement();
-}
+void PlatformMenuScreenshot(void) { extern void ScreenshotToBmpAutoIncrement(void); ScreenshotToBmpAutoIncrement(); }
 #endif
 
 static void handle_keydown(const SDL_Event *ev)
 {
     SDL_Keycode sym = ev->key.keysym.sym;
-    /* Latch only real character keys in the low byte. SDL's non-character
-     * keys (arrows, F-keys, keypad, …) carry SDLK_SCANCODE_MASK (1<<30);
-     * masking them to 8 bits ALIASES letters — SDLK_LEFT (0x40000050) →
-     * 0x50 = 'P' and SDLK_F9 (0x40000042) → 0x42 = 'B', which the debug-
-     * screenshot handler (frame_tick.c) reads as its PCX/BMP keys. On a
-     * handheld the d-pad arrives as arrow keysyms, so holding d-pad LEFT
-     * latched 'P' and spammed a screenshot every 500 ms. Store 0 for
-     * non-character keys so they can't impersonate a printable key. */
     g_key_state = (sym & SDLK_SCANCODE_MASK) ? 0 : (uint16_t)(sym & 0xFF);
-
     if (sym == SDLK_ESCAPE) s_quit = 1;
-
-    /* T53 — quicksave / quickload latches consumed by the play_demo_
-     * scene main loop once per frame. */
     if (sym == SDLK_F5)  g_quicksave_request  = 1;
     if (sym == SDLK_F9)  g_quickload_request  = 1;
-    /* T56 — F3 stats dump (logs to stderr). */
     if (sym == SDLK_F3)  g_stats_dump_request = 1;
-    /* T24 — F12 opens the Pytanie quit-confirmation menu. The Android Back
-     * button arrives here as SDLK_AC_BACK (delivered as a key rather than
-     * finishing the activity because the Android system HAL sets
-     * SDL_HINT_ANDROID_TRAP_BACK_BUTTON); map it to the same pause menu.
-     * AC_BACK never fires on desktop/handheld, so no platform guard. */
     if (sym == SDLK_F12 || sym == SDLK_AC_BACK) g_pause_menu_request = 1;
-
-    /* F11 toggles fullscreen at runtime — common convention across desktop
-     * apps. plat_video_toggle_fullscreen is a no-op on handheld/PS2 (no
-     * windowed mode), so this needs no platform guard. */
     if (sym == SDLK_F11) plat_video_toggle_fullscreen();
-
-    /* Tab switches the active actor (Ebek ↔ Fjej) — the same action as RMB and
-     * the two-finger tap. A keyboard alternative for desktop and especially
-     * Android emulators (BlueStacks et al.), where a hardware right-click isn't
-     * forwarded to the app and a two-finger tap is awkward. Never reached on a
-     * phone (no keyboard); handheld button→keysym maps use arrows/SPACE/LCTRL,
-     * not Tab, so there's no accidental toggle. */
+#ifndef WACKI_PS2
+    /* F10/F8 — aspect mode i touch mode: zdefiniowane w video_sdl.c /
+     * platform_sdl.c. PS2 uzywa video_ps2.c zamiast video_sdl.c i nie
+     * ma klawiatury, wiec te wywolania sa tam zbedne i spowodowaly by
+     * undefined reference przy linkowaniu. */
+    if (sym == SDLK_F10) platform_video_toggle_aspect_mode();
+    if (sym == SDLK_F8)  platform_touch_cycle_mode();
+#endif
     if (sym == SDLK_TAB) g_rmb_clicked = 1;
-
-    /* Inline-edit (save-slot rename): queue Backspace / Enter as
-     * typed-char events so the edit loop sees them alongside the
-     * SDL_TEXTINPUT printable chars. */
-    if (sym == SDLK_BACKSPACE)
-        PlatformPushTypedChar(ASCII_BACKSPACE);
-    if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER)
-        PlatformPushTypedChar(ASCII_ENTER);
-
-    /* Platform hardware buttons that arrive as SDL keysyms (the Miyoo's mmiyoo
-     * backend maps its buttons that way; pad-based handhelds use real
-     * SDL_GameController events in the pump loop instead, so this is a no-op
-     * there). Returns 1 iff a face-button click/menu latch fired. */
-    int handled = plat_handle_platform_key((int)sym);
-
-    if (input_debug_enabled()) {
-        SDL_Keymod mod = SDL_GetModState();
-        LOG_INFO("input",
-                 "KEYDOWN sym=0x%X scancode=0x%X mod=0x%X name='%s' repeat=%d → %s",
-                 (unsigned)sym, (unsigned)ev->key.keysym.scancode,
-                 (unsigned)mod, SDL_GetKeyName(sym),
-                 ev->key.repeat,
-                 handled ? "fired mouse-click latch" : "no click latch");
-    }
+    if (sym == SDLK_BACKSPACE) PlatformPushTypedChar(ASCII_BACKSPACE);
+    if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER) PlatformPushTypedChar(ASCII_ENTER);
+    plat_handle_platform_key((int)sym);
 }
 
 static void handle_textinput(const SDL_Event *ev)
 {
-    /* Push the printable bytes (latin-1 single-byte only — the
-     * original engine's slot-name field is 30 bytes single-byte and
-     * only accepts space + '0'..'Z'). Drop UTF-8 multi-byte
-     * sequences entirely. */
     for (const char *p = ev->text.text; *p; ++p) {
         uint8_t c = (uint8_t)*p;
         if (c >= UTF8_MULTIBYTE_MARK) continue;
@@ -297,242 +166,167 @@ static void handle_textinput(const SDL_Event *ev)
 static void handle_mouse_motion(const SDL_Event *ev)
 {
 #ifdef __ANDROID__
-    /* Ignore the synthesized mouse from a touch that's on an on-screen control
-     * (it would drag the cursor to the bar edge); the overlay drives the cursor
-     * itself there. Real game-area touches fall through. */
     if (ev->motion.which == SDL_TOUCH_MOUSEID && wacki_overlay_owns_touch()) return;
-#endif
     g_mouse_x = (int16_t)ev->motion.x;
     g_mouse_y = (int16_t)ev->motion.y;
-}
-
-/* Env-gated diagnostic — WACKI_INPUT_DEBUG=1 dumps every keydown and
- * mouse-button event so handheld port bugs ("button A fires both LMB
- * and RMB") can be traced. Lazy-init the flag so we don't strcmp on
- * every event. */
-static int input_debug_enabled(void)
-{
-    static int s_flag = -1;
-    if (s_flag < 0) {
-        const char *e = SDL_getenv("WACKI_INPUT_DEBUG");
-        s_flag = (e && *e && *e != '0') ? 1 : 0;
+#elif defined(WACKI_SWITCH)
+    /* In stretch mode SDL logical scaling is disabled, so mouse/touch
+     * coordinates are in raw window pixels and need manual scaling. */
+    int stretch = 0, win_w = s_w, win_h = s_h, fb_w = s_w, fb_h = s_h;
+    platform_video_get_present_state(&stretch, &win_w, &win_h, &fb_w, &fb_h);
+    if (stretch && win_w > 0 && win_h > 0) {
+        g_mouse_x = (int16_t)(ev->motion.x * fb_w / win_w);
+        g_mouse_y = (int16_t)(ev->motion.y * fb_h / win_h);
+    } else {
+        g_mouse_x = (int16_t)ev->motion.x;
+        g_mouse_y = (int16_t)ev->motion.y;
     }
-    return s_flag;
+#else
+    g_mouse_x = (int16_t)ev->motion.x;
+    g_mouse_y = (int16_t)ev->motion.y;
+#endif
 }
 
-/* ---- touchscreen gestures (Android / any SDL touch device) ------ *
- *
- * Single-finger touch needs no code here: SDL's built-in touch→mouse
- * synthesis (SDL_HINT_TOUCH_MOUSE_EVENTS, on by default) turns a tap into a
- * left click at the touched point — already corrected for the renderer's
- * letterbox by SDL_RenderSetLogicalSize — so walking, the HUD panel,
- * inventory and menus all work through the normal mouse path.
- *
- * What synthesis can't express is the game's one non-LMB action: RMB =
- * toggle the active actor (Ebek ↔ Fjej). We map it to a TWO-FINGER tap,
- * detected from the raw SDL_FINGER* stream. The left click the first finger's
- * synthesis latched is cancelled the moment a second finger lands, so the
- * toggle doesn't also fire a stray walk-to. Inert on every non-touch target
- * (no SDL_FINGER* events are ever generated). On Android the on-screen overlay
- * (android_touch.h) owns all touch, so this desktop-touchscreen path is
- * compiled out there. */
+static void handle_mouse_button_down(const SDL_Event *ev)
+{
+#ifdef __ANDROID__
+    if (ev->button.which == SDL_TOUCH_MOUSEID && wacki_overlay_owns_touch()) return;
+#endif
+    if (ev->button.button == SDL_BUTTON_LEFT)  g_lmb_clicked = 1;
+    if (ev->button.button == SDL_BUTTON_RIGHT) g_rmb_clicked = 1;
+}
+
+/* ---- touch (absolute: two-finger tap = RMB; relative: touchpad) ------- */
 #ifndef __ANDROID__
-static int s_touch_fingers = 0;   /* fingers currently down */
-static int s_touch_peak    = 0;   /* peak simultaneous fingers this gesture */
+static int          s_touch_fingers = 0, s_touch_peak = 0;
+static int          s_touch_rel_active = 0;
+static SDL_FingerID s_touch_rel_id = 0;
+static float        s_touch_rel_last_x = 0, s_touch_rel_last_y = 0;
 
 static void handle_finger_down(void)
 {
-    if (s_touch_fingers == 0) s_touch_peak = 0;     /* new gesture */
-    ++s_touch_fingers;
-    if (s_touch_fingers > s_touch_peak) s_touch_peak = s_touch_fingers;
-    /* A second finger means this is a multi-touch gesture, not a tap: cancel
-     * the left click the first finger's touch-synthesis just latched. */
+    if (s_touch_fingers == 0) s_touch_peak = 0;
+    if (++s_touch_fingers > s_touch_peak) s_touch_peak = s_touch_fingers;
     if (s_touch_fingers == 2) g_lmb_clicked = 0;
 }
 
 static void handle_finger_up(void)
 {
     if (s_touch_fingers > 0) --s_touch_fingers;
-    if (s_touch_fingers != 0) return;               /* wait for all to lift */
-    if (s_touch_peak >= 2) {
-        g_rmb_clicked = 1;                           /* two-finger tap → toggle */
-        g_lmb_clicked = 0;                           /* belt-and-suspenders */
-    }
+    if (s_touch_fingers != 0) return;
+    if (s_touch_peak >= 2) { g_rmb_clicked = 1; g_lmb_clicked = 0; }
     s_touch_peak = 0;
+}
+
+static void handle_finger_relative(const SDL_Event *ev)
+{
+    float nx = ev->tfinger.x, ny = ev->tfinger.y;
+    SDL_FingerID fid = ev->tfinger.fingerId;
+    if (ev->type == SDL_FINGERDOWN || !s_touch_rel_active || fid != s_touch_rel_id) {
+        s_touch_rel_active  = (ev->type != SDL_FINGERUP);
+        s_touch_rel_id      = fid;
+        s_touch_rel_last_x  = nx;
+        s_touch_rel_last_y  = ny;
+        return;
+    }
+    if (ev->type == SDL_FINGERUP) { s_touch_rel_active = 0; return; }
+    float dxn = nx - s_touch_rel_last_x, dyn = ny - s_touch_rel_last_y;
+    s_touch_rel_last_x = nx; s_touch_rel_last_y = ny;
+    s_vcur_rem_x += dxn * s_w; s_vcur_rem_y += dyn * s_h;
+    int mvx = (int)s_vcur_rem_x; s_vcur_rem_x -= mvx; s_vcur_x += mvx;
+    int mvy = (int)s_vcur_rem_y; s_vcur_rem_y -= mvy; s_vcur_y += mvy;
+    if (s_vcur_x < 0) s_vcur_x = 0; if (s_vcur_x >= s_w) s_vcur_x = s_w - 1;
+    if (s_vcur_y < 0) s_vcur_y = 0; if (s_vcur_y >= s_h) s_vcur_y = s_h - 1;
+    s_vcur_initialized = 1;
+    g_mouse_x = (int16_t)s_vcur_x; g_mouse_y = (int16_t)s_vcur_y;
 }
 #endif /* !__ANDROID__ */
 
-static void handle_mouse_button_down(const SDL_Event *ev)
-{
-#ifdef __ANDROID__
-    /* Suppress the synth click from a touch on an on-screen control — the
-     * overlay raises the latch itself (and at the cursor's current position,
-     * not the bar edge). */
-    if (ev->button.which == SDL_TOUCH_MOUSEID && wacki_overlay_owns_touch()) return;
-#endif
-    if (input_debug_enabled()) {
-        LOG_INFO("input",
-                 "MOUSEDOWN button=%u state=0x%X clicks=%u x=%d y=%d which=%u",
-                 (unsigned)ev->button.button, (unsigned)ev->button.state,
-                 (unsigned)ev->button.clicks, ev->button.x, ev->button.y,
-                 (unsigned)ev->button.which);
-    }
-    if (ev->button.button == SDL_BUTTON_LEFT)  g_lmb_clicked = 1;
-    if (ev->button.button == SDL_BUTTON_RIGHT) g_rmb_clicked = 1;
-}
+/* ---- virtual cursor (d-pad / analog stick) ---------------------------- */
 
-/* ---- virtual cursor (handheld d-pad → mouse) -------------------- *
- *
- * Polled once per PlatformPumpEvents pass. Reads SDL's current keyboard
- * snapshot (not events — we need REPEAT-style "is the key held right
- * now" semantics so the cursor glides while the d-pad stays pressed).
- * Each tick adds dx/dy to g_mouse_x/y; speed ramps from 1 px/tick to
- * 8 px/tick over ~10 ticks of continuous hold, then plateaus. Release
- * resets the ramp so the next tap is precise again. */
 static void poll_virtual_cursor(void)
 {
-
     if (!s_vcur_initialized) {
-        /* Seed from real-mouse position so we don't snap on first
-         * d-pad press if the user had moved the real cursor. */
         s_vcur_x = g_mouse_x ? g_mouse_x : s_w / 2;
         s_vcur_y = g_mouse_y ? g_mouse_y : s_h / 2;
         s_vcur_initialized = 1;
-        /* Publish the seed immediately. On handhelds there's no real
-         * mouse-motion event to set g_mouse_x/y, so without this the
-         * drawn cursor sits at (0,0) until the first d-pad press — which
-         * then looks like it teleports to centre. The no-input path below
-         * returns early and never writes g_mouse_x/y, so seed them here. */
         g_mouse_x = (int16_t)s_vcur_x;
         g_mouse_y = (int16_t)s_vcur_y;
     }
-
     const uint8_t *ks = SDL_GetKeyboardState(NULL);
     int dx = (int)ks[SDL_SCANCODE_RIGHT] - (int)ks[SDL_SCANCODE_LEFT];
     int dy = (int)ks[SDL_SCANCODE_DOWN]  - (int)ks[SDL_SCANCODE_UP];
-
-    /* Analog-stick contribution (px/tick), 0 unless a pad pushes past
-     * the deadzone. The d-pad folds into the discrete dx/dy. Filled by
-     * src/gamepad_sdl.c on Anbernic; a no-op extern elsewhere. */
-    float ax = 0.0f, ay = 0.0f;
-    /* Fold the game controller (+ PS2 USB mouse) into the cursor; no-op when
-     * no pad is open. */
+    float ax = 0, ay = 0;
     platform_pad_read_motion(&dx, &dy, &ax, &ay);
-
-    if (dx == 0 && dy == 0 && ax == 0.0f && ay == 0.0f) {
-        s_vcur_hold_ticks = 0;
-        s_vcur_rem_x = s_vcur_rem_y = 0.0f;
-        return;
+    if (dx == 0 && dy == 0 && ax == 0 && ay == 0) {
+        s_vcur_hold_ticks = 0; s_vcur_rem_x = s_vcur_rem_y = 0; return;
     }
-
-    /* Discrete d-pad / arrow keys: ±1 per axis with the accel ramp. */
     if (dx != 0 || dy != 0) {
-        if (dx >  1) dx =  1;
-        if (dx < -1) dx = -1;
-        if (dy >  1) dy =  1;
-        if (dy < -1) dy = -1;
-        int speed = VCUR_BASE_PIXELS_PER_TICK +
+        if (dx >  1) dx =  1; if (dx < -1) dx = -1;
+        if (dy >  1) dy =  1; if (dy < -1) dy = -1;
+        int spd = VCUR_BASE_PIXELS_PER_TICK +
             (s_vcur_hold_ticks * (VCUR_MAX_PIXELS_PER_TICK - VCUR_BASE_PIXELS_PER_TICK))
             / VCUR_ACCEL_TICKS;
-        if (speed > VCUR_MAX_PIXELS_PER_TICK) speed = VCUR_MAX_PIXELS_PER_TICK;
-        s_vcur_x += dx * speed;
-        s_vcur_y += dy * speed;
+        if (spd > VCUR_MAX_PIXELS_PER_TICK) spd = VCUR_MAX_PIXELS_PER_TICK;
+        s_vcur_x += dx * spd; s_vcur_y += dy * spd;
         ++s_vcur_hold_ticks;
-    } else {
-        s_vcur_hold_ticks = 0;
-    }
-
-    /* Analog stick: proportional, carrying the sub-pixel remainder so a
-     * gentle push still creeps the cursor for fine aiming. */
-    s_vcur_rem_x += ax;
-    s_vcur_rem_y += ay;
-    int mvx = (int)s_vcur_rem_x; s_vcur_rem_x -= (float)mvx; s_vcur_x += mvx;
-    int mvy = (int)s_vcur_rem_y; s_vcur_rem_y -= (float)mvy; s_vcur_y += mvy;
-
-    if (s_vcur_x < 0)        s_vcur_x = 0;
-    if (s_vcur_y < 0)        s_vcur_y = 0;
-    if (s_vcur_x >= s_w)     s_vcur_x = s_w - 1;
-    if (s_vcur_y >= s_h)     s_vcur_y = s_h - 1;
-
-    g_mouse_x = (int16_t)s_vcur_x;
-    g_mouse_y = (int16_t)s_vcur_y;
+    } else { s_vcur_hold_ticks = 0; }
+    s_vcur_rem_x += ax; s_vcur_rem_y += ay;
+    int mvx = (int)s_vcur_rem_x; s_vcur_rem_x -= mvx; s_vcur_x += mvx;
+    int mvy = (int)s_vcur_rem_y; s_vcur_rem_y -= mvy; s_vcur_y += mvy;
+    if (s_vcur_x < 0) s_vcur_x = 0; if (s_vcur_x >= s_w) s_vcur_x = s_w - 1;
+    if (s_vcur_y < 0) s_vcur_y = 0; if (s_vcur_y >= s_h) s_vcur_y = s_h - 1;
+    g_mouse_x = (int16_t)s_vcur_x; g_mouse_y = (int16_t)s_vcur_y;
     ++s_vcur_hold_ticks;
 }
 
+/* ---- event pump ------------------------------------------------------- */
+
 void PlatformPumpEvents(void)
 {
-    /* T31 v2 — re-assert cursor hide every pump. On macOS Cocoa,
-     * SDL_ShowCursor(SDL_DISABLE) called only at init is unreliable —
-     * the OS restores the arrow on focus-loss / mouse-leave / re-
-     * enter / sometimes after SDL_RenderPresent triggers a re-layout.
-     * Re-asserting here is cheap and 100% reliable across Cocoa /
-     * X11 / Win32. */
     if (!g_headless) SDL_ShowCursor(SDL_DISABLE);
-
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
-        case SDL_QUIT:
-            s_quit = 1;
-            break;
+        case SDL_QUIT: s_quit = 1; break;
         case SDL_WINDOWEVENT:
-            /* T140 — some window managers (X11 / Wayland) dispatch
-             * WINDOWEVENT_CLOSE instead of SDL_QUIT when the user
-             * clicks [×]. Treat both as a quit request so the main
-             * loop unwinds + flushes saves. */
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) s_quit = 1;
-            /* Player dragged the window edge to rescale — remember the nearest
-             * integer zoom so the next launch reopens at this size. The live
-             * rescale itself is free (RenderSetLogicalSize letterboxes the
-             * 640×480 canvas at any window size); we only persist the bucket.
-             * Skipped while fullscreen (the resize there reports the whole
-             * display). Inert on handhelds — a WM-less fullscreen panel never
-             * dispatches WINDOWEVENT_RESIZED. */
             else if (ev.window.event == SDL_WINDOWEVENT_RESIZED &&
-                     !g_fullscreen && s_w > 0)
-            {
-                int scale = (ev.window.data1 + s_w / 2) / s_w; /* round */
-                if (scale < 1) scale = 1;
-                if (scale > 8) scale = 8;
-                if (scale != g_scale_factor) {
-                    g_scale_factor = scale;
-                    extern void ConfigSave(void);
-                    ConfigSave();
+                     !g_fullscreen && s_w > 0) {
+                int sc = (ev.window.data1 + s_w / 2) / s_w;
+                if (sc < 1) sc = 1; if (sc > 8) sc = 8;
+                if (sc != g_scale_factor) {
+                    g_scale_factor = sc;
+                    extern void ConfigSave(void); ConfigSave();
                 }
             }
             break;
-        case SDL_KEYDOWN:
-            handle_keydown(&ev);
-            break;
-        case SDL_KEYUP:
-            g_key_state &= 0xFF00;
-            break;
-        case SDL_TEXTINPUT:
-            handle_textinput(&ev);
-            break;
-        case SDL_MOUSEMOTION:
-            handle_mouse_motion(&ev);
-            break;
-        case SDL_MOUSEBUTTONDOWN:
-            handle_mouse_button_down(&ev);
-            break;
+        case SDL_KEYDOWN:   handle_keydown(&ev);        break;
+        case SDL_KEYUP:     g_key_state &= 0xFF00;     break;
+        case SDL_TEXTINPUT: handle_textinput(&ev);      break;
+        case SDL_MOUSEMOTION:      handle_mouse_motion(&ev);      break;
+        case SDL_MOUSEBUTTONDOWN:  handle_mouse_button_down(&ev); break;
         case SDL_FINGERDOWN:
 #ifdef __ANDROID__
             wacki_overlay_finger_down(ev.tfinger.fingerId, ev.tfinger.x, ev.tfinger.y);
 #else
-            handle_finger_down();
+            if (g_touch_mode[0] == 'a') handle_finger_down();
+            else if (g_touch_mode[0] == 'r') handle_finger_relative(&ev);
 #endif
             break;
         case SDL_FINGERMOTION:
 #ifdef __ANDROID__
             wacki_overlay_finger_motion(ev.tfinger.fingerId, ev.tfinger.x, ev.tfinger.y);
+#else
+            if (g_touch_mode[0] == 'r') handle_finger_relative(&ev);
 #endif
             break;
         case SDL_FINGERUP:
 #ifdef __ANDROID__
             wacki_overlay_finger_up(ev.tfinger.fingerId, ev.tfinger.x, ev.tfinger.y);
 #else
-            handle_finger_up();
+            if (g_touch_mode[0] == 'a') handle_finger_up();
+            else if (g_touch_mode[0] == 'r') handle_finger_relative(&ev);
 #endif
             break;
         case SDL_CONTROLLERBUTTONDOWN:
@@ -542,34 +336,37 @@ void PlatformPumpEvents(void)
             break;
         }
     }
-
-    /* Drive the virtual cursor AFTER draining events so a real
-     * mouse-motion this frame doesn't get clobbered by the d-pad
-     * snapshot. If the d-pad isn't held, this is a cheap no-op. */
     if (!g_headless) poll_virtual_cursor();
-
 #ifdef __ANDROID__
-    /* Integrate the on-screen virtual stick into the cursor (no-op unless a
-     * finger is on it). After poll_virtual_cursor so the stick wins on Android. */
     if (!g_headless) wacki_overlay_tick();
 #endif
 }
 
 int PlatformShouldQuit(void) { return s_quit; }
 
-/* plat_input_has_keyboard() is provided by the per-target hooks file
- * (hooks_desktop.c = 1; the handhelds + PS2 = 0). */
+/* ---- touch mode cycle ------------------------------------------------- */
 
-/* ---- message box ------------------------------------------------- */
+void platform_touch_cycle_mode(void)
+{
+    if (strncmp(g_touch_mode, "absolute", 8) == 0)
+        strncpy(g_touch_mode, "relative", 15);
+    else if (strncmp(g_touch_mode, "relative", 8) == 0)
+        strncpy(g_touch_mode, "off", 15);
+    else
+        strncpy(g_touch_mode, "absolute", 15);
+    g_touch_mode[15] = '\0';
+#ifndef __ANDROID__
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS,
+                g_touch_mode[0] == 'a' ? "1" : "0");
+#endif
+    LOG_INFO("platform", "touch_mode=%s", g_touch_mode);
+    extern void ConfigSave(void); ConfigSave();
+}
+
+/* ---- message box ------------------------------------------------------ */
 
 void PlatformShowMessageBox(const char *title, const char *body)
 {
-    if (g_headless) {
-        /* No GUI dialog in headless mode — log to stderr so CI runs
-         * still see fatal messages (CD-rom missing, archive missing
-         * etc.). */
-        LOG_TRACE("msgbox", "%s: %s", title ? title : "(null)", body  ? body  : "(null)");
-        return;
-    }
+    if (g_headless) { LOG_TRACE("msgbox", "%s: %s", title, body); return; }
     plat_video_message_box(title, body);
 }
