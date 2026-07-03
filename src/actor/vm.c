@@ -110,14 +110,19 @@ extern void        EnqueueClickEvent(uint16_t obj, uint16_t verb);
 /* Resolve a PE-binary virtual address to a usable pointer in the host
  * address space. Some scripts reference oscillation / lookup tables by
  * their original PE VA — the PE loader maps the original image and
- * xlat_binary_ptr translates the address. Fallback to a raw cast for
- * addresses outside the loaded PE range (handful of edge cases). */
+ * xlat_binary_ptr translates the address.
+ *
+ * An address OUTSIDE the loaded PE range returns NULL, NOT a raw cast of
+ * the 32-bit VA: on a 64-bit host that cast produces an unmapped low
+ * pointer that segfaults the moment it's dereferenced, defeating the
+ * `osc_table_x ?` NULL guards at every use site. NULL lets those guards
+ * fire so the oscillation simply no-ops for that actor. */
 static const int16_t *resolve_pe_table(uint32_t addr)
 {
     if (PeLoaderContainsVA(addr)) {
         return (const int16_t *)xlat_binary_ptr(addr);
     }
-    return (const int16_t *)(uintptr_t)addr;
+    return NULL;
 }
 
 /* Scan one bytecode block for a LABEL (op 0x0A) whose argument matches
