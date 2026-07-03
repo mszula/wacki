@@ -32,6 +32,22 @@ env:
   SDL2_VERSION: 2.30.10        # SDL2 source tarball version
 
 jobs:
+  # Unit tests + sanitizers. Deliberately SEPARATE from the build matrix:
+  # the test binary links tests/sdl_stub + tests/embedded_wacki_pe_stub.c,
+  # so it needs neither SDL2 nor the WACKI.EXE secret — which means this is
+  # the ONE check that runs on fork PRs (every artifact job front-loads the
+  # WACKI_EXE_URL fetch and hard-fails without the secret). It also carries
+  # the ASan/UBSan leg the build matrix has no room for.
+  test:
+    name: Unit tests + sanitizers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: make test
+      - name: Unit tests (ASan + UBSan)
+        run: make test-asan
+
   build:
     name: ${{ matrix.label }}
     strategy:
