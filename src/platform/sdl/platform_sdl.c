@@ -465,7 +465,11 @@ static void poll_virtual_cursor(void)
 
     g_mouse_x = (int16_t)s_vcur_x;
     g_mouse_y = (int16_t)s_vcur_y;
-    ++s_vcur_hold_ticks;
+    /* NOTE: s_vcur_hold_ticks is advanced ONLY in the d-pad-held branch
+     * above (and reset to 0 on release). A second unconditional ++ here
+     * double-counted while the d-pad was held, so the acceleration ramp
+     * hit VCUR_MAX in ~half of VCUR_ACCEL_TICKS — a twitchier cursor than
+     * tuned — and also crept the counter up during analog-only motion. */
 }
 
 void PlatformPumpEvents(void)
