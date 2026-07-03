@@ -253,7 +253,7 @@ TEST_CFLAGS = -O2 -Wall -Wextra -Wpedantic \
               -std=gnu11 -I tests/sdl_stub -I include -I tests
 
 # ---- targets ----------------------------------------------------------------
-.PHONY: all engine tools viewer clean run debug test miyoo ps2 ps2-iso
+.PHONY: all engine tools viewer clean run debug test test-asan miyoo ps2 ps2-iso
 all: engine tools
 
 engine: $(DIST)/$(BIN_NAME)$(EXE)
@@ -314,6 +314,28 @@ test: $(DIST)/run-tests$(EXE)
 
 $(DIST)/run-tests$(EXE): $(TEST_SRCS) $(TEST_ENGINE_SRCS) | $(DIST)
 	$(CC) $(TEST_CFLAGS) -o $@ $(TEST_SRCS) $(TEST_ENGINE_SRCS)
+
+# Sanitizer test leg — same sources as `test`, built with ASan + UBSan so
+# the file-format parsers (depack / flic / RLE / archive) and the raw-byte
+# entity paths are exercised with memory checking on. Alignment checking is
+# OFF: the suite deliberately does unaligned byte access mirroring the
+# Entity layout (the packed-struct EOFF accessor handles it safely in
+# production, and tests run only on permissive hosts) — same rationale as
+# the engine's -fno-strict-aliasing. Leak detection is off to match
+# tools/smoke-runner.sh (the port isn't leak-free yet). This is the leg to
+# wire into CI; it needs neither SDL2 nor WACKI.EXE.
+TEST_ASAN_CFLAGS = -O1 -g -fno-omit-frame-pointer \
+                   -fsanitize=address -fsanitize=undefined \
+                   -fno-sanitize=alignment -fno-strict-aliasing \
+                   -Wall -Wextra -Wno-unused-parameter -Wno-pointer-sign \
+                   -Wno-language-extension-token \
+                   -std=gnu11 -I tests/sdl_stub -I include -I tests
+
+test-asan: $(DIST)/run-tests-asan$(EXE)
+	ASAN_OPTIONS=detect_leaks=0 $(DIST)/run-tests-asan$(EXE)
+
+$(DIST)/run-tests-asan$(EXE): $(TEST_SRCS) $(TEST_ENGINE_SRCS) | $(DIST)
+	$(CC) $(TEST_ASAN_CFLAGS) -o $@ $(TEST_SRCS) $(TEST_ENGINE_SRCS)
 
 # `clean` blows away the whole $(DIST) tree (every built artefact lives there),
 # the generated embed source, and stray .o files from ad-hoc compiles.
