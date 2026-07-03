@@ -18,7 +18,8 @@
  *   PlatformInit / PlatformShutdown
  *   PlatformPresent  — upload + present one frame
  *   PlatformPumpEvents — drain SDL events, update input globals
- *   PlatformShouldQuit — set by SDL_QUIT / WINDOWCLOSE / ESC
+ *   PlatformShouldQuit — set by SDL_QUIT / WINDOWCLOSE (hard quit only;
+ *                        ESC is per-context, see handle_keydown)
  *   PlatformSetTextInput / PlatformPollTypedChar / PushTypedChar
  *   PlatformShowMessageBox
  */
@@ -228,7 +229,15 @@ static void handle_keydown(const SDL_Event *ev)
      * non-character keys so they can't impersonate a printable key. */
     g_key_state = (sym & SDLK_SCANCODE_MASK) ? 0 : (uint16_t)(sym & 0xFF);
 
-    if (sym == SDLK_ESCAPE) s_quit = 1;
+    /* NOTE: ESC does NOT set the hard-quit latch. It reaches g_key_state
+     * above (SDLK_ESCAPE = 0x1B) and every context consumes it there:
+     * gameplay via handle_gameplay_keys (→ GAME_OVER_USER_QUIT), menus
+     * via poll_menu_keyboard_quit (→ MENU_ESC_RC, which at the title menu
+     * drives the quit-confirm dialog). Latching s_quit on ESC — as the
+     * port did — made that permanent flag cascade through every enclosing
+     * PlatformShouldQuit() check, so ESC hard-exited the whole app (unsaved)
+     * and the back-out / confirm paths were dead. s_quit is reserved for
+     * genuine hard quit: SDL_QUIT / WINDOWCLOSE (below) and Cmd-Q. */
 
     /* T53 — quicksave / quickload latches consumed by the play_demo_
      * scene main loop once per frame. */
