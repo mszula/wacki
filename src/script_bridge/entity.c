@@ -187,7 +187,13 @@ void ScriptCallDestroyEnt(uint16_t id, int also_unreg_asset)
 
             UnregisterEntityByPtr(e);
             UnlinkEntity(e);
-            xfree(e);
+            /* FreeEntity, not xfree(e): the entity owns its bitmap
+             * (e->pixels, set only by init_entity_bitmap), so a bare
+             * xfree leaked that buffer on every script-destroyed alpha /
+             * doubled sprite. Safe here — the two Unlink/Unregister calls
+             * above have already removed e from every table, so nothing
+             * still references it. */
+            FreeEntity(e);
             ++total_killed;
         }
     }
