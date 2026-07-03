@@ -108,7 +108,11 @@ TEST(opcode_exactly_0x57_is_valid)
     /* op 0x57 = DEBUG_LOG. Boundary: 0x57 is the LAST valid op.
      * (Test the `op > 0x57` check is strict-greater, not >=.) */
     reset_vm();
-    uint16_t prog[8] = { 0 };
+    /* 4 instructions: 3× emit_imm32 (4 halfwords each) + 1 emit = 14
+     * halfwords. prog must hold them all — an [8] here wrote past the
+     * end (ASan stack-buffer-overflow) even though the VM only reads a
+     * valid prefix. */
+    uint16_t prog[16] = { 0 };
     size_t p = 0;
     p = emit_imm32(prog, p, 0x0D, 2, 5, 0x77);
     p = emit_imm32(prog, p, 0x57, 2, 0, 0);          /* op 0x57 = valid */
