@@ -282,6 +282,16 @@ void DepackPkv2Buffer(void *src_, void *dst_, void (*progress)(int))
             return;
         }
         if (mlen == 0) break;
+        /* Back-reference source must stay inside the output buffer. The
+         * copy reads DOWN from out+moff to out, so the highest byte read
+         * is at out+moff-1 and must be below the buffer top (dst+unp).
+         * moff comes from the file's offset width tables, so a corrupt
+         * value would read above the buffer — the read-side sibling of
+         * the mlen/llen write-side clamps above. Dead for valid data. */
+        if (moff > (uint32_t)((dst + unp) - out)) {
+            LOG_TRACE("depack", "iter %u: moff=%u reads past output top — bail", iters, moff);
+            return;
+        }
         uint8_t *back = out + moff;
         for (uint32_t i = 0; i < mlen; ++i) {
             *--out = *--back;
