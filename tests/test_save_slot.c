@@ -34,7 +34,7 @@ extern int  QuickSaveToSlot(uint16_t idx);
 extern int  QuickLoadFromSlot(uint16_t idx);
 
 /* Engine globals (script.c + test_engine_stubs.c). */
-extern uint32_t g_script_vars[0x129];
+extern uint32_t g_script_vars[0x200];
 extern uint16_t g_cur_etap;
 extern uint16_t g_cur_komnata;
 extern uint32_t g_entity_state[0x11C];

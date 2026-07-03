@@ -29,7 +29,11 @@ extern uint16_t  g_screen_w_dim, g_screen_h_dim;
 
 /* ---- script register file + scene state -------------------------- */
 
-extern uint32_t  g_script_vars[0x129];
+/* 0x200 entries, NOT 0x129: vm_var_get/set mask the index with
+ * SCRIPT_VAR_INDEX_MASK (0x1FF), so any index up to 511 is reachable and
+ * MUST be in bounds. Only the first 0x129 are persisted (WackiSlot.script_vars);
+ * the rest are runtime scratch the original engine's 512-slot file also had. */
+extern uint32_t  g_script_vars[0x200];
 extern uint32_t  g_entity_state[0x11C];
 extern uint16_t  g_active_actor;
 extern uint16_t  g_cur_etap;

@@ -20,7 +20,7 @@
 #include <string.h>
 
 extern int RunScriptInterpreter(uint16_t this_id, uint16_t that_id, uint8_t *bytecode);
-extern uint32_t g_script_vars[0x129];
+extern uint32_t g_script_vars[0x200];
 
 static size_t emit(uint16_t *buf, size_t pos, uint8_t op, uint8_t len,
                     uint16_t a0, uint16_t a1, uint16_t a2)

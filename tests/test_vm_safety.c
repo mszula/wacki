@@ -11,9 +11,9 @@
  *      garbage operands and possibly crash.
  *
  *   2. var index masking: `g_script_vars[i & 0x1FF]` — all reads /
- *      writes mask the index. The array is 0x129 entries but the mask
- *      is 0x1FF (= 511). High-index writes hit slots 0..0x1FF; values
- *      beyond 0x1FF (i.e. 0x200+) wrap around. We pin this contract.
+ *      writes mask the index. The array is sized 0x200 to match the
+ *      0x1FF mask, so every masked index (0..511) lands in bounds;
+ *      indices >= 0x200 wrap. Only 0..0x128 are persisted. We pin this.
  *
  *   3. End-of-call-stack pop after bogus opcode: if the bogus op is
  *      encountered INSIDE a CALL_SUB callee, the VM must pop the
@@ -30,7 +30,7 @@
 #include <string.h>
 
 extern int RunScriptInterpreter(uint16_t this_id, uint16_t that_id, uint8_t *bytecode);
-extern uint32_t g_script_vars[0x129];
+extern uint32_t g_script_vars[0x200];
 
 static size_t emit(uint16_t *buf, size_t pos, uint8_t op, uint8_t len,
                     uint16_t a0, uint16_t a1, uint16_t a2)
@@ -159,20 +159,19 @@ TEST(var_set_index_masked_to_0x1FF)
 
 TEST(var_set_index_0x1FE_writes_high_slot_in_bounds)
 {
-    /* Index 0x1FE = 510. Array size = 0x129 = 297. 510 is past the
-     * array end! But the mask only enforces < 0x200, not < 0x129. So
-     * writing to vars[0x1FE] is OUT-OF-BOUNDS-but-MASKED — port
-     * relies on the surrounding malloc'd block having enough padding.
-     *
-     * This test pins the WRITE behavior — vars[i & 0x1FF] for i =
-     * 0x1FE works out to vars[510], which is past the legitimate
-     * array. We rely on the test build's global storage being
-     * generous (gcc usually pads).
-     *
-     * Skip this test — it depends on undefined behavior. Document
-     * that var indices beyond 0x129 are out-of-bounds and shipped
-     * scripts should never use them. */
-    ASSERT_TRUE(1);
+    /* Index 0x1FE = 510. The array is sized 0x200 (512) to cover the
+     * full SCRIPT_VAR_INDEX_MASK (0x1FF) range, so a write to vars[510]
+     * is in bounds. This pins that: masked indices up to 511 land in a
+     * real slot (no OOB), even though only vars[0..0x128] are persisted. */
+    reset_vm();
+    uint16_t prog[8] = { 0 };
+    size_t p = 0;
+    p = emit_imm32(prog, p, 0x0D, 2, 0x1FE, 0xBEEF);   /* index 0x1FE */
+    p = emit(prog, p, 0x55, 1, 0, 0, 0);
+    (void)p;
+
+    RunScriptInterpreter(0, 0, (uint8_t *)prog);
+    ASSERT_EQ(g_script_vars[0x1FE], 0xBEEFu);
 }
 
 /* ---- this_id / that_id remap on a0 = 0x27 / 0x28 with high values --- */

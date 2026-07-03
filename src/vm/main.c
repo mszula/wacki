@@ -36,7 +36,7 @@
  *
  * Only those the VM reads or writes; the rest live in their owner
  * modules. */
-uint32_t g_script_vars[0x129];              /* register file */
+uint32_t g_script_vars[0x200];              /* register file — 0x200, see globals.h */
 /* g_return_reg aliases g_script_vars[4] — the original engine put
  * the return register at +0x10 from g_script_vars (= index 4). Scripts
  * read the return value via op 0x04 IF_EQ a0=4, so the write target

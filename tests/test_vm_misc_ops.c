@@ -25,7 +25,7 @@
 #include <string.h>
 
 extern int RunScriptInterpreter(uint16_t this_id, uint16_t that_id, uint8_t *bytecode);
-extern uint32_t g_script_vars[0x129];
+extern uint32_t g_script_vars[0x200];
 extern Entity  *g_actor[2];
 extern int      g_actor_scale_frozen[2];
 extern uint16_t g_cursor_speed, g_perspective_min, g_perspective_step;

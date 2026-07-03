@@ -34,7 +34,7 @@ extern WackiSaveFile g_save;
 extern void LoadSaveStateOrInitialize(void);
 extern void WriteSaveFile(void);
 
-/* save.c also pulls extern uint32_t g_script_vars[0x129], extern uint16_t
+/* save.c also pulls extern uint32_t g_script_vars[0x200], extern uint16_t
  * g_active_actor / g_cur_etap / g_cur_komnata, extern uint32_t
  * g_entity_state[0x11C], extern uint32_t g_scene_snapshot[0x1E], extern
  * int LoadStage(...) — these are referenced by LoadSaveSlot /

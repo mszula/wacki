@@ -32,7 +32,7 @@
 #include <string.h>
 
 extern int RunScriptInterpreter(uint16_t this_id, uint16_t that_id, uint8_t *bytecode);
-extern uint32_t g_script_vars[0x129];
+extern uint32_t g_script_vars[0x200];
 extern int   PeLoaderInit(const char *exe_path);
 extern void  PeLoaderFree(void);
 extern uint32_t ent_ptr_intern(void *p);
