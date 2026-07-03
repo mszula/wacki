@@ -217,7 +217,7 @@ TEST_SRCS = \
 	tests/test_per_entity_vm_real.c                            \
 	tests/test_click_queue.c       tests/test_update_registration.c \
 	tests/test_ent_ptr_intern.c    tests/test_sampl_parser.c   \
-	tests/test_komnata_load.c                                  \
+	tests/test_komnata_load.c      tests/test_flic_decoder.c   \
 	tests/test_engine_stubs.c
 
 TEST_ENGINE_SRCS = \
@@ -240,7 +240,8 @@ TEST_ENGINE_SRCS = \
 	src/stubs.c     src/actor/intern.c    src/actor/registration.c \
 	src/actor/list.c src/actor/vm.c \
 	src/actor/render.c src/actor/alloc.c \
-	src/actor/walker.c src/anim/alpha_blit.c
+	src/actor/walker.c src/anim/alpha_blit.c \
+	src/flic/decoder.c
 
 # Tests reuse the engine's warnings but use a stub SDL.h (tests/sdl_stub) instead
 # of the system SDL2 headers; -I tests/sdl_stub MUST come first so the stub wins

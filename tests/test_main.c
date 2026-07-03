@@ -76,6 +76,7 @@ extern void run_suite_update_registration(int *, int *);
 extern void run_suite_ent_ptr_intern(int *, int *);
 extern void run_suite_sampl_parser(int *, int *);
 extern void run_suite_komnata_load(int *, int *);
+extern void run_suite_flic_decoder(int *, int *);
 
 /* ---- main --------------------------------------------------------------- */
 
@@ -135,6 +136,7 @@ static const struct suite kSuites[] = {
     { "ent_ptr_intern",      run_suite_ent_ptr_intern },
     { "sampl_parser",        run_suite_sampl_parser },
     { "komnata_load",        run_suite_komnata_load },
+    { "flic_decoder",        run_suite_flic_decoder },
 };
 
 int main(int argc, char **argv)
