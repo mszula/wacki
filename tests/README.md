@@ -1,6 +1,6 @@
 # Unit tests for wacki-src
 
-Custom minimal header-only test framework + 41 suites covering the
+Custom minimal header-only test framework + 50 suites covering the
 SDL-independent subset of the engine. **Production `stubs.c` linked**
 (via expanded SDL stub) — Inventory state machine and sound queue
 stereo pan math tested end-to-end on real production code. Designed as a **safety net for
@@ -23,17 +23,22 @@ of `g_script_vars` / call counts on the captured stubs.
 make test
 ```
 
-Builds `tests/run-tests` (no SDL — uses `tests/sdl_stub/SDL.h`) and
-runs all 41 suites. Exit code 0 if every test passes. Output:
+Builds `dist/run-tests` (no SDL — uses `tests/sdl_stub/SDL.h`) and
+runs all 50 suites. Exit code 0 if every test passes. Output:
 
 ```
-[wacki-tests] running 41 suites
+[wacki-tests] running 50 suites
 
-[suite 1/41] entity_layout
+[suite 1/50] entity_layout
   PASS  entity_size_at_least_e0
 …
-[wacki-tests] 353 passed, 0 failed
+[wacki-tests] 494 passed, 0 failed
 ```
+
+`make test-asan` builds and runs the same suite under AddressSanitizer +
+UBSan (memory checking for the file-format parsers and raw-byte entity
+paths). It needs neither SDL2 nor WACKI.EXE, so CI runs it on every push
+and PR — see [CI integration](#ci-integration).
 
 ## Coverage map
 
@@ -92,7 +97,9 @@ tests can't isolate without rebuilding the whole engine:
   into `g_back_shadow` which is sized via `PlatformInit`. Covered
   end-to-end by interactive runs + `wac*.bmp` reference dumps.
 - **Game loop** (`src/game.c`) — pulls stubs.c + actor.c + audio.c.
-- **FLIC/AVI decoder** (`src/flic.c`) — pulls platform layer.
+- **FLIC/AVI streaming wrapper** (`src/flic.c`) — pulls the platform
+  layer. NOTE: the FLIC *frame decoder* (`src/flic/decoder.c`) IS now
+  tested — see the `flic_decoder` suite (bounds + malformed-input).
 - **Walker tick / EntityListClearAll** in `actor.c` — pulls graphics +
   stubs. Walker MATH is covered by `walker` suite (characterization).
 - **Save slot restore** (`LoadSaveSlot`, `QuickSaveToSlot`) — calls
@@ -113,9 +120,9 @@ tests can't isolate without rebuilding the whole engine:
 For end-to-end coverage of the above, use:
 
 ```
+make test-asan                             # full suite under ASan + UBSan
 make tools && ./tools/dta-validate.sh      # PKv2 byte-perfect (1782 files)
-make debug && ./wacki-debug --headless     # ASAN/UBSan smoke
-./tools/smoke-runner.sh                    # headless smoke run
+make debug && ./tools/smoke-runner.sh -b debug   # ASan/UBSan headless smoke
 ```
 
 ## Framework reference
@@ -232,12 +239,16 @@ share one TU. Tracked in `REFACTOR.md` (proposal, not yet shipped).
 
 ## CI integration
 
-Not yet wired. Suggested when someone adds GitHub Actions:
+Wired in `.github/workflows/build.yml`:
 
-```yaml
-- run: make tools && ./tools/dta-validate.sh
-- run: make test
-- run: make debug && ./wacki-debug --headless
-```
+- A dedicated **`test` job** (ubuntu) runs `make test` then
+  `make test-asan` (ASan + UBSan). It links the SDL + PE stubs, so it
+  needs no SDL2 and no WACKI.EXE secret — which is why it's the one check
+  that runs on fork PRs.
+- The **build matrix** additionally runs `make test` on macOS, Linux and
+  Windows as part of each artifact build, so the suite is exercised on
+  all three host toolchains.
+- A **boot-only smoke** (`tools/smoke-runner.sh --boot-only`) confirms
+  the release binary starts cleanly.
 
-`make test` exits non-zero on any failure, so it's drop-in.
+`make test` / `make test-asan` exit non-zero on any failure.
