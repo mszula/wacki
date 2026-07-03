@@ -65,6 +65,12 @@ void LoadSaveStateOrInitialize(void)
             memcpy(s->name, WACKI_DEFAULT_SLOT_NAME,
                    sizeof WACKI_DEFAULT_SLOT_NAME);
         }
+    } else {
+        /* Slot names came from disk. A corrupt file may leave one with no
+         * NUL in name[30], so the picker's strcmp / snprintf("%s", name)
+         * would read past the field into script_vars. Force termination. */
+        for (int i = 0; i < WACKI_SAVE_SLOTS; ++i)
+            g_save.slots[i].name[sizeof g_save.slots[i].name - 1] = '\0';
     }
 }
 
@@ -78,18 +84,24 @@ int LoadSaveSlot(uint16_t idx)
     WackiSlot *s = &g_save.slots[idx];
     if (s->stage_indicator == 0) return 0;
 
-    /* T102 call order matters:
-     *   1. g_cur_etap = slot.etap_id
-     *   2. LoadStage(etap)   ← BEFORE the memcpy
-     *   3. g_cur_komnata = slot.stage_indicator
-     *   4. memcpy script_vars / entity_state / scene_snapshot
+    /* Validate the disk-sourced etap BEFORE mutating any live state: a
+     * corrupt or hand-edited slot with an out-of-range etap_id must be
+     * refused, not poured into a half-initialised wrong-stage world.
+     * The old code ran LoadStage, ignored its result, memcpy'd the vars
+     * in regardless, and returned success — leaving g_stage pointing at
+     * the previous/fallback stage while the slot's vars said otherwise.
+     * LoadStage returns 0 for etap 0, etap > STAGE_COUNT, or an unbuilt
+     * stage, and sets g_cur_etap itself on success.
      *
-     * Earlier port had LoadStage AFTER the memcpy — LoadStage's
-     * stage init + entry_script ran AFTER restoring vars and
-     * clobbered them back to defaults. Quickload (F9) and menu Load
-     * silently dropped all progress flags every time. */
+     * T102 call order still holds: g_cur_etap is set and LoadStage runs
+     * BEFORE the memcpy, so its stage init + entry_script can't clobber
+     * the restored vars. */
     g_cur_etap = s->etap_id;
-    LoadStage(g_cur_etap);
+    if (!LoadStage(g_cur_etap)) {
+        LOG_INFO("save", "slot %u: invalid etap %u — load refused",
+                 (unsigned)idx, (unsigned)s->etap_id);
+        return 0;
+    }
     g_cur_komnata = s->stage_indicator;
     memcpy(g_script_vars,    s->script_vars,    sizeof s->script_vars);
     memcpy(g_entity_state,   s->entity_state,   sizeof s->entity_state);

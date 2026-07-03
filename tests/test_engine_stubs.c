@@ -129,9 +129,10 @@ int  GraphicsAlphaFxEnabled(void)                    { return 1; }
 
 /* ---- game.c stubs --------------------------------------------------- */
 
-/* From game.c — save.c LoadSaveSlot calls this. Tests don't exercise
- * the slot-restore path; stub returns 1. */
-int LoadStage(uint16_t stage)         { (void)stage; return 1; }
+/* From game.c — save.c LoadSaveSlot calls this. Mirror the real range
+ * contract (stage 1..STAGE_COUNT valid, else 0) so LoadSaveSlot's
+ * reject-invalid-etap path is exercisable; the real body pulls SDL. */
+int LoadStage(uint16_t stage)         { return (stage >= 1 && stage <= 5) ? 1 : 0; }
 
 /* From game.c — stubs.c LoadKomnata calls these. */
 void LoadKomnataScene(uint16_t id)    { (void)id; }

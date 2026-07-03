@@ -134,6 +134,30 @@ TEST(load_slot_empty_returns_zero)
     ASSERT_EQ(g_entity_state[0], 0xCAFEBABEu);
 }
 
+TEST(load_slot_invalid_etap_returns_zero)
+{
+    /* A slot can carry a non-zero stage_indicator but an out-of-range
+     * etap_id (corrupt / hand-edited file). LoadStage rejects it, so
+     * LoadSaveSlot must refuse and leave live state untouched — not pour
+     * the slot's vars into a wrong-stage world and report success. */
+    memset(&g_save, 0, sizeof g_save);
+    g_save.slots[2].stage_indicator = 5;
+    g_save.slots[2].etap_id         = 7;       /* only 1..5 are valid */
+    for (int i = 0; i < 0x129; ++i) g_save.slots[2].script_vars[i] = 0x1234u;
+
+    g_script_vars[0]  = 0xDEADBEEFu;
+    g_entity_state[0] = 0xCAFEBABEu;
+    g_cur_komnata     = 0xAAAA;
+
+    int rc = LoadSaveSlot(2);
+    ASSERT_EQ(rc, 0);
+    /* memcpy block never ran: live state preserved. g_cur_komnata is set
+     * only after LoadStage succeeds, so it too is untouched. */
+    ASSERT_EQ(g_script_vars[0],  0xDEADBEEFu);
+    ASSERT_EQ(g_entity_state[0], 0xCAFEBABEu);
+    ASSERT_EQ(g_cur_komnata,     0xAAAAu);
+}
+
 /* ---- T102 order check (indirect) ----------------------------------- */
 
 TEST(load_slot_t102_etap_set_before_komnata)
@@ -194,6 +218,7 @@ SUITE(save_slot)
     RUN_TEST(load_slot_sets_cur_etap_and_komnata);
     RUN_TEST(load_slot_out_of_range_returns_zero);
     RUN_TEST(load_slot_empty_returns_zero);
+    RUN_TEST(load_slot_invalid_etap_returns_zero);
     RUN_TEST(load_slot_t102_etap_set_before_komnata);
     RUN_TEST(quicksave_refuses_when_not_in_game);
     RUN_TEST(quicksave_out_of_range_returns_zero);
