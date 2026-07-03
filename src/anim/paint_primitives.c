@@ -176,7 +176,7 @@ void paint_anim_button_at(AnimAsset *atlas, uint16_t frame,
         int      need    = (int)w * (int)h;
         uint8_t *scratch = get_rle_scratch(need);
         if (!scratch) return;
-        DepackRleFrame(px, scratch, need);
+        DepackRleFrame(px, AnimFrameRleSrcLen(atlas, px), scratch, need);
         px = scratch;
     }
     /* mode 0 = colour-key 0 (transparent). */

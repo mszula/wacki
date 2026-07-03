@@ -98,8 +98,14 @@ void InstallPalette(const uint8_t *rgb, uint16_t first);
 
 /* Decompress one RLE-encoded "rich" ANIM frame (asset kind=3) into a
  * flat (w*h)-byte raw pixel buffer. The src buffer is
- * AnimAsset.pixel_ptrs[frame], dst must be at least dst_len bytes. */
-void DepackRleFrame(const uint8_t *src, uint8_t *dst, int dst_len);
+ * AnimAsset.pixel_ptrs[frame]; src_len bounds the compressed stream
+ * (bytes from the frame to the end of the atlas buffer) so a corrupt
+ * frame can't read past it. dst must be at least dst_len bytes. */
+void DepackRleFrame(const uint8_t *src, int src_len, uint8_t *dst, int dst_len);
+
+/* Compressed-stream length available to RLE frame `px` within atlas `a`
+ * (px .. end of a->raw_buffer). Pass as DepackRleFrame's src_len. */
+int AnimFrameRleSrcLen(const AnimAsset *a, const uint8_t *px);
 
 /* Nearest-neighbor scaled colour-key blit (palette idx 0 =
  * transparent). Used for perspective-scaled actors. */

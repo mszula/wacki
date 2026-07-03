@@ -34,7 +34,7 @@ TEST(rle_literal_passthrough)
     const uint8_t src[] = { 0x00, 0xAA, 0xBB,
                             0x10, 0x20, 0x30, 0x40, 0x50 };
     uint8_t dst[5] = { 0 };
-    DepackRleFrame(src, dst, 5);
+    DepackRleFrame(src, (int)sizeof src, dst, 5);
     ASSERT_EQ(dst[0], 0x10);
     ASSERT_EQ(dst[1], 0x20);
     ASSERT_EQ(dst[2], 0x30);
@@ -48,7 +48,7 @@ TEST(rle_marker_a_emits_run_of_fill)
     const uint8_t src[] = { 0x00, 0xAA, 0xBB,
                             0xAA, 0x04, 0x11 };
     uint8_t dst[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-    DepackRleFrame(src, dst, 6);
+    DepackRleFrame(src, (int)sizeof src, dst, 6);
     ASSERT_EQ(dst[0], 0x00);
     ASSERT_EQ(dst[1], 0x00);
     ASSERT_EQ(dst[2], 0x00);
@@ -64,7 +64,7 @@ TEST(rle_marker_b_emits_run_of_value)
     const uint8_t src[] = { 0x00, 0xAA, 0xBB,
                             0xBB, 0x02, 0x7C, 0x99 };
     uint8_t dst[4] = { 0 };
-    DepackRleFrame(src, dst, 4);
+    DepackRleFrame(src, (int)sizeof src, dst, 4);
     ASSERT_EQ(dst[0], 0x7C);
     ASSERT_EQ(dst[1], 0x7C);
     ASSERT_EQ(dst[2], 0x7C);
@@ -78,7 +78,7 @@ TEST(rle_respects_dst_len_clamp)
                             0xAA, 0xFF };       /* would emit 256 × 0 */
     uint8_t dst[8];
     memset(dst, 0xCD, sizeof dst);
-    DepackRleFrame(src, dst, 4);   /* only 4 bytes of output */
+    DepackRleFrame(src, (int)sizeof src, dst, 4);   /* only 4 bytes of output */
     ASSERT_EQ(dst[0], 0x00);
     ASSERT_EQ(dst[1], 0x00);
     ASSERT_EQ(dst[2], 0x00);
@@ -95,7 +95,7 @@ TEST(rle_handles_zero_length_dst)
     /* dst_len <= 0 → early return, no crash. */
     const uint8_t src[] = { 0x00, 0xAA, 0xBB, 0x11 };
     uint8_t dst[4] = { 0x55, 0x55, 0x55, 0x55 };
-    DepackRleFrame(src, dst, 0);
+    DepackRleFrame(src, (int)sizeof src, dst, 0);
     /* All output untouched. */
     ASSERT_EQ(dst[0], 0x55);
     ASSERT_EQ(dst[1], 0x55);
@@ -106,10 +106,36 @@ TEST(rle_handles_zero_length_dst)
 TEST(rle_null_input_does_not_crash)
 {
     uint8_t dst[8] = { 0 };
-    DepackRleFrame(NULL, dst, 8);
-    DepackRleFrame((const uint8_t *)"abc", NULL, 8);
+    DepackRleFrame(NULL, 0, dst, 8);
+    DepackRleFrame((const uint8_t *)"abc", 3, NULL, 8);
     /* If we reach here without segfault, the test passes. */
     ASSERT_TRUE(1);
+}
+
+TEST(rle_truncated_source_stops_at_src_len)
+{
+    /* dst_len (32) demands far more than the source provides (1 literal).
+     * Without the src_len bound the decoder reads past `src`; with it,
+     * decode stops when the stream is exhausted and leaves dst partial. */
+    const uint8_t src[] = { 0x00, 0xAA, 0xBB, 0x10 };   /* header + 1 literal */
+    uint8_t dst[32];
+    memset(dst, 0xCD, sizeof dst);
+    DepackRleFrame(src, (int)sizeof src, dst, 32);
+    ASSERT_EQ(dst[0], 0x10);       /* the one literal decoded */
+    ASSERT_EQ(dst[1], 0xCD);       /* stopped at src end — rest untouched */
+    ASSERT_EQ(dst[31], 0xCD);
+}
+
+TEST(rle_marker_b_truncated_before_value_stops)
+{
+    /* marker_B needs a count AND a value byte after it; supply only the
+     * count. The 2-byte guard must stop rather than read the missing
+     * value past the source. */
+    const uint8_t src[] = { 0x00, 0xAA, 0xBB, 0xBB, 0x05 };  /* B, count, no value */
+    uint8_t dst[16];
+    memset(dst, 0xCD, sizeof dst);
+    DepackRleFrame(src, (int)sizeof src, dst, 16);
+    ASSERT_EQ(dst[0], 0xCD);       /* nothing emitted — bailed on short marker_B */
 }
 
 /* ---- InstallPalette: copies bytes into g_palette_rgb -------------------- */
@@ -314,7 +340,7 @@ TEST(rle_marker_a_and_b_same_byte_a_wins)
     const uint8_t src[] = { 0x00, 0xAA, 0xAA,
                             0xAA, 0x03, 0x99 };  /* AA → fill (marker_A path) */
     uint8_t dst[5] = { 0 };
-    DepackRleFrame(src, dst, 5);
+    DepackRleFrame(src, (int)sizeof src, dst, 5);
     /* Marker_A branch: count=4, emit 4 × fill (= 0x00). 5th byte = 0x99 literal. */
     ASSERT_EQ(dst[0], 0x00);
     ASSERT_EQ(dst[1], 0x00);
@@ -395,6 +421,8 @@ SUITE(graphics)
     RUN_TEST(rle_respects_dst_len_clamp);
     RUN_TEST(rle_handles_zero_length_dst);
     RUN_TEST(rle_null_input_does_not_crash);
+    RUN_TEST(rle_truncated_source_stops_at_src_len);
+    RUN_TEST(rle_marker_b_truncated_before_value_stops);
     RUN_TEST(install_palette_copies_full);
     RUN_TEST(install_palette_partial_starts_at_first);
     RUN_TEST(install_palette_out_of_range_is_no_op);

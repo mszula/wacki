@@ -204,7 +204,7 @@ TEST(kind_3_asset_pixel_ptrs_decode_via_rle)
     /* DepackRleFrame against the pixel block, decoding sizeof expected bytes. */
     uint8_t decoded[16];
     memset(decoded, 0x55, sizeof decoded);   /* sentinel guard */
-    DepackRleFrame(p, decoded, (int)sizeof expected);
+    DepackRleFrame(p, AnimFrameRleSrcLen(a, p), decoded, (int)sizeof expected);
 
     ASSERT_MEMEQ(decoded, expected, sizeof expected);
     /* Guard bytes past sizeof expected must still hold 0x55. */
@@ -251,7 +251,7 @@ TEST(kind_3_decode_full_8x4_frame_via_rle)
 
     uint8_t decoded[64];
     memset(decoded, 0xAA, sizeof decoded);
-    DepackRleFrame(a->pixel_ptrs[0], decoded, frame_pixels);
+    DepackRleFrame(a->pixel_ptrs[0], AnimFrameRleSrcLen(a, a->pixel_ptrs[0]), decoded, frame_pixels);
 
     for (int i = 0; i < frame_pixels; ++i) ASSERT_EQ(decoded[i], 0);
     /* Past frame area sentinels untouched. */

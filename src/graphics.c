@@ -435,9 +435,16 @@ void BlitSpriteScaledColorKeyFlip(int16_t dx, int16_t dy,
  *   else:          emit b once
  *
  * Loop until `dst_len` output bytes written. */
-void DepackRleFrame(const uint8_t *src, uint8_t *dst, int dst_len)
+void DepackRleFrame(const uint8_t *src, int src_len, uint8_t *dst, int dst_len)
 {
-    if (!src || !dst || dst_len <= 0) return;
+    /* src_len bounds the compressed stream: a truncated / corrupt ANIM
+     * frame must not read past the atlas buffer. NOTE: diverges from the
+     * original FUN_00410cb0, which trusted the stream and had no src
+     * bound. For valid frames the dst_len loop terminates first (there
+     * are always enough source bytes), so the guards are dead in
+     * practice — they only stop a runaway read on bad data. */
+    if (!src || !dst || dst_len <= 0 || src_len < 3) return;
+    const uint8_t *src_end = src + src_len;
     uint8_t  fill     = src[0];
     uint8_t  marker_A = src[1];
     uint8_t  marker_B = src[2];
@@ -445,12 +452,15 @@ void DepackRleFrame(const uint8_t *src, uint8_t *dst, int dst_len)
     uint8_t       *d   = dst;
     uint8_t       *end = dst + dst_len;
     while (d < end) {
+        if (p >= src_end) break;                 /* stream truncated */
         uint8_t b = *p++;
         if (b == marker_A) {
+            if (p >= src_end) break;             /* need the count byte */
             int count = (int)(*p++) + 1;
             uint8_t v = fill;
             while (count-- > 0 && d < end) *d++ = v;
         } else if (b == marker_B) {
+            if (p + 1 >= src_end) break;         /* need count + value bytes */
             int count = (int)(*p++) + 1;
             uint8_t v = *p++;
             while (count-- > 0 && d < end) *d++ = v;
@@ -458,6 +468,20 @@ void DepackRleFrame(const uint8_t *src, uint8_t *dst, int dst_len)
             *d++ = b;
         }
     }
+}
+
+/* Bytes available to an RLE frame: from its pixel pointer to the end of
+ * the atlas raw buffer. Feeds DepackRleFrame's src_len bound. Returns 0
+ * when px lies outside the buffer (decode then no-ops rather than
+ * trusting a stray pointer). */
+int AnimFrameRleSrcLen(const AnimAsset *a, const uint8_t *px)
+{
+    if (!a) return 0;
+    const uint8_t *base = (const uint8_t *)a->raw_buffer;
+    if (!base || !px || px < base) return 0;
+    size_t off = (size_t)(px - base);
+    if (off >= a->raw_size) return 0;
+    return (int)(a->raw_size - off);
 }
 
 /* ---- InstallPalette ---------------------------------------------- *

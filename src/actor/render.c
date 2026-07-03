@@ -349,7 +349,7 @@ void EntityRenderAll(Entity *head)
                 s_scratch_sz = s_scratch ? need : 0;
             }
             if (!s_scratch) continue;
-            DepackRleFrame(px, s_scratch, need);
+            DepackRleFrame(px, AnimFrameRleSrcLen(atlas, px), s_scratch, need);
             px = s_scratch;
         }
 
