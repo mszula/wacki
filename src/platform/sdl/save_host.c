@@ -32,6 +32,19 @@ static int atomic_replace(const char *from, const char *to)
 }
 #endif
 
+/* Flush a file's data to physical storage before we rename it into place.
+ * tmp+rename gives atomicity against a crash; fsync adds durability
+ * against POWER LOSS — on ext4/f2fs (handhelds) the rename can otherwise
+ * commit while the file's bytes are still only in the page cache, so a
+ * hard power cut leaves a zero/garbage save that the loader then resets. */
+#ifdef _WIN32
+#  include <io.h>
+static void sync_file(FILE *fp) { _commit(_fileno(fp)); }
+#else
+#  include <unistd.h>
+static void sync_file(FILE *fp) { int fd = fileno(fp); if (fd >= 0) fsync(fd); }
+#endif
+
 int plat_save_read(void *buf, int size)
 {
     FILE *fp = fopen(WACKI_SAVE_FILE, "rb");
@@ -56,6 +69,7 @@ int plat_save_write(const void *buf, int size)
         return 0;
     }
     fflush(fp);
+    sync_file(fp);          /* durability before the rename (see sync_file) */
     fclose(fp);
 
     if (atomic_replace(tmp_path, WACKI_SAVE_FILE) != 0) {
