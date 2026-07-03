@@ -148,7 +148,6 @@ extern SceneDef         g_load_menu_scene;
 extern SceneDef         g_sel_tlo_scene;
 extern int              s_chapter_pick;
 extern int              SelTloRefreshButtons(void);
-extern uint16_t         g_selected_save_slot;
 
 /* ---- HandlePytanieClick ------------------------------------------- */
 
@@ -758,9 +757,12 @@ static int dispatch_main_menu_rc(int rc, int *should_return)
         return 1;
 
     case MAIN_MENU_RC_LOAD_SAVE:
-        /* LoadSaveSlot restores g_cur_komnata + g_script_vars +
-         * g_entity_state from Wacki.sav slot N. */
-        LoadSaveSlot(g_selected_save_slot);
+        /* The chosen slot was ALREADY restored inside the picker:
+         * LoadSlotClick calls LoadSaveSlot + LoadKomnataScene on commit
+         * and only then returns LOAD_COMPLETED (which maps to this rc).
+         * Just launch the stage loop on that restored state. Re-loading
+         * here would clobber it — the old LoadSaveSlot(g_selected_save_slot)
+         * call always reloaded slot 0 (that global was never written). */
         RunGameStageLoop(STAGE_LOAD_FLAG_SAVE_LOAD);
         return 1;
 

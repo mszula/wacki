@@ -53,7 +53,6 @@ extern int  BindActorWalker(int actor_idx, int target_x, int target_y);
  * Default 2 = actors-only, no panel — matches menu / cutscene boot
  * state. LoadKomnata raises bit 0 for in-game rooms. */
 uint16_t  g_komnata_flags = 2;
-uint16_t  g_selected_save_slot = 0;
 
 void     *g_dialogues_obj = NULL;
 void     *g_scripts_obj   = NULL;
