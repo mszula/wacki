@@ -88,7 +88,7 @@ int view_render_anim_frame(struct AnimAsset *a, int f, ViewImage *out)
     if (a->kind == ANIM_KIND_RICH) {
         uint8_t *tmp = (uint8_t *)malloc((size_t)w * (size_t)h);
         if (!tmp) { free(out->rgba); out->rgba = NULL; return 0; }
-        DepackRleFrame(src, tmp, w * h);
+        DepackRleFrame(src, AnimFrameRleSrcLen(a, src), tmp, w * h);
         blit_indexed(tmp, w, h, 1, out);
         free(tmp);
     } else {
