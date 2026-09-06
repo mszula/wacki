@@ -307,6 +307,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.${{ matrix.archive_ext }}
           if-no-files-found: error
+          retention-days: 5
 
   # ---- Miyoo Mini Plus (and pin-compatible handhelds) -------------
   # Separate job because the build runs entirely inside the
@@ -356,6 +357,7 @@ jobs:
           name: wacki-miyoo
           path: dist/wacki-miyoo.zip
           if-no-files-found: error
+          retention-days: 5
 
   # ---- Anbernic & other PortMaster handhelds ----------------------
   # CROSS-compiles the engine inside a native amd64 Debian bullseye
@@ -407,6 +409,8 @@ jobs:
           name: portmaster-elf-${{ matrix.arch }}
           path: dist/portmaster/wacki.${{ matrix.arch }}
           if-no-files-found: error
+          # consumed by the assemble job in this same run — nothing reads it after
+          retention-days: 1
 
   # ---- PortMaster: assemble the .zip ------------------------------
   # Pulls both per-arch ELFs from the matrix above and runs
@@ -447,6 +451,7 @@ jobs:
           name: wacki-portmaster
           path: dist/wacki-portmaster.zip
           if-no-files-found: error
+          retention-days: 5
 
   # ---- PlayStation 2 (EE / ps2dev) --------------------------------
   # Builds dist/wacki-ps2.elf inside the ps2dev Docker image and packages it
@@ -488,6 +493,7 @@ jobs:
           name: wacki-ps2
           path: dist/wacki-ps2.zip
           if-no-files-found: error
+          retention-days: 5
 
   # ---- Android (SDL2 / Gradle + CMake-NDK) ------------------------
   # Builds the sideload debug APK. Unlike the handheld/PS2 jobs this isn't
@@ -599,6 +605,7 @@ jobs:
           name: wacki-android
           path: wacki-android.apk
           if-no-files-found: error
+          retention-days: 5
 
   # ---- release -----------------------------------------------------
   # Only fires on tag push (`v*`). Pulls the per-platform archives from the

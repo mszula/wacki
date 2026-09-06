@@ -179,6 +179,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.${{ matrix.archive_ext }}
           if-no-files-found: error
+          retention-days: 5
 
   # ---- release ----------------------------------------------------------
   # Fires ONLY on an `assets-explorer-v*` tag (never the engine's `v*`). Creates
